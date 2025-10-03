@@ -1,7 +1,15 @@
 pyproject.toml
 setup.py
+BESTLIB/__init__.py
+BESTLIB/matrix.js
+BESTLIB/matrix.py
+BESTLIB/style.css
+bestlib/__init__.py
+bestlib/matrix.js
+bestlib/matrix.py
+bestlib/style.css
 bestlib.egg-info/PKG-INFO
 bestlib.egg-info/SOURCES.txt
 bestlib.egg-info/dependency_links.txt
-bestlib.egg-info/requires.txt
 bestlib.egg-info/top_level.txt
+docs/README.md

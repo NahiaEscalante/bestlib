@@ -5,5 +5,68 @@ Summary: MatrixLayout widget for dashboards
 Author: Nahia, Alejandro, Max
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
-Requires-Dist: anywidget
-Requires-Dist: traitlets
+
+# bestlib: MatrixLayout para dashboards en Jupyter con soporte D3 básico
+
+bestlib permite crear grillas de celdas a partir de un layout ASCII y rellenarlas con contenido HTML o gráficos sencillos con D3 directamente en notebooks.
+
+## Instalación (editable)
+
+```bash
+pip install -e .
+```
+
+## Uso rápido
+
+```python
+from bestlib import MatrixLayout
+
+# Mapeo de celdas a HTML
+MatrixLayout.map({
+    "A": "<b>Plot 1</b>",
+    "B": "<i>Control</i>"
+})
+
+layout = MatrixLayout("""
+AA
+BB
+""")
+
+layout
+```
+
+## Modo seguro vs HTML crudo
+
+Por defecto se permite HTML en celdas. Para forzar texto plano (evitar XSS):
+
+```python
+MatrixLayout.set_safe_html(False)
+```
+
+## Soporte D3 básico (barras)
+
+Puedes mapear letras a especificaciones D3 sencillas:
+
+```python
+MatrixLayout.map({
+    "A": {
+        "type": "bar",
+        "data": [
+            {"category": "X", "value": 10},
+            {"category": "Y", "value": 7}
+        ],
+        "color": "#2ca02c",
+        "axes": True
+    }
+})
+```
+
+## Limitaciones actuales
+- Se valida que todas las filas del layout tengan el mismo ancho.
+- D3 soporta por ahora un gráfico de barras básico.
+- Los assets `matrix.js` y `style.css` se sirven embebidos desde el paquete.
+
+## Licencia
+MIT
+
+
