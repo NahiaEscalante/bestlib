@@ -15,7 +15,7 @@ class MatrixLayout:
         self.div_id = "matrix-" + str(uuid.uuid4())
 
     def _repr_html_(self):
-        # Cargar JS y CSS desde el mismo paquete
+        # Cargar JS y CSS desde el mismo p aquete
         js_path = os.path.join(os.path.dirname(__file__), "matrix.js")
         css_path = os.path.join(os.path.dirname(__file__), "style.css")
 
