@@ -9,9 +9,6 @@ description = "MatrixLayout widget for dashboards"
 authors = [
     { name="Nahia, Alejandro, Max" }
 ]
-readme = "README.md"
+readme = "docs/README.md"
 requires-python = ">=3.8"
-dependencies = [
-    "anywidget",
-    "traitlets"
-]
+dependencies = []
