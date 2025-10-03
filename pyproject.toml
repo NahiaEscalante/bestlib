@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bestlib"
+version = "0.1.0"
+description = "MatrixLayout widget for dashboards"
+authors = [
+    { name="Nahia, Alejandro, Max" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "anywidget",
+    "traitlets"
+]

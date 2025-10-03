@@ -1,0 +1,7 @@
+pyproject.toml
+setup.py
+bestlib.egg-info/PKG-INFO
+bestlib.egg-info/SOURCES.txt
+bestlib.egg-info/dependency_links.txt
+bestlib.egg-info/requires.txt
+bestlib.egg-info/top_level.txt

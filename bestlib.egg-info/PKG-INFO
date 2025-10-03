@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: bestlib
+Version: 0.1.0
+Summary: MatrixLayout widget for dashboards
+Author: Nahia, Alejandro, Max
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: anywidget
+Requires-Dist: traitlets
