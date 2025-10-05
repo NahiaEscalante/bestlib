@@ -1,10 +1,93 @@
 import uuid
 import json
 import os
+import weakref
 
 class MatrixLayout:
     _map = {}
     _safe_html = True
+    
+    # Sistema de comunicación bidireccional (JS → Python)
+    _instances = {}  # dict[str, weakref.ReferenceType[MatrixLayout]]
+    _global_handlers = {}  # dict[str, callable]
+    _comm_registered = False
+    
+    @classmethod
+    def on_global(cls, event, func):
+        """
+        Registra un callback global para un tipo de evento.
+        Se ejecuta si no hay handler específico en la instancia.
+        
+        Args:
+            event (str): Nombre del evento (ej: 'select', 'click', 'brush')
+            func (callable): Función callback que recibe (payload)
+        """
+        cls._global_handlers[event] = func
+    
+    @classmethod
+    def _ensure_comm_target(cls):
+        """
+        Registra el comm target de Jupyter para recibir eventos desde JS.
+        Solo se ejecuta una vez por sesión.
+        """
+        if cls._comm_registered:
+            return
+        
+        try:
+            from IPython import get_ipython
+            ip = get_ipython()
+            if not ip or not hasattr(ip, "kernel"):
+                return
+            
+            km = ip.kernel.comm_manager
+            
+            def _target(comm, open_msg):
+                @comm.on_msg
+                def _recv(msg):
+                    try:
+                        data = msg["content"]["data"]
+                        div_id = data.get("div_id")
+                        event_type = data.get("type")
+                        payload = data.get("payload")
+                        
+                        # Buscar instancia por div_id
+                        inst_ref = cls._instances.get(div_id)
+                        inst = inst_ref() if inst_ref else None
+                        
+                        # Buscar handler: primero en instancia, luego global
+                        handler = None
+                        if inst and hasattr(inst, "_handlers"):
+                            handler = inst._handlers.get(event_type)
+                        if not handler:
+                            handler = cls._global_handlers.get(event_type)
+                        
+                        # Ejecutar callback
+                        if handler:
+                            handler(payload)
+                    except Exception as e:
+                        print(f"[MatrixLayout] Error en handler: {e}")
+            
+            km.register_target("bestlib_matrix", _target)
+            cls._comm_registered = True
+        except Exception as e:
+            print(f"[MatrixLayout] No se pudo registrar comm: {e}")
+    
+    def on(self, event, func):
+        """
+        Registra un callback específico para esta instancia.
+        
+        Args:
+            event (str): Nombre del evento (ej: 'select', 'click', 'brush')
+            func (callable): Función callback que recibe (payload)
+        
+        Example:
+            layout = MatrixLayout("AAA\\nBBB")
+            layout.on('select', lambda data: print(f"Seleccionado: {data}"))
+        """
+        if not hasattr(self, "_handlers"):
+            self._handlers = {}
+        self._handlers[event] = func
+        return self  # Para encadenar: layout.on(...).on(...)
 
     @classmethod
     def map(cls, mapping):
@@ -17,6 +100,10 @@ class MatrixLayout:
     def __init__(self, ascii_layout):
         self.ascii_layout = ascii_layout
         self.div_id = "matrix-" + str(uuid.uuid4())
+        
+        # Registrar instancia para recibir eventos
+        MatrixLayout._instances[self.div_id] = weakref.ref(self)
+        self._handlers = {}
 
     def _repr_html_(self):
         # Cargar JS y CSS desde el mismo p aquete
@@ -52,6 +139,9 @@ class MatrixLayout:
         return html
 
     def _repr_mimebundle_(self, include=None, exclude=None):
+        # Asegurar que el comm target está registrado
+        MatrixLayout._ensure_comm_target()
+        
         # Cargar JS y CSS desde el mismo paquete
         js_path = os.path.join(os.path.dirname(__file__), "matrix.js")
         css_path = os.path.join(os.path.dirname(__file__), "style.css")
@@ -75,11 +165,18 @@ class MatrixLayout:
         <style>{css_code}</style>
         <div id="{self.div_id}" class="matrix-layout"></div>
         """
+        
+        # Pasar div_id y safe_html al JS
+        meta = {
+            "__safe_html__": bool(self._safe_html),
+            "__div_id__": self.div_id
+        }
+        mapping_js = json.dumps({**self._map, **meta})
 
         js = (
             js_code
             + "\n"
-            + f"render(\"{self.div_id}\", `{escaped_layout}`, {{...{json.dumps(self._map)}, __safe_html__: {str(self._safe_html).lower()}}});"
+            + f'render("{self.div_id}", `{escaped_layout}`, {mapping_js});'
         )
 
         return {
