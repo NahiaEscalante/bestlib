@@ -106,7 +106,7 @@ class MatrixLayout:
         self._handlers = {}
 
     def _repr_html_(self):
-        # Cargar JS y CSS desde el mismo p aquete
+        # Cargar JS y CSS desde el mismo paquete
         js_path = os.path.join(os.path.dirname(__file__), "matrix.js")
         css_path = os.path.join(os.path.dirname(__file__), "style.css")
 
@@ -127,13 +127,20 @@ class MatrixLayout:
         # Escapar backticks para no romper el template literal JS
         escaped_layout = self.ascii_layout.replace("`", "\\`")
 
+        # Pasar metadata al JS
+        meta = {
+            "__safe_html__": bool(self._safe_html),
+            "__div_id__": self.div_id
+        }
+        mapping_js = json.dumps({**self._map, **meta})
+
         # Render HTML con contenedor + CSS + JS inline (compatible con Notebook clásico)
         html = f"""
         <style>{css_code}</style>
         <div id="{self.div_id}" class="matrix-layout"></div>
         <script>
         {js_code}
-        render("{self.div_id}", `{escaped_layout}`, {{...{json.dumps(self._map)}, __safe_html__: {str(self._safe_html).lower()}}});
+        render("{self.div_id}", `{escaped_layout}`, {mapping_js});
         </script>
         """
         return html
@@ -183,3 +190,56 @@ class MatrixLayout:
             "text/html": html,
             "application/javascript": js,
         }
+    
+    def display(self):
+        """
+        Método alternativo para mostrar el layout usando IPython.display.
+        Útil cuando _repr_mimebundle_ no funciona correctamente en VS Code.
+        """
+        try:
+            from IPython.display import display, HTML, Javascript
+            
+            # Cargar archivos
+            js_path = os.path.join(os.path.dirname(__file__), "matrix.js")
+            css_path = os.path.join(os.path.dirname(__file__), "style.css")
+            
+            with open(js_path, "r", encoding="utf-8") as f:
+                js_code = f.read()
+            
+            with open(css_path, "r", encoding="utf-8") as f:
+                css_code = f.read()
+            
+            # Validar layout
+            rows = [r for r in self.ascii_layout.strip().split("\n") if r]
+            if not rows:
+                raise ValueError("ascii_layout no puede estar vacío")
+            
+            escaped_layout = self.ascii_layout.replace("`", "\\`")
+            
+            # Metadata
+            meta = {
+                "__safe_html__": bool(self._safe_html),
+                "__div_id__": self.div_id
+            }
+            mapping_js = json.dumps({**self._map, **meta})
+            
+            # HTML con estilo y contenedor
+            html_content = f"""
+            <style>{css_code}</style>
+            <div id="{self.div_id}" class="matrix-layout"></div>
+            """
+            
+            # JavaScript con render
+            js_content = f"""
+            {js_code}
+            render("{self.div_id}", `{escaped_layout}`, {mapping_js});
+            """
+            
+            # Mostrar HTML primero, luego JS
+            display(HTML(html_content))
+            display(Javascript(js_content))
+            
+        except ImportError:
+            print("⚠️ IPython no disponible. Usa en un notebook Jupyter.")
+        except Exception as e:
+            print(f"❌ Error al mostrar layout: {e}")

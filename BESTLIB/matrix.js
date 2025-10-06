@@ -66,23 +66,79 @@
     if (!container) return;
 
     const rows = asciiLayout.trim().split("\n");
+    const R = rows.length;
+    const C = rows[0].length;
+    
     container.style.display = "grid";
-    container.style.gridTemplateColumns = `repeat(${rows[0].length}, 1fr)`;
-    container.style.gridTemplateRows = `repeat(${rows.length}, 140px)`;
+    container.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
+    container.style.gridTemplateRows = `repeat(${R}, 140px)`;
     container.style.gap = "8px";
 
     const safeHtml = mapping.__safe_html__ !== false;
     const divIdFromMapping = mapping.__div_id__ || divId;
+    
+    // Soporte para merge de celdas
+    const mergeOpt = mapping.__merge__;
+    const mergeAll = mergeOpt === true;
+    const mergeSet = Array.isArray(mergeOpt) ? new Set(mergeOpt) : null;
+    const shouldMerge = (letter) => {
+      if (letter === '.') return false;
+      return mergeAll || (mergeSet ? mergeSet.has(letter) : false);
+    };
 
     function isD3Spec(value) {
       return value && typeof value === 'object' && (value.type === 'bar' || value.type === 'scatter');
     }
 
-    rows.forEach(row => {
-      row.split("").forEach(letter => {
+    // Sistema de merge: marcar celdas visitadas
+    const visited = Array.from({length: R}, () => Array(C).fill(false));
+    
+    for (let r = 0; r < R; r++) {
+      for (let c = 0; c < C; c++) {
+        if (visited[r][c]) continue;
+        
+        const letter = rows[r][c];
+        if (letter === '.') {
+          visited[r][c] = true;
+          continue;
+        }
+        
+        let width = 1;
+        let height = 1;
+        
+        // Si debe hacer merge, calcular el área rectangular
+        if (shouldMerge(letter)) {
+          // Expandir horizontalmente
+          while (c + width < C && !visited[r][c + width] && rows[r][c + width] === letter) {
+            width++;
+          }
+          
+          // Expandir verticalmente
+          let canGrow = true;
+          while (r + height < R && canGrow) {
+            for (let cc = c; cc < c + width; cc++) {
+              if (visited[r + height][cc] || rows[r + height][cc] !== letter) {
+                canGrow = false;
+                break;
+              }
+            }
+            if (canGrow) height++;
+          }
+        }
+        
+        // Marcar todas las celdas como visitadas
+        for (let rr = r; rr < r + height; rr++) {
+          for (let cc = c; cc < c + width; cc++) {
+            visited[rr][cc] = true;
+          }
+        }
+        
+        // Crear celda
         const spec = mapping[letter];
         const cell = document.createElement("div");
         cell.className = "matrix-cell";
+        cell.style.gridRow = `${r + 1} / span ${height}`;
+        cell.style.gridColumn = `${c + 1} / span ${width}`;
 
         if (isD3Spec(spec)) {
           ensureD3().then(d3 => renderD3(cell, spec, d3, divIdFromMapping));
@@ -93,8 +149,8 @@
         }
 
         container.appendChild(cell);
-      });
-    });
+      }
+    }
   }
 
   // ==========================================
