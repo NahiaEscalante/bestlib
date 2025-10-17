@@ -26,25 +26,20 @@
       if (J && J.notebook && J.notebook.kernel) {
         const comm = J.notebook.kernel.comm_manager.new_comm("bestlib_matrix", { div_id: divId });
         global._bestlibComms[divId] = comm;
-        console.log(`✅ [BESTLIB] Comm creado (Jupyter) para ${divId}`);
         return comm;
       }
       
       // Si no funciona, intentar con Google Colab (retorna Promise)
       if (global.google && global.google.colab && global.google.colab.kernel) {
-        console.log('🔄 [BESTLIB] Creando comm para Colab (async)...');
-        // En Colab, open() retorna una Promise
         const commPromise = global.google.colab.kernel.comms.open("bestlib_matrix", { div_id: divId });
         
         // Guardar la promesa y resolverla
         commPromise.then(comm => {
           global._bestlibComms[divId] = comm;
-          console.log(`✅ [BESTLIB] Comm creado (Colab) para ${divId}`, comm);
         }).catch(err => {
-          console.error('❌ [BESTLIB] Error al crear comm de Colab:', err);
+          console.error('Error al crear comm:', err);
         });
         
-        // Retornar la promesa para manejo async
         return commPromise;
       }
       
@@ -52,15 +47,13 @@
       if (global.IPython && global.IPython.notebook && global.IPython.notebook.kernel) {
         const comm = global.IPython.notebook.kernel.comm_manager.new_comm("bestlib_matrix", { div_id: divId });
         global._bestlibComms[divId] = comm;
-        console.log(`✅ [BESTLIB] Comm creado (IPython) para ${divId}`);
         return comm;
       }
       
-      console.warn('⚠️ [BESTLIB] No se encontró kernel de Jupyter/Colab');
       return null;
       
     } catch (e) {
-      console.warn('❌ [BESTLIB] Error al crear comm:', e);
+      console.error('Error al crear comm:', e);
       return null;
     }
   }
@@ -73,13 +66,10 @@
    * @param {object} payload - Datos del evento
    */
   async function sendEvent(divId, type, payload) {
-    console.log('sendEvent called:', { divId, type, payload });
-    
     try {
       const commOrPromise = getComm(divId);
       
       if (!commOrPromise) {
-        console.warn('⚠️ No comm found for divId:', divId);
         return;
       }
       
@@ -89,7 +79,6 @@
         : commOrPromise;
       
       if (!comm) {
-        console.error('❌ Comm resuelto es null');
         return;
       }
       
@@ -99,18 +88,12 @@
         payload: payload 
       };
       
-      // Intentar diferentes métodos de envío según el entorno
+      // Enviar datos
       if (typeof comm.send === 'function') {
-        // Jupyter clásico / IPython / Colab resuelto
-        console.log('📤 Enviando via comm.send...');
         comm.send(message);
-        console.log('✅ Data sent successfully');
-      } else {
-        console.error('❌ Comm object no tiene método send:', comm);
-        console.log('Métodos disponibles:', Object.keys(comm));
       }
     } catch (e) {
-      console.error('❌ Error al enviar datos:', e);
+      console.error('Error al enviar datos:', e);
     }
   }
   
@@ -568,8 +551,7 @@
             return px >= x0 && px <= x1 && py >= y0 && py <= y1;
           });
           
-          // SIEMPRE enviar el evento (incluso si no hay puntos seleccionados)
-          console.log('Brush ended - selected items:', selected.length);
+          // Enviar el evento de selección
           sendEvent(divId, 'select', {
             type: 'select',
             items: selected,
