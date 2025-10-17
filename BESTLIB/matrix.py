@@ -182,9 +182,6 @@ class MatrixLayout:
         
         # Asegurar que el comm esté registrado
         MatrixLayout._ensure_comm_target()
-        
-        if MatrixLayout._debug:
-            print(f"✅ [MatrixLayout] Instancia creada: {self.div_id}")
     
     def __del__(self):
         """Limpia la referencia cuando se destruye la instancia"""
@@ -291,11 +288,6 @@ class MatrixLayout:
             
             # Usar el layout proporcionado o el de la instancia
             layout_to_use = ascii_layout if ascii_layout is not None else self.ascii_layout
-            
-            if MatrixLayout._debug:
-                print(f"📺 [MatrixLayout] Mostrando layout: {self.div_id}")
-                print(f"   Layout: {layout_to_use}")
-                print(f"   Handlers registrados: {list(self._handlers.keys())}")
             
             js_path = os.path.join(os.path.dirname(__file__), "matrix.js")
             css_path = os.path.join(os.path.dirname(__file__), "style.css")
