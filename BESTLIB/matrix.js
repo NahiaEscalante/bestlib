@@ -259,9 +259,9 @@
    */
   function renderBarChartD3(container, spec, d3, divId) {
     const data = spec.data || [];
-    const width = container.clientWidth || 300;
-    const height = container.clientHeight || 200;
-    const margin = { top: 10, right: 10, bottom: 30, left: 40 };
+    const width = container.clientWidth || 400;
+    const height = 250;  // Altura fija más compacta
+    const margin = { top: 20, right: 20, bottom: 40, left: 50 };
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
     
@@ -322,51 +322,32 @@
       .attr('y', d => y(d.value))
       .attr('height', d => chartHeight - y(d.value));
     
-    // Ejes con D3
+    // Ejes con D3 - Mejorados para visibilidad
     if (spec.axes) {
-      g.append('g')
+      // Eje X
+      const xAxis = g.append('g')
         .attr('transform', `translate(0,${chartHeight})`)
-        .call(d3.axisBottom(x))
-        .selectAll('text')
-        .style('font-size', '10px')
-        .style('fill', '#333');  // Color visible para texto
+        .call(d3.axisBottom(x));
       
-      g.append('g')
-        .call(d3.axisLeft(y).ticks(5))
-        .selectAll('text')
-        .style('font-size', '10px')
-        .style('fill', '#333');  // Color visible para texto
-    }
-    
-    // Agregar brush para selección múltiple
-    if (spec.interactive) {
-      const brush = d3.brushX()
-        .extent([[0, 0], [chartWidth, chartHeight]])
-        .on('end', function(event) {
-          if (!event.selection) return;
-          
-          const [x0, x1] = event.selection;
-          const selected = data.filter(d => {
-            const barX = x(d.category);
-            const barCenter = barX + x.bandwidth() / 2;
-            return barCenter >= x0 && barCenter <= x1;
-          });
-          
-          if (selected.length > 0) {
-            sendEvent(divId, 'select', {
-              type: 'select',
-              items: selected,
-              indices: selected.map((d, i) => data.indexOf(d))
-            });
-          }
-          
-          // Limpiar brush después de selección
-          d3.select(this).call(brush.move, null);
-        });
+      xAxis.selectAll('text')
+        .style('font-size', '11px')
+        .style('font-weight', '500')
+        .style('fill', '#2c3e50');
       
-      g.append('g')
-        .attr('class', 'brush')
-        .call(brush);
+      xAxis.selectAll('line, path')
+        .style('stroke', '#7f8c8d');
+      
+      // Eje Y
+      const yAxis = g.append('g')
+        .call(d3.axisLeft(y).ticks(5));
+      
+      yAxis.selectAll('text')
+        .style('font-size', '11px')
+        .style('font-weight', '500')
+        .style('fill', '#2c3e50');
+      
+      yAxis.selectAll('line, path')
+        .style('stroke', '#7f8c8d');
     }
   }
   
@@ -375,9 +356,9 @@
    */
   function renderScatterPlotD3(container, spec, d3, divId) {
     const data = spec.data || [];
-    const width = container.clientWidth || 300;
-    const height = container.clientHeight || 200;
-    const margin = { top: 10, right: 10, bottom: 30, left: 40 };
+    const width = container.clientWidth || 400;
+    const height = 250;  // Altura fija más compacta
+    const margin = { top: 20, right: 20, bottom: 40, left: 50 };
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
     
@@ -447,28 +428,70 @@
         }
       });
     
-    // Ejes con D3
+    // Ejes con D3 - Mejorados para visibilidad
     if (spec.axes) {
-      g.append('g')
+      // Eje X
+      const xAxis = g.append('g')
         .attr('transform', `translate(0,${chartHeight})`)
-        .call(d3.axisBottom(x).ticks(5))
-        .selectAll('text')
-        .style('font-size', '10px')
-        .style('fill', '#333');  // Color visible para texto
+        .call(d3.axisBottom(x).ticks(6));
       
-      g.append('g')
-        .call(d3.axisLeft(y).ticks(5))
-        .selectAll('text')
-        .style('font-size', '10px')
-        .style('fill', '#333');  // Color visible para texto
+      xAxis.selectAll('text')
+        .style('font-size', '11px')
+        .style('font-weight', '500')
+        .style('fill', '#2c3e50');
+      
+      xAxis.selectAll('line, path')
+        .style('stroke', '#7f8c8d');
+      
+      // Eje Y
+      const yAxis = g.append('g')
+        .call(d3.axisLeft(y).ticks(6));
+      
+      yAxis.selectAll('text')
+        .style('font-size', '11px')
+        .style('font-weight', '500')
+        .style('fill', '#2c3e50');
+      
+      yAxis.selectAll('line, path')
+        .style('stroke', '#7f8c8d');
     }
     
-    // Agregar brush para selección múltiple
+    // Brush para selección de área (solo en scatter)
     if (spec.interactive) {
       const brush = d3.brush()
         .extent([[0, 0], [chartWidth, chartHeight]])
-        .on('end', function(event) {
+        .on('start', function() {
+          // Destacar que se está seleccionando
+          g.selectAll('.dot')
+            .style('opacity', 0.3);
+        })
+        .on('brush', function(event) {
           if (!event.selection) return;
+          
+          const [[x0, y0], [x1, y1]] = event.selection;
+          
+          // Resaltar puntos dentro de la selección
+          g.selectAll('.dot')
+            .style('opacity', d => {
+              const px = x(d.x);
+              const py = y(d.y);
+              return (px >= x0 && px <= x1 && py >= y0 && py <= y1) ? 1 : 0.1;
+            })
+            .attr('r', d => {
+              const px = x(d.x);
+              const py = y(d.y);
+              const inSelection = px >= x0 && px <= x1 && py >= y0 && py <= y1;
+              return inSelection ? (spec.pointRadius || 4) * 1.3 : (spec.pointRadius || 4);
+            });
+        })
+        .on('end', function(event) {
+          if (!event.selection) {
+            // Restaurar si se cancela
+            g.selectAll('.dot')
+              .style('opacity', 0.7)
+              .attr('r', spec.pointRadius || 4);
+            return;
+          }
           
           const [[x0, y0], [x1, y1]] = event.selection;
           const selected = data.filter(d => {
@@ -485,13 +508,21 @@
             });
           }
           
-          // Limpiar brush después de selección
+          // Restaurar visualización
+          g.selectAll('.dot')
+            .transition()
+            .duration(300)
+            .style('opacity', 0.7)
+            .attr('r', spec.pointRadius || 4);
+          
+          // Limpiar brush
           d3.select(this).call(brush.move, null);
         });
       
       g.append('g')
         .attr('class', 'brush')
-        .call(brush);
+        .call(brush)
+        .call(brush.move, null);  // Asegurar que empiece limpio
     }
   }
 
