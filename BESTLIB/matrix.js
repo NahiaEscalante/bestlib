@@ -57,6 +57,7 @@
   
   /**
    * Envía un evento desde JavaScript a Python
+   * Compatible con Jupyter Notebook clásico y Google Colab
    * @param {string} divId - ID del contenedor matrix
    * @param {string} type - Tipo de evento (ej: 'select', 'click', 'brush')
    * @param {object} payload - Datos del evento
@@ -64,16 +65,40 @@
   function sendEvent(divId, type, payload) {
     console.log('sendEvent called:', { divId, type, payload });
     const comm = getComm(divId);
-    if (comm) {
-      console.log('Comm found, sending data...');
-      comm.send({ 
+    
+    if (!comm) {
+      console.warn('⚠️ No comm found for divId:', divId);
+      return;
+    }
+    
+    try {
+      const message = { 
         type: type, 
         div_id: divId, 
         payload: payload 
-      });
-      console.log('Data sent successfully');
-    } else {
-      console.warn('No comm found for divId:', divId);
+      };
+      
+      // Intentar diferentes métodos de envío según el entorno
+      if (typeof comm.send === 'function') {
+        // Jupyter clásico / IPython
+        console.log('📤 Enviando via comm.send (Jupyter)...');
+        comm.send(message);
+        console.log('✅ Data sent successfully (Jupyter)');
+      } else if (typeof comm.sendMsg === 'function') {
+        // Google Colab alternativa 1
+        console.log('📤 Enviando via comm.sendMsg (Colab)...');
+        comm.sendMsg(message);
+        console.log('✅ Data sent successfully (Colab sendMsg)');
+      } else if (comm.postMessage) {
+        // Google Colab alternativa 2
+        console.log('📤 Enviando via comm.postMessage (Colab)...');
+        comm.postMessage(message);
+        console.log('✅ Data sent successfully (Colab postMessage)');
+      } else {
+        console.error('❌ Comm object no tiene método send/sendMsg/postMessage:', comm);
+      }
+    } catch (e) {
+      console.error('❌ Error al enviar datos:', e);
     }
   }
   
