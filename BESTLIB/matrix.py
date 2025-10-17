@@ -11,37 +11,69 @@ class MatrixLayout:
     _instances = {}  # dict[str, weakref.ReferenceType[MatrixLayout]]
     _global_handlers = {}  # dict[str, callable]
     _comm_registered = False
+    _debug = False  # Modo debug para ver mensajes detallados
+    
+    @classmethod
+    def set_debug(cls, enabled: bool):
+        """Activa/desactiva mensajes de debug."""
+        cls._debug = enabled
     
     @classmethod
     def on_global(cls, event, func):
+        """Registra un callback global para un tipo de evento."""
+        cls._global_handlers[event] = func
+    
+    @classmethod
+    def register_comm(cls, force=False):
         """
-        Registra un callback global para un tipo de evento.
-        Se ejecuta si no hay handler específico en la instancia.
+        Registra manualmente el comm target de Jupyter.
+        Útil para forzar el registro o verificar que funciona.
         
         Args:
-            event (str): Nombre del evento (ej: 'select', 'click', 'brush')
-            func (callable): Función callback que recibe (payload)
+            force (bool): Si True, fuerza el re-registro incluso si ya está registrado
+        
+        Returns:
+            bool: True si el registro fue exitoso, False si falló
         """
-        cls._global_handlers[event] = func
+        if cls._comm_registered and not force:
+            if cls._debug:
+                print("ℹ️ [MatrixLayout] Comm ya estaba registrado")
+            return True
+        
+        if force:
+            cls._comm_registered = False
+        
+        return cls._ensure_comm_target()
     
     @classmethod
     def _ensure_comm_target(cls):
         """
         Registra el comm target de Jupyter para recibir eventos desde JS.
         Solo se ejecuta una vez por sesión.
+        
+        Returns:
+            bool: True si el registro fue exitoso, False si falló
         """
         if cls._comm_registered:
-            return
+            return True
         
         try:
             from IPython import get_ipython
             ip = get_ipython()
             if not ip or not hasattr(ip, "kernel"):
-                return
+                if cls._debug:
+                    print("⚠️ [MatrixLayout] No hay kernel de IPython disponible")
+                return False
             
             km = ip.kernel.comm_manager
             
             def _target(comm, open_msg):
+                """Handler del comm target que procesa mensajes desde JS"""
+                div_id = open_msg['content']['data'].get('div_id', 'unknown')
+                
+                if cls._debug:
+                    print(f"🔗 [MatrixLayout] Comm abierto para div_id: {div_id}")
+                
                 @comm.on_msg
                 def _recv(msg):
                     try:
@@ -49,6 +81,12 @@ class MatrixLayout:
                         div_id = data.get("div_id")
                         event_type = data.get("type")
                         payload = data.get("payload")
+                        
+                        if cls._debug:
+                            print(f"📩 [MatrixLayout] Evento recibido:")
+                            print(f"   - Tipo: {event_type}")
+                            print(f"   - Div ID: {div_id}")
+                            print(f"   - Payload: {payload}")
                         
                         # Buscar instancia por div_id
                         inst_ref = cls._instances.get(div_id)
@@ -58,36 +96,48 @@ class MatrixLayout:
                         handler = None
                         if inst and hasattr(inst, "_handlers"):
                             handler = inst._handlers.get(event_type)
+                            if handler and cls._debug:
+                                print(f"   ✓ Usando handler de instancia")
+                        
                         if not handler:
                             handler = cls._global_handlers.get(event_type)
+                            if handler and cls._debug:
+                                print(f"   ✓ Usando handler global")
                         
                         # Ejecutar callback
                         if handler:
                             handler(payload)
+                        else:
+                            if cls._debug:
+                                print(f"   ⚠️ No hay handler registrado para '{event_type}'")
+                    
                     except Exception as e:
-                        print(f"[MatrixLayout] Error en handler: {e}")
+                        print(f"❌ [MatrixLayout] Error en handler: {e}")
+                        if cls._debug:
+                            import traceback
+                            traceback.print_exc()
             
             km.register_target("bestlib_matrix", _target)
             cls._comm_registered = True
+            
+            if cls._debug:
+                print("✅ [MatrixLayout] Comm target 'bestlib_matrix' registrado exitosamente")
+            
+            return True
+            
         except Exception as e:
-            print(f"[MatrixLayout] No se pudo registrar comm: {e}")
+            print(f"❌ [MatrixLayout] No se pudo registrar comm: {e}")
+            if cls._debug:
+                import traceback
+                traceback.print_exc()
+            return False
     
     def on(self, event, func):
-        """
-        Registra un callback específico para esta instancia.
-        
-        Args:
-            event (str): Nombre del evento (ej: 'select', 'click', 'brush')
-            func (callable): Función callback que recibe (payload)
-        
-        Example:
-            layout = MatrixLayout("AAA\\nBBB")
-            layout.on('select', lambda data: print(f"Seleccionado: {data}"))
-        """
+        """Registra un callback específico para esta instancia."""
         if not hasattr(self, "_handlers"):
             self._handlers = {}
         self._handlers[event] = func
-        return self  # Para encadenar: layout.on(...).on(...)
+        return self
 
     @classmethod
     def map(cls, mapping):
@@ -96,14 +146,34 @@ class MatrixLayout:
     @classmethod
     def set_safe_html(cls, safe: bool):
         cls._safe_html = bool(safe)
+    
+    @classmethod
+    def get_status(cls):
+        """Retorna el estado actual del sistema de comunicación."""
+        active_instances = {
+            div_id: ref() is not None 
+            for div_id, ref in cls._instances.items()
+        }
+        
+        return {
+            "comm_registered": cls._comm_registered,
+            "debug_mode": cls._debug,
+            "active_instances": sum(active_instances.values()),
+            "total_instances": len(cls._instances),
+            "instance_ids": list(cls._instances.keys()),
+            "global_handlers": list(cls._global_handlers.keys()),
+        }
 
     def __init__(self, ascii_layout):
         self.ascii_layout = ascii_layout
         self.div_id = "matrix-" + str(uuid.uuid4())
-        
-        # Registrar instancia para recibir eventos
         MatrixLayout._instances[self.div_id] = weakref.ref(self)
         self._handlers = {}
+    
+    def __del__(self):
+        """Limpia la referencia cuando se destruye la instancia"""
+        if hasattr(self, 'div_id') and self.div_id in MatrixLayout._instances:
+            del MatrixLayout._instances[self.div_id]
 
     def _repr_html_(self):
         # Cargar JS y CSS desde el mismo paquete
@@ -192,14 +262,12 @@ class MatrixLayout:
         }
     
     def display(self):
-        """
-        Método alternativo para mostrar el layout usando IPython.display.
-        Útil cuando _repr_mimebundle_ no funciona correctamente en VS Code.
-        """
+        """Muestra el layout usando IPython.display."""
         try:
             from IPython.display import display, HTML, Javascript
             
-            # Cargar archivos
+            MatrixLayout._ensure_comm_target()
+            
             js_path = os.path.join(os.path.dirname(__file__), "matrix.js")
             css_path = os.path.join(os.path.dirname(__file__), "style.css")
             
@@ -209,37 +277,55 @@ class MatrixLayout:
             with open(css_path, "r", encoding="utf-8") as f:
                 css_code = f.read()
             
-            # Validar layout
             rows = [r for r in self.ascii_layout.strip().split("\n") if r]
             if not rows:
                 raise ValueError("ascii_layout no puede estar vacío")
             
             escaped_layout = self.ascii_layout.replace("`", "\\`")
             
-            # Metadata
             meta = {
                 "__safe_html__": bool(self._safe_html),
                 "__div_id__": self.div_id
             }
             mapping_js = json.dumps({**self._map, **meta})
             
-            # HTML con estilo y contenedor
             html_content = f"""
             <style>{css_code}</style>
             <div id="{self.div_id}" class="matrix-layout"></div>
             """
             
-            # JavaScript con render
             js_content = f"""
-            {js_code}
-            render("{self.div_id}", `{escaped_layout}`, {mapping_js});
+            (function() {{
+                function ensureD3() {{
+                    if (window.d3) return Promise.resolve(window.d3);
+                    
+                    return new Promise((resolve, reject) => {{
+                        const script = document.createElement('script');
+                        script.src = 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js';
+                        script.onload = () => {{
+                            if (window.d3) resolve(window.d3);
+                            else reject(new Error('D3 no se cargó'));
+                        }};
+                        script.onerror = () => reject(new Error('Error al cargar D3'));
+                        document.head.appendChild(script);
+                    }});
+                }}
+                
+                ensureD3().then(d3 => {{
+                    {js_code}
+                    render("{self.div_id}", `{escaped_layout}`, {mapping_js});
+                }}).catch(e => {{
+                    const errorDiv = document.getElementById("{self.div_id}");
+                    if (errorDiv) {{
+                        errorDiv.innerHTML = '<div style="color: #e74c3c; padding: 20px; border: 2px solid #e74c3c; border-radius: 5px;">' +
+                            '<strong>❌ Error:</strong> ' + e.message + '</div>';
+                    }}
+                }});
+            }})();
             """
             
-            # Mostrar HTML primero, luego JS
             display(HTML(html_content))
             display(Javascript(js_content))
             
-        except ImportError:
-            print("⚠️ IPython no disponible. Usa en un notebook Jupyter.")
         except Exception as e:
-            print(f"❌ Error al mostrar layout: {e}")
+            print(f"❌ Error: {e}")

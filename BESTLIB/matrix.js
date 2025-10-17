@@ -51,9 +51,6 @@
         div_id: divId, 
         payload: payload 
       });
-      console.log(`[BESTLIB] Evento enviado: ${type}`, payload);
-    } else {
-      console.warn(`[BESTLIB] No se pudo enviar evento ${type}: comm no disponible`);
     }
   }
   
@@ -88,6 +85,12 @@
 
     function isD3Spec(value) {
       return value && typeof value === 'object' && (value.type === 'bar' || value.type === 'scatter');
+    }
+    
+    function isSimpleViz(value) {
+      if (!value || typeof value !== 'object') return false;
+      const type = value.type || value.shape;
+      return type === 'circle' || type === 'rect' || type === 'line';
     }
 
     // Sistema de merge: marcar celdas visitadas
@@ -140,8 +143,20 @@
         cell.style.gridRow = `${r + 1} / span ${height}`;
         cell.style.gridColumn = `${c + 1} / span ${width}`;
 
-        if (isD3Spec(spec)) {
-          ensureD3().then(d3 => renderD3(cell, spec, d3, divIdFromMapping));
+        if (isD3Spec(spec) || isSimpleViz(spec)) {
+          // Cargar D3 y renderizar (para gráficos Y formas simples)
+          ensureD3().then(d3 => {
+            if (isD3Spec(spec)) {
+              renderChartD3(cell, spec, d3, divIdFromMapping);
+            } else if (isSimpleViz(spec)) {
+              renderSimpleVizD3(cell, spec, d3);
+            }
+          }).catch(err => {
+            cell.textContent = 'Error: No se pudo cargar D3.js';
+            cell.style.color = '#e74c3c';
+            cell.style.padding = '20px';
+            console.error('[BESTLIB]', err);
+          });
         } else if (safeHtml) {
           cell.innerHTML = spec || letter;
         } else {
@@ -154,16 +169,299 @@
   }
 
   // ==========================================
-  // Carga de D3.js
+  // Renderizado de Visualizaciones Simples con D3
+  // ==========================================
+  
+  /**
+   * Renderiza elementos visuales simples (círculos, rectángulos, líneas) usando D3.js
+   */
+  function renderSimpleVizD3(container, spec, d3) {
+    const width = container.clientWidth || 140;
+    const height = container.clientHeight || 140;
+    
+    // Crear SVG con D3
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 100 100`)
+      .style('display', 'block');
+    
+    const shape = spec.type || spec.shape;
+    
+    if (shape === 'circle') {
+      svg.append('circle')
+        .attr('cx', spec.cx || 50)
+        .attr('cy', spec.cy || 50)
+        .attr('r', 0)
+        .attr('fill', spec.fill || spec.color || '#4a90e2')
+        .attr('opacity', spec.opacity || 1)
+        .attr('stroke', spec.stroke || 'none')
+        .attr('stroke-width', spec.strokeWidth || 0)
+        .transition()
+        .duration(800)
+        .attr('r', spec.r || 40);
+      
+    } else if (shape === 'rect') {
+      const rectX = spec.x || 10;
+      const rectY = spec.y || 10;
+      const rectW = spec.width || 80;
+      const rectH = spec.height || 80;
+      
+      svg.append('rect')
+        .attr('x', rectX)
+        .attr('y', rectY)
+        .attr('width', 0)
+        .attr('height', 0)
+        .attr('fill', spec.fill || spec.color || '#4a90e2')
+        .attr('opacity', spec.opacity || 1)
+        .attr('rx', spec.borderRadius || spec.rx || 0)
+        .attr('stroke', spec.stroke || 'none')
+        .attr('stroke-width', spec.strokeWidth || 0)
+        .transition()
+        .duration(800)
+        .attr('width', rectW)
+        .attr('height', rectH);
+      
+    } else if (shape === 'line') {
+      svg.append('line')
+        .attr('x1', spec.x1 || 10)
+        .attr('y1', spec.y1 || 50)
+        .attr('x2', spec.x1 || 10)
+        .attr('y2', spec.y1 || 50)
+        .attr('stroke', spec.stroke || spec.color || '#4a90e2')
+        .attr('stroke-width', spec.strokeWidth || 3)
+        .attr('stroke-linecap', 'round')
+        .transition()
+        .duration(800)
+        .attr('x2', spec.x2 || 90)
+        .attr('y2', spec.y2 || 50);
+    }
+  }
+
+  // ==========================================
+  // Renderizado de Gráficos con D3.js
+  // ==========================================
+  
+  /**
+   * Renderiza gráficos con D3.js
+   */
+  function renderChartD3(container, spec, d3, divId) {
+    if (spec.type === 'bar') {
+      renderBarChartD3(container, spec, d3, divId);
+    } else if (spec.type === 'scatter') {
+      renderScatterPlotD3(container, spec, d3, divId);
+    }
+  }
+  
+  /**
+   * Gráfico de barras con D3.js
+   */
+  function renderBarChartD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const width = container.clientWidth || 300;
+    const height = container.clientHeight || 200;
+    const margin = { top: 10, right: 10, bottom: 30, left: 40 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+    
+    // Crear SVG con D3
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height);
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    // Escalas D3
+    const x = d3.scaleBand()
+      .domain(data.map(d => d.category))
+      .range([0, chartWidth])
+      .padding(0.2);
+    
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d.value) || 100])
+      .nice()
+      .range([chartHeight, 0]);
+    
+    // Barras con D3
+    g.selectAll('.bar')
+      .data(data)
+      .enter()
+      .append('rect')
+      .attr('class', 'bar')
+      .attr('x', d => x(d.category))
+      .attr('y', chartHeight)
+      .attr('width', x.bandwidth())
+      .attr('height', 0)
+      .attr('fill', spec.color || '#4a90e2')
+      .style('cursor', spec.interactive ? 'pointer' : 'default')
+      .on('click', function(event, d) {
+        if (spec.interactive) {
+          const index = data.indexOf(d);
+          sendEvent(divId, 'select', {
+            type: 'select',
+            items: [d],
+            indices: [index]
+          });
+        }
+      })
+      .on('mouseenter', function() {
+        if (spec.interactive) {
+          d3.select(this).attr('fill', spec.hoverColor || '#357abd');
+        }
+      })
+      .on('mouseleave', function() {
+        if (spec.interactive) {
+          d3.select(this).attr('fill', spec.color || '#4a90e2');
+        }
+      })
+      .transition()
+      .duration(800)
+      .attr('y', d => y(d.value))
+      .attr('height', d => chartHeight - y(d.value));
+    
+    // Ejes con D3
+    if (spec.axes) {
+      g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x))
+        .selectAll('text')
+        .style('font-size', '10px');
+      
+      g.append('g')
+        .call(d3.axisLeft(y).ticks(5))
+        .selectAll('text')
+        .style('font-size', '10px');
+    }
+  }
+  
+  /**
+   * Gráfico de dispersión con D3.js
+   */
+  function renderScatterPlotD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const width = container.clientWidth || 300;
+    const height = container.clientHeight || 200;
+    const margin = { top: 10, right: 10, bottom: 30, left: 40 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+    
+    // Crear SVG con D3
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height);
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    // Escalas D3
+    const x = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d.x) || 100])
+      .nice()
+      .range([0, chartWidth]);
+    
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d.y) || 100])
+      .nice()
+      .range([chartHeight, 0]);
+    
+    // Puntos con D3
+    g.selectAll('.dot')
+      .data(data)
+      .enter()
+      .append('circle')
+      .attr('class', 'dot')
+      .attr('cx', d => x(d.x))
+      .attr('cy', d => y(d.y))
+      .attr('r', spec.pointRadius || 4)
+      .attr('fill', d => {
+        if (spec.colorMap && d.category) {
+          return spec.colorMap[d.category] || '#4a90e2';
+        }
+        return spec.color || '#4a90e2';
+      })
+      .attr('opacity', 0.7)
+      .style('cursor', spec.interactive ? 'pointer' : 'default')
+      .on('click', function(event, d) {
+        if (spec.interactive) {
+          const index = data.indexOf(d);
+          sendEvent(divId, 'point_click', {
+            type: 'point_click',
+            point: d,
+            index: index
+          });
+        }
+      })
+      .on('mouseenter', function() {
+        if (spec.interactive) {
+          d3.select(this)
+            .transition()
+            .duration(200)
+            .attr('r', (spec.pointRadius || 4) * 1.5)
+            .attr('opacity', 1);
+        }
+      })
+      .on('mouseleave', function() {
+        if (spec.interactive) {
+          d3.select(this)
+            .transition()
+            .duration(200)
+            .attr('r', spec.pointRadius || 4)
+            .attr('opacity', 0.7);
+        }
+      });
+    
+    // Ejes con D3
+    if (spec.axes) {
+      g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x).ticks(5))
+        .selectAll('text')
+        .style('font-size', '10px');
+      
+      g.append('g')
+        .call(d3.axisLeft(y).ticks(5))
+        .selectAll('text')
+        .style('font-size', '10px');
+    }
+  }
+
+  // ==========================================
+  // Carga de D3.js (Optimizado para Colab)
   // ==========================================
   
   function ensureD3() {
     if (global.d3) return Promise.resolve(global.d3);
+    
     return new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[src*="d3"]');
+      if (existing) {
+        const checkD3 = setInterval(() => {
+          if (global.d3) {
+            clearInterval(checkD3);
+            resolve(global.d3);
+          }
+        }, 100);
+        setTimeout(() => {
+          clearInterval(checkD3);
+          if (global.d3) resolve(global.d3);
+          else reject(new Error('Timeout D3'));
+        }, 5000);
+        return;
+      }
+      
       const script = document.createElement('script');
       script.src = 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js';
-      script.onload = () => resolve(global.d3);
-      script.onerror = () => reject(new Error('No se pudo cargar D3'));
+      script.onload = () => {
+        setTimeout(() => {
+          if (global.d3) resolve(global.d3);
+          else reject(new Error('D3 no se inicializó'));
+        }, 50);
+      };
+      script.onerror = () => reject(new Error('Error cargar D3'));
       document.head.appendChild(script);
     });
   }
