@@ -44,13 +44,18 @@
    * @param {object} payload - Datos del evento
    */
   function sendEvent(divId, type, payload) {
+    console.log('sendEvent called:', { divId, type, payload });
     const comm = getComm(divId);
     if (comm) {
+      console.log('Comm found, sending data...');
       comm.send({ 
         type: type, 
         div_id: divId, 
         payload: payload 
       });
+      console.log('Data sent successfully');
+    } else {
+      console.warn('No comm found for divId:', divId);
     }
   }
   
@@ -490,6 +495,7 @@
             });
         })
         .on('end', function(event) {
+          // Si no hay selección, resetear y salir
           if (!event.selection) {
             g.selectAll('.dot')
               .style('opacity', 0.7)
@@ -497,27 +503,32 @@
             return;
           }
           
+          // Obtener coordenadas de la selección
           const [[x0, y0], [x1, y1]] = event.selection;
+          
+          // Filtrar puntos dentro de la selección
           const selected = data.filter(d => {
             const px = x(d.x);
             const py = y(d.y);
             return px >= x0 && px <= x1 && py >= y0 && py <= y1;
           });
           
-          if (selected.length > 0) {
-            sendEvent(divId, 'select', {
-              type: 'select',
-              items: selected,
-              count: selected.length
-            });
-          }
+          // SIEMPRE enviar el evento (incluso si no hay puntos seleccionados)
+          console.log('Brush ended - selected items:', selected.length);
+          sendEvent(divId, 'select', {
+            type: 'select',
+            items: selected,
+            count: selected.length
+          });
           
+          // Resetear visualización de puntos
           g.selectAll('.dot')
             .transition()
             .duration(300)
             .style('opacity', 0.7)
             .attr('r', spec.pointRadius || 4);
           
+          // Limpiar el brush visual
           brushGroup.call(brush.move, null);
         });
       
