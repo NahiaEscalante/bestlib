@@ -30,12 +30,22 @@
         return comm;
       }
       
-      // Si no funciona, intentar con Google Colab
+      // Si no funciona, intentar con Google Colab (retorna Promise)
       if (global.google && global.google.colab && global.google.colab.kernel) {
-        const comm = global.google.colab.kernel.comms.open("bestlib_matrix", { div_id: divId });
-        global._bestlibComms[divId] = comm;
-        console.log(`✅ [BESTLIB] Comm creado (Colab) para ${divId}`);
-        return comm;
+        console.log('🔄 [BESTLIB] Creando comm para Colab (async)...');
+        // En Colab, open() retorna una Promise
+        const commPromise = global.google.colab.kernel.comms.open("bestlib_matrix", { div_id: divId });
+        
+        // Guardar la promesa y resolverla
+        commPromise.then(comm => {
+          global._bestlibComms[divId] = comm;
+          console.log(`✅ [BESTLIB] Comm creado (Colab) para ${divId}`, comm);
+        }).catch(err => {
+          console.error('❌ [BESTLIB] Error al crear comm de Colab:', err);
+        });
+        
+        // Retornar la promesa para manejo async
+        return commPromise;
       }
       
       // Último intento: buscar kernel en window
@@ -62,16 +72,27 @@
    * @param {string} type - Tipo de evento (ej: 'select', 'click', 'brush')
    * @param {object} payload - Datos del evento
    */
-  function sendEvent(divId, type, payload) {
+  async function sendEvent(divId, type, payload) {
     console.log('sendEvent called:', { divId, type, payload });
-    const comm = getComm(divId);
-    
-    if (!comm) {
-      console.warn('⚠️ No comm found for divId:', divId);
-      return;
-    }
     
     try {
+      const commOrPromise = getComm(divId);
+      
+      if (!commOrPromise) {
+        console.warn('⚠️ No comm found for divId:', divId);
+        return;
+      }
+      
+      // Si es una promesa (Colab), esperar a que se resuelva
+      const comm = (commOrPromise instanceof Promise) 
+        ? await commOrPromise 
+        : commOrPromise;
+      
+      if (!comm) {
+        console.error('❌ Comm resuelto es null');
+        return;
+      }
+      
       const message = { 
         type: type, 
         div_id: divId, 
@@ -80,22 +101,13 @@
       
       // Intentar diferentes métodos de envío según el entorno
       if (typeof comm.send === 'function') {
-        // Jupyter clásico / IPython
-        console.log('📤 Enviando via comm.send (Jupyter)...');
+        // Jupyter clásico / IPython / Colab resuelto
+        console.log('📤 Enviando via comm.send...');
         comm.send(message);
-        console.log('✅ Data sent successfully (Jupyter)');
-      } else if (typeof comm.sendMsg === 'function') {
-        // Google Colab alternativa 1
-        console.log('📤 Enviando via comm.sendMsg (Colab)...');
-        comm.sendMsg(message);
-        console.log('✅ Data sent successfully (Colab sendMsg)');
-      } else if (comm.postMessage) {
-        // Google Colab alternativa 2
-        console.log('📤 Enviando via comm.postMessage (Colab)...');
-        comm.postMessage(message);
-        console.log('✅ Data sent successfully (Colab postMessage)');
+        console.log('✅ Data sent successfully');
       } else {
-        console.error('❌ Comm object no tiene método send/sendMsg/postMessage:', comm);
+        console.error('❌ Comm object no tiene método send:', comm);
+        console.log('Métodos disponibles:', Object.keys(comm));
       }
     } catch (e) {
       console.error('❌ Error al enviar datos:', e);
