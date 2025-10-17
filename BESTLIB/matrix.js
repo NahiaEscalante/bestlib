@@ -328,12 +328,45 @@
         .attr('transform', `translate(0,${chartHeight})`)
         .call(d3.axisBottom(x))
         .selectAll('text')
-        .style('font-size', '10px');
+        .style('font-size', '10px')
+        .style('fill', '#333');  // Color visible para texto
       
       g.append('g')
         .call(d3.axisLeft(y).ticks(5))
         .selectAll('text')
-        .style('font-size', '10px');
+        .style('font-size', '10px')
+        .style('fill', '#333');  // Color visible para texto
+    }
+    
+    // Agregar brush para selección múltiple
+    if (spec.interactive) {
+      const brush = d3.brushX()
+        .extent([[0, 0], [chartWidth, chartHeight]])
+        .on('end', function(event) {
+          if (!event.selection) return;
+          
+          const [x0, x1] = event.selection;
+          const selected = data.filter(d => {
+            const barX = x(d.category);
+            const barCenter = barX + x.bandwidth() / 2;
+            return barCenter >= x0 && barCenter <= x1;
+          });
+          
+          if (selected.length > 0) {
+            sendEvent(divId, 'select', {
+              type: 'select',
+              items: selected,
+              indices: selected.map((d, i) => data.indexOf(d))
+            });
+          }
+          
+          // Limpiar brush después de selección
+          d3.select(this).call(brush.move, null);
+        });
+      
+      g.append('g')
+        .attr('class', 'brush')
+        .call(brush);
     }
   }
   
@@ -420,12 +453,45 @@
         .attr('transform', `translate(0,${chartHeight})`)
         .call(d3.axisBottom(x).ticks(5))
         .selectAll('text')
-        .style('font-size', '10px');
+        .style('font-size', '10px')
+        .style('fill', '#333');  // Color visible para texto
       
       g.append('g')
         .call(d3.axisLeft(y).ticks(5))
         .selectAll('text')
-        .style('font-size', '10px');
+        .style('font-size', '10px')
+        .style('fill', '#333');  // Color visible para texto
+    }
+    
+    // Agregar brush para selección múltiple
+    if (spec.interactive) {
+      const brush = d3.brush()
+        .extent([[0, 0], [chartWidth, chartHeight]])
+        .on('end', function(event) {
+          if (!event.selection) return;
+          
+          const [[x0, y0], [x1, y1]] = event.selection;
+          const selected = data.filter(d => {
+            const px = x(d.x);
+            const py = y(d.y);
+            return px >= x0 && px <= x1 && py >= y0 && py <= y1;
+          });
+          
+          if (selected.length > 0) {
+            sendEvent(divId, 'select', {
+              type: 'select',
+              items: selected,
+              count: selected.length
+            });
+          }
+          
+          // Limpiar brush después de selección
+          d3.select(this).call(brush.move, null);
+        });
+      
+      g.append('g')
+        .attr('class', 'brush')
+        .call(brush);
     }
   }
 
