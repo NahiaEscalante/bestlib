@@ -164,11 +164,27 @@ class MatrixLayout:
             "global_handlers": list(cls._global_handlers.keys()),
         }
 
-    def __init__(self, ascii_layout):
+    def __init__(self, ascii_layout=None):
+        """
+        Crea una nueva instancia de MatrixLayout.
+        
+        Args:
+            ascii_layout (str, optional): Layout ASCII. Si no se proporciona, se genera uno simple.
+        """
+        # Si no se proporciona layout, crear uno simple
+        if ascii_layout is None:
+            ascii_layout = "A"
+        
         self.ascii_layout = ascii_layout
         self.div_id = "matrix-" + str(uuid.uuid4())
         MatrixLayout._instances[self.div_id] = weakref.ref(self)
         self._handlers = {}
+        
+        # Asegurar que el comm esté registrado
+        MatrixLayout._ensure_comm_target()
+        
+        if MatrixLayout._debug:
+            print(f"✅ [MatrixLayout] Instancia creada: {self.div_id}")
     
     def __del__(self):
         """Limpia la referencia cuando se destruye la instancia"""
@@ -261,12 +277,25 @@ class MatrixLayout:
             "application/javascript": js,
         }
     
-    def display(self):
-        """Muestra el layout usando IPython.display."""
+    def display(self, ascii_layout=None):
+        """
+        Muestra el layout usando IPython.display.
+        
+        Args:
+            ascii_layout (str, optional): Layout ASCII a usar. Si no se proporciona, usa self.ascii_layout.
+        """
         try:
             from IPython.display import display, HTML, Javascript
             
             MatrixLayout._ensure_comm_target()
+            
+            # Usar el layout proporcionado o el de la instancia
+            layout_to_use = ascii_layout if ascii_layout is not None else self.ascii_layout
+            
+            if MatrixLayout._debug:
+                print(f"📺 [MatrixLayout] Mostrando layout: {self.div_id}")
+                print(f"   Layout: {layout_to_use}")
+                print(f"   Handlers registrados: {list(self._handlers.keys())}")
             
             js_path = os.path.join(os.path.dirname(__file__), "matrix.js")
             css_path = os.path.join(os.path.dirname(__file__), "style.css")
@@ -277,11 +306,11 @@ class MatrixLayout:
             with open(css_path, "r", encoding="utf-8") as f:
                 css_code = f.read()
             
-            rows = [r for r in self.ascii_layout.strip().split("\n") if r]
+            rows = [r for r in layout_to_use.strip().split("\n") if r]
             if not rows:
                 raise ValueError("ascii_layout no puede estar vacío")
             
-            escaped_layout = self.ascii_layout.replace("`", "\\`")
+            escaped_layout = layout_to_use.replace("`", "\\`")
             
             meta = {
                 "__safe_html__": bool(self._safe_html),
