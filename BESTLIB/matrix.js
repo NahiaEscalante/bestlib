@@ -428,49 +428,52 @@
         }
       });
     
-    // Ejes con D3 - Mejorados para visibilidad
+    // Ejes con texto NEGRO y visible
     if (spec.axes) {
-      // Eje X
       const xAxis = g.append('g')
         .attr('transform', `translate(0,${chartHeight})`)
         .call(d3.axisBottom(x).ticks(6));
       
       xAxis.selectAll('text')
-        .style('font-size', '11px')
-        .style('font-weight', '500')
-        .style('fill', '#2c3e50');
+        .style('font-size', '12px')
+        .style('font-weight', '600')
+        .style('fill', '#000000')  // NEGRO
+        .style('font-family', 'Arial, sans-serif');
       
       xAxis.selectAll('line, path')
-        .style('stroke', '#7f8c8d');
+        .style('stroke', '#000000')
+        .style('stroke-width', '1.5px');
       
-      // Eje Y
       const yAxis = g.append('g')
         .call(d3.axisLeft(y).ticks(6));
       
       yAxis.selectAll('text')
-        .style('font-size', '11px')
-        .style('font-weight', '500')
-        .style('fill', '#2c3e50');
+        .style('font-size', '12px')
+        .style('font-weight', '600')
+        .style('fill', '#000000')  // NEGRO
+        .style('font-family', 'Arial, sans-serif');
       
       yAxis.selectAll('line, path')
-        .style('stroke', '#7f8c8d');
+        .style('stroke', '#000000')
+        .style('stroke-width', '1.5px');
     }
     
-    // Brush para selección de área (solo en scatter)
+    // BRUSH para selección de área (MEJORADO)
     if (spec.interactive) {
+      const brushGroup = g.append('g')
+        .attr('class', 'brush-layer');
+      
       const brush = d3.brush()
         .extent([[0, 0], [chartWidth, chartHeight]])
-        .on('start', function() {
-          // Destacar que se está seleccionando
-          g.selectAll('.dot')
-            .style('opacity', 0.3);
+        .on('start', function(event) {
+          if (!event.sourceEvent) return;
+          g.selectAll('.dot').style('opacity', 0.3);
         })
         .on('brush', function(event) {
           if (!event.selection) return;
           
           const [[x0, y0], [x1, y1]] = event.selection;
           
-          // Resaltar puntos dentro de la selección
           g.selectAll('.dot')
             .style('opacity', d => {
               const px = x(d.x);
@@ -481,12 +484,11 @@
               const px = x(d.x);
               const py = y(d.y);
               const inSelection = px >= x0 && px <= x1 && py >= y0 && py <= y1;
-              return inSelection ? (spec.pointRadius || 4) * 1.3 : (spec.pointRadius || 4);
+              return inSelection ? (spec.pointRadius || 4) * 1.5 : (spec.pointRadius || 4);
             });
         })
         .on('end', function(event) {
           if (!event.selection) {
-            // Restaurar si se cancela
             g.selectAll('.dot')
               .style('opacity', 0.7)
               .attr('r', spec.pointRadius || 4);
@@ -508,21 +510,16 @@
             });
           }
           
-          // Restaurar visualización
           g.selectAll('.dot')
             .transition()
             .duration(300)
             .style('opacity', 0.7)
             .attr('r', spec.pointRadius || 4);
           
-          // Limpiar brush
-          d3.select(this).call(brush.move, null);
+          brushGroup.call(brush.move, null);
         });
       
-      g.append('g')
-        .attr('class', 'brush')
-        .call(brush)
-        .call(brush.move, null);  // Asegurar que empiece limpio
+      brushGroup.call(brush);
     }
   }
 
