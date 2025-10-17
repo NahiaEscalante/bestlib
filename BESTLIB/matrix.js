@@ -322,32 +322,34 @@
       .attr('y', d => y(d.value))
       .attr('height', d => chartHeight - y(d.value));
     
-    // Ejes con D3 - Mejorados para visibilidad
+    // Ejes con D3 - Texto NEGRO y visible
     if (spec.axes) {
-      // Eje X
       const xAxis = g.append('g')
         .attr('transform', `translate(0,${chartHeight})`)
         .call(d3.axisBottom(x));
       
       xAxis.selectAll('text')
-        .style('font-size', '11px')
-        .style('font-weight', '500')
-        .style('fill', '#2c3e50');
+        .style('font-size', '12px')
+        .style('font-weight', '600')
+        .style('fill', '#000000')  // NEGRO
+        .style('font-family', 'Arial, sans-serif');
       
       xAxis.selectAll('line, path')
-        .style('stroke', '#7f8c8d');
+        .style('stroke', '#000000')
+        .style('stroke-width', '1.5px');
       
-      // Eje Y
       const yAxis = g.append('g')
         .call(d3.axisLeft(y).ticks(5));
       
       yAxis.selectAll('text')
-        .style('font-size', '11px')
-        .style('font-weight', '500')
-        .style('fill', '#2c3e50');
+        .style('font-size', '12px')
+        .style('font-weight', '600')
+        .style('fill', '#000000')  // NEGRO
+        .style('font-family', 'Arial, sans-serif');
       
       yAxis.selectAll('line, path')
-        .style('stroke', '#7f8c8d');
+        .style('stroke', '#000000')
+        .style('stroke-width', '1.5px');
     }
   }
   
