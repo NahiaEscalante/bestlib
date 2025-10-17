@@ -6,6 +6,7 @@
   
   /**
    * Obtiene o crea un comm de Jupyter para comunicación con Python
+   * Compatible con Jupyter Notebook clásico y Google Colab
    * @param {string} divId - ID del contenedor matrix
    * @returns {object|null} Comm de Jupyter o null si no está disponible
    */
@@ -20,19 +21,36 @@
     }
     
     try {
+      // Intentar primero con Jupyter clásico
       const J = global.Jupyter;
-      const kernel = J && J.notebook && J.notebook.kernel;
-      if (!kernel) {
-        console.warn('[BESTLIB] Jupyter kernel no disponible');
-        return null;
+      if (J && J.notebook && J.notebook.kernel) {
+        const comm = J.notebook.kernel.comm_manager.new_comm("bestlib_matrix", { div_id: divId });
+        global._bestlibComms[divId] = comm;
+        console.log(`✅ [BESTLIB] Comm creado (Jupyter) para ${divId}`);
+        return comm;
       }
       
-      const comm = kernel.comm_manager.new_comm("bestlib_matrix", { div_id: divId });
-      global._bestlibComms[divId] = comm;
-      console.log(`[BESTLIB] Comm creado para ${divId}`);
-      return comm;
+      // Si no funciona, intentar con Google Colab
+      if (global.google && global.google.colab && global.google.colab.kernel) {
+        const comm = global.google.colab.kernel.comms.open("bestlib_matrix", { div_id: divId });
+        global._bestlibComms[divId] = comm;
+        console.log(`✅ [BESTLIB] Comm creado (Colab) para ${divId}`);
+        return comm;
+      }
+      
+      // Último intento: buscar kernel en window
+      if (global.IPython && global.IPython.notebook && global.IPython.notebook.kernel) {
+        const comm = global.IPython.notebook.kernel.comm_manager.new_comm("bestlib_matrix", { div_id: divId });
+        global._bestlibComms[divId] = comm;
+        console.log(`✅ [BESTLIB] Comm creado (IPython) para ${divId}`);
+        return comm;
+      }
+      
+      console.warn('⚠️ [BESTLIB] No se encontró kernel de Jupyter/Colab');
+      return null;
+      
     } catch (e) {
-      console.warn('[BESTLIB] No se pudo crear comm:', e);
+      console.warn('❌ [BESTLIB] Error al crear comm:', e);
       return null;
     }
   }
