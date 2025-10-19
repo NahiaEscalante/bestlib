@@ -13,6 +13,10 @@ class MatrixLayout:
     _comm_registered = False
     _debug = False  # Modo debug para ver mensajes detallados
     
+    # Linked views system
+    _linked_groups = {}  # dict[str, list[str]] - group_id -> list of div_ids
+    _link_mode = {}  # dict[str, str] - group_id -> 'highlight' or 'filter'
+    
     @classmethod
     def set_debug(cls, enabled: bool):
         """Activa/desactiva mensajes de debug."""
@@ -92,6 +96,12 @@ class MatrixLayout:
                         inst_ref = cls._instances.get(div_id)
                         inst = inst_ref() if inst_ref else None
                         
+                        # Auto-store selection data
+                        if inst and event_type in ['select', 'point_click', 'brush']:
+                            if not hasattr(inst, '_selection_data'):
+                                inst._selection_data = {}
+                            inst._selection_data[event_type] = payload
+                        
                         # Buscar handler: primero en instancia, luego global
                         handler = None
                         if inst and hasattr(inst, "_handlers"):
@@ -110,6 +120,25 @@ class MatrixLayout:
                         else:
                             if cls._debug:
                                 print(f"   ⚠️ No hay handler registrado para '{event_type}'")
+                        
+                        # Propagate to linked views
+                        for group_id, linked_divs in cls._linked_groups.items():
+                            if div_id in linked_divs:
+                                mode = cls._link_mode.get(group_id, 'highlight')
+                                # Send update to all other linked views
+                                for linked_div in linked_divs:
+                                    if linked_div != div_id:
+                                        linked_inst_ref = cls._instances.get(linked_div)
+                                        linked_inst = linked_inst_ref() if linked_inst_ref else None
+                                        if linked_inst:
+                                            # Store linked update in selection data
+                                            if not hasattr(linked_inst, '_selection_data'):
+                                                linked_inst._selection_data = {}
+                                            linked_inst._selection_data['linked_update'] = {
+                                                'mode': mode,
+                                                'source_div': div_id,
+                                                'selection': payload
+                                            }
                     
                     except Exception as e:
                         print(f"❌ [MatrixLayout] Error en handler: {e}")
@@ -139,6 +168,20 @@ class MatrixLayout:
         self._handlers[event] = func
         return self
 
+    def get_selection(self, event_type='select'):
+        """
+        Get the latest selection data without needing a callback.
+        
+        Args:
+            event_type (str): Type of event ('select', 'point_click', 'brush')
+        
+        Returns:
+            dict: Latest selection payload or empty dict if no selection
+        """
+        if not hasattr(self, '_selection_data'):
+            self._selection_data = {}
+        return self._selection_data.get(event_type, {})
+
     @classmethod
     def map(cls, mapping):
         cls._map = mapping
@@ -164,6 +207,31 @@ class MatrixLayout:
             "global_handlers": list(cls._global_handlers.keys()),
         }
 
+    @classmethod
+    def link_views(cls, layouts, group_id=None, mode='highlight'):
+        """
+        Link multiple layout instances for synchronized selection.
+        
+        Args:
+            layouts (list[MatrixLayout]): Layouts to link
+            group_id (str): Optional group identifier
+            mode (str): 'highlight' or 'filter'
+        """
+        if group_id is None:
+            group_id = f"link-{uuid.uuid4()}"
+        
+        div_ids = [layout.div_id for layout in layouts]
+        cls._linked_groups[group_id] = div_ids
+        cls._link_mode[group_id] = mode
+        
+        return group_id
+
+    @classmethod
+    def unlink_views(cls, group_id):
+        """Remove a linked group."""
+        cls._linked_groups.pop(group_id, None)
+        cls._link_mode.pop(group_id, None)
+
     def __init__(self, ascii_layout=None):
         """
         Crea una nueva instancia de MatrixLayout.
@@ -179,6 +247,7 @@ class MatrixLayout:
         self.div_id = "matrix-" + str(uuid.uuid4())
         MatrixLayout._instances[self.div_id] = weakref.ref(self)
         self._handlers = {}
+        self._selection_data = {}  # Store selections by event type
         
         # Asegurar que el comm esté registrado
         MatrixLayout._ensure_comm_target()

@@ -98,6 +98,90 @@
   }
   
   // ==========================================
+  // Linked Views System
+  // ==========================================
+  
+  /**
+   * Handle linked view updates from Python
+   */
+  function handleLinkedUpdate(divId, payload) {
+    const mode = payload.mode;
+    const selection = payload.selection;
+    const container = document.getElementById(divId);
+    
+    if (!container) return;
+    
+    if (mode === 'highlight') {
+      highlightLinkedSelection(container, selection);
+    } else if (mode === 'filter') {
+      filterLinkedSelection(container, selection);
+    }
+  }
+  
+  function highlightLinkedSelection(container, selection) {
+    const items = selection.items || [];
+    const svg = d3.select(container).select('svg');
+    
+    if (svg.empty()) return;
+    
+    // Dim all elements
+    svg.selectAll('.bar, .dot, .scatter-point, .radar-point, .stream-layer')
+      .attr('opacity', 0.2);
+    
+    // Highlight matching elements based on data comparison
+    if (items.length > 0) {
+      svg.selectAll('.bar, .dot, .scatter-point, .radar-point, .stream-layer')
+        .filter(function(d) {
+          return items.some(item => {
+            // Compare based on chart type and data structure
+            if (d.category && item.category) {
+              return d.category === item.category;
+            }
+            if (d.x !== undefined && item.x !== undefined && d.y !== undefined && item.y !== undefined) {
+              return d.x === item.x && d.y === item.y;
+            }
+            if (d.axis && item.axis) {
+              return d.axis === item.axis;
+            }
+            return false;
+          });
+        })
+        .attr('opacity', 1);
+    }
+  }
+  
+  function filterLinkedSelection(container, selection) {
+    const items = selection.items || [];
+    const svg = d3.select(container).select('svg');
+    
+    if (svg.empty()) return;
+    
+    if (items.length === 0) {
+      // Show all elements if no selection
+      svg.selectAll('.bar, .dot, .scatter-point, .radar-point, .stream-layer')
+        .style('display', null);
+    } else {
+      // Hide non-matching elements
+      svg.selectAll('.bar, .dot, .scatter-point, .radar-point, .stream-layer')
+        .style('display', function(d) {
+          const matches = items.some(item => {
+            if (d.category && item.category) {
+              return d.category === item.category;
+            }
+            if (d.x !== undefined && item.x !== undefined && d.y !== undefined && item.y !== undefined) {
+              return d.x === item.x && d.y === item.y;
+            }
+            if (d.axis && item.axis) {
+              return d.axis === item.axis;
+            }
+            return false;
+          });
+          return matches ? null : 'none';
+        });
+    }
+  }
+  
+  // ==========================================
   // Renderizado Principal
   // ==========================================
   
@@ -127,7 +211,8 @@
     };
 
     function isD3Spec(value) {
-      return value && typeof value === 'object' && (value.type === 'bar' || value.type === 'scatter');
+      return value && typeof value === 'object' && 
+        ['bar', 'scatter', 'sunburst', 'radar', 'stream'].includes(value.type);
     }
     
     function isSimpleViz(value) {
@@ -294,6 +379,12 @@
       renderBarChartD3(container, spec, d3, divId);
     } else if (spec.type === 'scatter') {
       renderScatterPlotD3(container, spec, d3, divId);
+    } else if (spec.type === 'sunburst') {
+      renderSunburstD3(container, spec, d3, divId);
+    } else if (spec.type === 'radar') {
+      renderRadarChartD3(container, spec, d3, divId);
+    } else if (spec.type === 'stream') {
+      renderStreamGraphD3(container, spec, d3, divId);
     }
   }
   
@@ -438,7 +529,13 @@
       .attr('r', spec.pointRadius || 4)
       .attr('fill', d => {
         if (spec.colorMap && d.category) {
-          return spec.colorMap[d.category] || '#4a90e2';
+          return spec.colorMap[d.category];
+        } else if (d.color) {
+          return d.color;
+        } else if (d.category) {
+          // Auto-generate color scale for categories
+          const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+          return colorScale(d.category);
         }
         return spec.color || '#4a90e2';
       })
@@ -571,6 +668,241 @@
       
       brushGroup.call(brush);
     }
+  }
+
+  /**
+   * Sunburst Chart with D3.js
+   */
+  function renderSunburstD3(container, spec, d3, divId) {
+    const data = spec.data || {};  // Hierarchical data
+    const width = container.clientWidth || 400;
+    const height = 400;
+    const radius = Math.min(width, height) / 2;
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height);
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${width/2},${height/2})`);
+    
+    const color = d3.scaleOrdinal(d3.schemeCategory10);
+    
+    const partition = d3.partition()
+      .size([2 * Math.PI, radius]);
+    
+    const root = d3.hierarchy(data)
+      .sum(d => d.value || 0);
+    
+    partition(root);
+    
+    const arc = d3.arc()
+      .startAngle(d => d.x0)
+      .endAngle(d => d.x1)
+      .innerRadius(d => d.y0)
+      .outerRadius(d => d.y1);
+    
+    g.selectAll('path')
+      .data(root.descendants())
+      .enter()
+      .append('path')
+      .attr('d', arc)
+      .attr('fill', d => color(d.data.name))
+      .attr('opacity', 0.8)
+      .attr('stroke', '#fff')
+      .style('cursor', spec.interactive ? 'pointer' : 'default')
+      .on('click', function(event, d) {
+        if (spec.interactive) {
+          sendEvent(divId, 'select', {
+            type: 'sunburst',
+            item: d.data,
+            path: d.ancestors().map(n => n.data.name).reverse()
+          });
+        }
+      })
+      .on('mouseenter', function() {
+        d3.select(this).attr('opacity', 1);
+      })
+      .on('mouseleave', function() {
+        d3.select(this).attr('opacity', 0.8);
+      });
+  }
+
+  /**
+   * Radar Chart with D3.js
+   */
+  function renderRadarChartD3(container, spec, d3, divId) {
+    const data = spec.data || [];  // [{axis: 'A', value: 50}, ...]
+    const width = container.clientWidth || 400;
+    const height = 400;
+    const margin = 50;
+    const radius = Math.min(width, height) / 2 - margin;
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height);
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${width/2},${height/2})`);
+    
+    const axes = data.map(d => d.axis);
+    const angleSlice = (Math.PI * 2) / axes.length;
+    
+    // Scale for radius
+    const rScale = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d.value) || 100])
+      .range([0, radius]);
+    
+    // Draw circular grid
+    const levels = 5;
+    for (let i = 1; i <= levels; i++) {
+      const levelRadius = (radius / levels) * i;
+      g.append('circle')
+        .attr('r', levelRadius)
+        .attr('fill', 'none')
+        .attr('stroke', '#CDCDCD')
+        .attr('stroke-width', 0.5);
+    }
+    
+    // Draw axes
+    axes.forEach((axis, i) => {
+      const angle = angleSlice * i - Math.PI / 2;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      
+      g.append('line')
+        .attr('x1', 0)
+        .attr('y1', 0)
+        .attr('x2', x)
+        .attr('y2', y)
+        .attr('stroke', '#CDCDCD')
+        .attr('stroke-width', 1);
+      
+      g.append('text')
+        .attr('x', x * 1.1)
+        .attr('y', y * 1.1)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '12px')
+        .text(axis);
+    });
+    
+    // Draw data polygon
+    const radarLine = d3.lineRadial()
+      .angle((d, i) => angleSlice * i)
+      .radius(d => rScale(d.value))
+      .curve(d3.curveLinearClosed);
+    
+    g.append('path')
+      .datum(data)
+      .attr('d', radarLine)
+      .attr('fill', spec.color || '#4a90e2')
+      .attr('fill-opacity', 0.3)
+      .attr('stroke', spec.color || '#4a90e2')
+      .attr('stroke-width', 2);
+    
+    // Add interactive points
+    if (spec.interactive) {
+      g.selectAll('.radar-point')
+        .data(data)
+        .enter()
+        .append('circle')
+        .attr('class', 'radar-point')
+        .attr('cx', (d, i) => {
+          const angle = angleSlice * i - Math.PI / 2;
+          return Math.cos(angle) * rScale(d.value);
+        })
+        .attr('cy', (d, i) => {
+          const angle = angleSlice * i - Math.PI / 2;
+          return Math.sin(angle) * rScale(d.value);
+        })
+        .attr('r', 4)
+        .attr('fill', spec.color || '#4a90e2')
+        .style('cursor', 'pointer')
+        .on('click', function(event, d) {
+          sendEvent(divId, 'point_click', {
+            type: 'radar',
+            point: d
+          });
+        });
+    }
+  }
+
+  /**
+   * Stream Graph with D3.js
+   */
+  function renderStreamGraphD3(container, spec, d3, divId) {
+    const data = spec.data || [];  // [{date: ..., key1: val, key2: val}, ...]
+    const keys = spec.keys || [];  // ['key1', 'key2', ...]
+    const width = container.clientWidth || 600;
+    const height = 400;
+    const margin = {top: 20, right: 20, bottom: 30, left: 50};
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height);
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+    
+    // Stack data
+    const stack = d3.stack()
+      .keys(keys)
+      .offset(d3.stackOffsetWiggle);
+    
+    const series = stack(data);
+    
+    // Scales
+    const x = d3.scaleLinear()
+      .domain([0, data.length - 1])
+      .range([0, chartWidth]);
+    
+    const y = d3.scaleLinear()
+      .domain([
+        d3.min(series, s => d3.min(s, d => d[0])),
+        d3.max(series, s => d3.max(s, d => d[1]))
+      ])
+      .range([chartHeight, 0]);
+    
+    const color = d3.scaleOrdinal(d3.schemeCategory10);
+    
+    // Area generator
+    const area = d3.area()
+      .x((d, i) => x(i))
+      .y0(d => y(d[0]))
+      .y1(d => y(d[1]))
+      .curve(d3.curveBasis);
+    
+    // Draw streams
+    g.selectAll('.stream-layer')
+      .data(series)
+      .enter()
+      .append('path')
+      .attr('class', 'stream-layer')
+      .attr('d', area)
+      .attr('fill', (d, i) => color(i))
+      .attr('opacity', 0.7)
+      .style('cursor', spec.interactive ? 'pointer' : 'default')
+      .on('click', function(event, d) {
+        if (spec.interactive) {
+          sendEvent(divId, 'select', {
+            type: 'stream',
+            key: d.key,
+            data: d
+          });
+        }
+      })
+      .on('mouseenter', function() {
+        d3.select(this).attr('opacity', 1);
+      })
+      .on('mouseleave', function() {
+        d3.select(this).attr('opacity', 0.7);
+      });
   }
 
   // ==========================================

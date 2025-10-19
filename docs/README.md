@@ -9,9 +9,12 @@ Librería Python para crear layouts interactivos basados en grids ASCII con visu
 - ✅ **Layouts ASCII**: Define grids visuales con arte ASCII simple
 - ✅ **Merge de Celdas**: Combina celdas automáticamente
 - ✅ **Elementos Visuales Simples**: Círculos, rectángulos, líneas sin D3
-- ✅ **Gráficos D3.js**: Bar charts y scatter plots interactivos
+- ✅ **Gráficos D3.js**: Bar charts, scatter plots, sunburst, radar, stream
 - ✅ **Interactividad**: Selección, zoom, tooltips automáticos
 - ✅ **Comunicación Bidireccional**: Eventos JS → Python en tiempo real
+- ✅ **🆕 Selección Automática**: `get_selection()` sin callbacks manuales
+- ✅ **🆕 Linked Views**: Sincronización entre múltiples gráficos
+- ✅ **🆕 Nuevos Tipos de Gráfico**: Sunburst, Radar, Stream, Scatter mejorado
 - ✅ **Safe HTML**: Renderizado seguro por defecto
 
 ## 🚀 Instalación
@@ -136,6 +139,71 @@ layout.on('point_click', lambda p: print(f"Click: {p['point']['label']}"))\
 layout
 ```
 
+### 🆕 5. Selección Automática de Datos
+
+```python
+# Sin callbacks manuales - acceso directo
+layout = MatrixLayout("BBB")
+
+# Interactuar con el gráfico, luego:
+selection = layout.get_selection('select')
+if selection:
+    items = selection.get('items', [])
+    print(f"Seleccionados: {len(items)} elementos")
+    print(f"Datos: {items}")
+```
+
+### 🆕 6. Linked Views
+
+```python
+# Crear múltiples layouts
+layout1 = MatrixLayout("B")
+layout2 = MatrixLayout("S")
+layout3 = MatrixLayout("R")
+
+# Linkear con modo highlight
+group_id = MatrixLayout.link_views([layout1, layout2, layout3], mode='highlight')
+
+# Linkear con modo filter
+filter_group = MatrixLayout.link_views([layout1, layout2], mode='filter')
+
+# Deslinkear
+MatrixLayout.unlink_views(group_id)
+```
+
+### 🆕 7. Nuevos Tipos de Gráfico
+
+```python
+# Sunburst Chart
+MatrixLayout.map({
+    'SB': {
+        "type": "sunburst",
+        "data": hierarchical_data,
+        "interactive": True
+    }
+})
+
+# Radar Chart
+MatrixLayout.map({
+    'R': {
+        "type": "radar",
+        "data": radar_data,
+        "color": "#e74c3c",
+        "interactive": True
+    }
+})
+
+# Stream Graph
+MatrixLayout.map({
+    'ST': {
+        "type": "stream",
+        "data": time_series_data,
+        "keys": ["key1", "key2"],
+        "interactive": True
+    }
+})
+```
+
 ## 📊 Tipos de Visualizaciones
 
 ### Elementos Simples (sin D3)
@@ -203,6 +271,47 @@ layout
     "interactive": True,  # Habilita selección
     "zoom": True,  # Habilita zoom con rueda del mouse
     "axes": True
+}
+```
+
+#### 🆕 Sunburst Chart
+```python
+{
+    "type": "sunburst",
+    "data": {
+        "name": "Root",
+        "children": [
+            {"name": "Category A", "value": 30},
+            {"name": "Category B", "value": 50}
+        ]
+    },
+    "interactive": True
+}
+```
+
+#### 🆕 Radar Chart
+```python
+{
+    "type": "radar",
+    "data": [
+        {"axis": "Speed", "value": 85},
+        {"axis": "Reliability", "value": 70}
+    ],
+    "color": "#e74c3c",
+    "interactive": True
+}
+```
+
+#### 🆕 Stream Graph
+```python
+{
+    "type": "stream",
+    "data": [
+        {"date": "2023-01", "Product A": 10, "Product B": 20},
+        {"date": "2023-02", "Product A": 15, "Product B": 25}
+    ],
+    "keys": ["Product A", "Product B"],
+    "interactive": True
 }
 ```
 

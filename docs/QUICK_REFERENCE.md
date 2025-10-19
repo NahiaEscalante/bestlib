@@ -94,9 +94,81 @@ layout = MatrixLayout("SSS")
 layout
 ```
 
+### 🆕 Sunburst Chart
+```python
+data = {
+    "name": "Root",
+    "children": [
+        {"name": "Category A", "value": 30},
+        {"name": "Category B", "value": 50}
+    ]
+}
+
+MatrixLayout.map({
+    'SB': {
+        "type": "sunburst",
+        "data": data,
+        "interactive": True
+    }
+})
+
+layout = MatrixLayout("SB")
+layout
+```
+
+### 🆕 Radar Chart
+```python
+data = [
+    {"axis": "Speed", "value": 85},
+    {"axis": "Reliability", "value": 70}
+]
+
+MatrixLayout.map({
+    'R': {
+        "type": "radar",
+        "data": data,
+        "color": "#e74c3c",
+        "interactive": True
+    }
+})
+
+layout = MatrixLayout("RRR")
+layout
+```
+
+### 🆕 Stream Graph
+```python
+data = [
+    {"date": "2023-01", "Product A": 10, "Product B": 20},
+    {"date": "2023-02", "Product A": 15, "Product B": 25}
+]
+
+MatrixLayout.map({
+    'ST': {
+        "type": "stream",
+        "data": data,
+        "keys": ["Product A", "Product B"],
+        "interactive": True
+    }
+})
+
+layout = MatrixLayout("STST")
+layout
+```
+
 ## 3️⃣ Selección de Datos
 
-### Callback Simple
+### 🆕 Método Automático (Recomendado)
+```python
+# Sin callbacks - acceso directo a datos
+selection = layout.get_selection('select')
+if selection:
+    items = selection.get('items', [])
+    print(f"Seleccionados: {len(items)}")
+    print(f"Datos: {items}")
+```
+
+### Callback Simple (Tradicional)
 ```python
 selected = []
 
@@ -122,17 +194,47 @@ layout.on('select', on_select)
 
 ### Usar Datos en Otra Celda
 ```python
-# En una celda:
+# Método automático (recomendado):
+selection = layout.get_selection('select')
+if selection:
+    import pandas as pd
+    df = pd.DataFrame(selection.get('items', []))
+    print(df)
+
+# Método tradicional:
 selected_data = []
 layout.on('select', lambda p: selected_data.append(p['items']))
-
-# En otra celda:
-import pandas as pd
-df = pd.DataFrame(selected_data[-1] if selected_data else [])
-print(df)
 ```
 
-## 4️⃣ Dashboard
+## 4️⃣ 🆕 Linked Views
+
+### Link Charts (Highlight Mode)
+```python
+# Create multiple layouts
+layout1 = MatrixLayout("B")
+layout2 = MatrixLayout("S") 
+layout3 = MatrixLayout("R")
+
+# Link them with highlight mode
+group_id = MatrixLayout.link_views([layout1, layout2, layout3], mode='highlight')
+print(f"Linked charts: {group_id}")
+```
+
+### Link Charts (Filter Mode)
+```python
+# Link with filter mode
+filter_group = MatrixLayout.link_views([layout1, layout2], mode='filter')
+print(f"Filter group: {filter_group}")
+```
+
+### Unlink Charts
+```python
+# Remove linking
+MatrixLayout.unlink_views(group_id)
+print("Charts unlinked")
+```
+
+## 5️⃣ Dashboard
 
 ```python
 MatrixLayout.map({
