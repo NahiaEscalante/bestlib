@@ -3,6 +3,12 @@ import json
 import os
 import weakref
 
+try:
+    import ipywidgets as widgets
+    HAS_WIDGETS = True
+except ImportError:
+    HAS_WIDGETS = False
+
 class MatrixLayout:
     _map = {}
     _safe_html = True
@@ -179,9 +185,43 @@ class MatrixLayout:
         self.div_id = "matrix-" + str(uuid.uuid4())
         MatrixLayout._instances[self.div_id] = weakref.ref(self)
         self._handlers = {}
+        self._reactive_model = None  # Para modelo reactivo
         
         # Asegurar que el comm esté registrado
         MatrixLayout._ensure_comm_target()
+    
+    def connect_selection(self, reactive_model):
+        """
+        Conecta un modelo reactivo para actualizar automáticamente.
+        
+        Args:
+            reactive_model: Instancia de ReactiveData o SelectionModel
+        
+        Ejemplo:
+            from BESTLIB.reactive import SelectionModel
+            
+            selection = SelectionModel()
+            selection.on_change(lambda items, count: print(f"{count} seleccionados"))
+            
+            layout = MatrixLayout("S")
+            layout.connect_selection(selection)
+            layout.display()
+        """
+        if not HAS_WIDGETS:
+            print("⚠️ ipywidgets no está instalado. Instala con: pip install ipywidgets")
+            return
+        
+        self._reactive_model = reactive_model
+        
+        # Crear handler que actualiza el modelo reactivo
+        def update_model(payload):
+            items = payload.get('items', [])
+            reactive_model.update(items)
+        
+        # Registrar el handler
+        self.on('select', update_model)
+        
+        return self
     
     def __del__(self):
         """Limpia la referencia cuando se destruye la instancia"""
