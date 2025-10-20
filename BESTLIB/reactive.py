@@ -135,3 +135,103 @@ def create_reactive_variable(name="data"):
     var = ReactiveData()
     var.name = name
     return var
+
+
+class ReactiveMatrixLayout:
+    """
+    Versión reactiva de MatrixLayout que actualiza automáticamente los datos.
+    
+    Uso:
+        from BESTLIB.reactive import ReactiveMatrixLayout, SelectionModel
+        
+        # Crear modelo de selección
+        selection = SelectionModel()
+        
+        # Crear layout reactivo
+        layout = ReactiveMatrixLayout("S", selection_model=selection)
+        layout.map({'S': {...}})
+        layout.display()
+        
+        # Mostrar widget (se actualiza automáticamente)
+        display(selection.widget)
+    """
+    
+    def __init__(self, ascii_layout=None, selection_model=None):
+        """
+        Crea un MatrixLayout con soporte reactivo.
+        
+        Args:
+            ascii_layout: Layout ASCII (opcional)
+            selection_model: Instancia de SelectionModel para reactividad
+        """
+        from .matrix import MatrixLayout
+        
+        # Crear instancia base de MatrixLayout
+        self._layout = MatrixLayout(ascii_layout)
+        
+        # Modelo reactivo
+        self.selection_model = selection_model or SelectionModel()
+        
+        # Conectar el modelo reactivo
+        self._layout.connect_selection(self.selection_model)
+    
+    def map(self, mapping):
+        """Delega al MatrixLayout interno"""
+        self._layout.map(mapping)
+        return self
+    
+    def on(self, event, func):
+        """Delega al MatrixLayout interno"""
+        self._layout.on(event, func)
+        return self
+    
+    def display(self, ascii_layout=None):
+        """Delega al MatrixLayout interno"""
+        self._layout.display(ascii_layout)
+        return self
+    
+    @property
+    def selection_widget(self):
+        """
+        Retorna el widget de selección para mostrar en Jupyter.
+        
+        Uso:
+            display(layout.selection_widget)
+        """
+        if not hasattr(self.selection_model, '_widget'):
+            # Crear widget visual
+            self.selection_model._widget = widgets.VBox([
+                widgets.HTML('<h4>📊 Datos Seleccionados</h4>'),
+                widgets.Label(value='Esperando selección...'),
+                widgets.IntText(value=0, description='Cantidad:', disabled=True)
+            ])
+            
+            # Observar cambios y actualizar widget
+            def update_widget(change):
+                items = change['new']
+                count = len(items)
+                
+                label = self.selection_model._widget.children[1]
+                counter = self.selection_model._widget.children[2]
+                
+                if count > 0:
+                    label.value = f'✅ {count} elementos seleccionados'
+                    counter.value = count
+                else:
+                    label.value = 'Esperando selección...'
+                    counter.value = 0
+            
+            self.selection_model.observe(update_widget, names='items')
+        
+        return self.selection_model._widget
+    
+    @property
+    def items(self):
+        """Retorna los items seleccionados"""
+        return self.selection_model.get_items()
+    
+    @property
+    def count(self):
+        """Retorna el número de items seleccionados"""
+        return self.selection_model.get_count()
+
