@@ -238,32 +238,8 @@ class LinkedViews:
         layout.display()
     
     def display(self):
-        """Muestra todas las vistas enlazadas"""
-        if not HAS_IPYTHON:
-            return
-        
-        # Crear contenedor HTML
-        html_parts = [f'<div id="{self._container_id}" style="display: flex; flex-wrap: wrap; gap: 20px;">']
-        
-        for view_id in self._views.keys():
-            container_id = f"{self._container_id}-{view_id}"
-            html_parts.append(
-                f'<div id="{container_id}" style="flex: 1; min-width: 400px; max-width: 600px;"></div>'
-            )
-        
-        html_parts.append('</div>')
-        
-        display(HTML(''.join(html_parts)))
-        
-        # Crear y mostrar cada vista
-        for view_id, view_config in self._views.items():
-            if view_config['type'] == 'scatter':
-                self._create_scatter_layout(view_id, view_config).display()
-            elif view_config['type'] == 'barchart':
-                self._create_barchart_layout(view_id, view_config).display()
         """Muestra todas las vistas enlazadas en el notebook"""
         if not HAS_IPYTHON:
-            print("Error: IPython no disponible")
             return
         
         # Crear contenedor HTML para todas las vistas
