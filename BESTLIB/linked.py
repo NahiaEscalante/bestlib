@@ -90,7 +90,10 @@ class LinkedViews:
             category_field: Campo de categoría para agrupar
             value_field: Campo numérico para agregar (opcional)
             aggregation: 'count', 'sum', 'mean' (solo si value_field está definido)
-            **kwargs: Argumentos adicionales (color, axes, etc.)
+            **kwargs: Argumentos adicionales
+                - colorMap: Diccionario {categoria: color} para colorear barras
+                - color: Color único para todas las barras (ignorado si colorMap está presente)
+                - axes: Mostrar ejes (default: True)
         """
         self._views[view_id] = {
             'type': 'barchart',
@@ -125,8 +128,15 @@ class LinkedViews:
         # Contar por categoría
         categories = Counter([item.get(cat_field, 'unknown') for item in data])
         
+        # Obtener colorMap si existe
+        color_map = view_config.get('kwargs', {}).get('colorMap', {})
+        
         bar_data = [
-            {'category': cat, 'value': count}
+            {
+                'category': cat, 
+                'value': count,
+                'color': color_map.get(cat, '#9b59b6')  # Color por defecto si no está en el mapa
+            }
             for cat, count in categories.items()
         ]
         
@@ -261,9 +271,7 @@ class LinkedViews:
                 self._create_scatter_layout(view_id, view_config).display()
             elif view_config['type'] == 'barchart':
                 self._create_barchart_layout(view_id, view_config).display()
-        
-        print(" Vistas enlazadas creadas")
-        print(" Selecciona puntos en el scatter plot para actualizar el bar chart")
+    
     
     def get_selected_data(self):
         """Retorna los datos seleccionados actualmente"""

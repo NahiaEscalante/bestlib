@@ -67,16 +67,15 @@ linked.add_scatter(
 linked.add_barchart(
     'bar1',
     category_field='category',
-    color='#9b59b6'
+    colorMap={
+        'A': '#e74c3c',
+        'B': '#3498db', 
+        'C': '#2ecc71'
+    }
 )
 
 # Mostrar ambas vistas enlazadas
 linked.display()
-
-print("\n🎯 INSTRUCCIONES:")
-print("1. Arrastra el mouse sobre el scatter plot para seleccionar puntos")
-print("2. El bar chart se actualizará automáticamente")
-print("3. Mostrará solo las categorías de los puntos seleccionados")
 ```
 
 ---
@@ -161,14 +160,15 @@ linked.add_scatter(
 linked.add_barchart(
     'species_bar',
     category_field='species',
-    color='#9b59b6'
+    colorMap={
+        'setosa': '#e74c3c',
+        'versicolor': '#3498db',
+        'virginica': '#2ecc71'
+    }
 )
 
 # Mostrar vistas enlazadas
 linked.display()
-
-print("\n🎯 Scatter Plot ← → Bar Chart")
-print("✅ Completamente enlazados en tiempo real")
 ```
 
 ---
@@ -197,7 +197,8 @@ Agrega un bar chart que se actualiza automáticamente.
 **Parámetros**:
 - `view_id`: Identificador único
 - `category_field`: Campo para agrupar (default: 'category')
-- `color`: Color de las barras
+- `colorMap`: Diccionario {categoría: color} para colorear barras por categoría
+- `color`: Color único para todas las barras (ignorado si colorMap está presente)
 - `axes`: Mostrar ejes (default: True)
 
 ### **`.display()`**
