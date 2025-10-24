@@ -4,11 +4,27 @@ from .matrix import MatrixLayout
 try:
     from .reactive import ReactiveMatrixLayout, SelectionModel
     HAS_REACTIVE = True
-    __all__ = ["MatrixLayout", "ReactiveMatrixLayout", "SelectionModel"]
 except ImportError:
-    # Si ipywidgets no está instalado, solo exportar MatrixLayout
     HAS_REACTIVE = False
-    __all__ = ["MatrixLayout"]
+    ReactiveMatrixLayout = None
+    SelectionModel = None
+
+# Importar sistema de vistas enlazadas
+try:
+    from .linked import LinkedViews
+    HAS_LINKED = True
+except ImportError:
+    HAS_LINKED = False
+    LinkedViews = None
+
+# Construir __all__ dinámicamente
+__all__ = ["MatrixLayout"]
+
+if HAS_REACTIVE:
+    __all__.extend(["ReactiveMatrixLayout", "SelectionModel"])
+
+if HAS_LINKED:
+    __all__.append("LinkedViews")
 
 # Registrar automáticamente el comm al importar
 # Esto asegura que la comunicación bidireccional funcione sin configuración extra
