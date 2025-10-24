@@ -187,37 +187,80 @@ class LinkedViews:
         if not HAS_IPYTHON:
             return
         
-        # Actualizar solo los bar charts (las vistas dependientes)
+        # Actualizar solo los bar charts con datos seleccionados
         for view_id, view_config in self._views.items():
-            if view_config['type'] == 'barchart':
-                # Recrear el layout con datos seleccionados
-                self._create_barchart_layout(view_id, view_config, data_source='selected')
+            if view_config['type'] == 'barchart' and view_id in self._layouts:
+                # Usar datos seleccionados si existen, sino usar originales
+                data = self._selected_data if self._selected_data else self._data
                 
-                # Re-renderizar
+                # Extraer los datos originales
+                original_data = [item.get('_original', item) for item in data]
+                
+                # Preparar nuevos datos del barchart
+                bar_data = self._prepare_barchart_data(view_config, original_data)
+                
+                # Actualizar el spec del layout existente
+                bar_spec = {
+                    'type': 'bar',
+                    'data': bar_data,
+                    'axes': True,
+                    'interactive': False,
+                    **view_config['kwargs']
+                }
+                
+                # Re-mapear y re-renderizar
+                self._layouts[view_id].map({'B': bar_spec})
+                
+                # Limpiar y re-renderizar el contenedor
                 container_id = f"{self._container_id}-{view_id}"
-                self._render_view_update(view_id, container_id)
+                self._clear_and_redisplay(view_id, container_id)
     
-    def _render_view_update(self, view_id, container_id):
-        """Re-renderiza una vista específica"""
+    def _clear_and_redisplay(self, view_id, container_id):
+        """Limpia y re-renderiza una vista específica"""
         layout = self._layouts.get(view_id)
         if not layout:
             return
         
-        # Generar JavaScript para actualizar el contenedor
-        js_code = f"""
+        # JavaScript para limpiar el contenedor
+        js_clear = f"""
+        <script>
         (function() {{
             const container = document.getElementById('{container_id}');
             if (container) {{
-                container.innerHTML = '';  // Limpiar
-                // El layout se renderizará automáticamente
+                container.innerHTML = '';
             }}
         }})();
+        </script>
         """
         
-        display(HTML(f"<script>{js_code}</script>"))
+        # Mostrar el script de limpieza y luego el nuevo gráfico
+        display(HTML(js_clear))
         layout.display()
     
     def display(self):
+        """Muestra todas las vistas enlazadas"""
+        if not HAS_IPYTHON:
+            return
+        
+        # Crear contenedor HTML
+        html_parts = [f'<div id="{self._container_id}" style="display: flex; flex-wrap: wrap; gap: 20px;">']
+        
+        for view_id in self._views.keys():
+            container_id = f"{self._container_id}-{view_id}"
+            html_parts.append(
+                f'<div id="{container_id}" style="flex: 1; min-width: 400px; max-width: 600px;"></div>'
+            )
+        
+        html_parts.append('</div>')
+        
+        display(HTML(''.join(html_parts)))
+        
+        # Crear y mostrar cada vista
+        for view_id, view_config in self._views.items():
+            if view_config['type'] == 'scatter':
+                self._create_scatter_layout(view_id, view_config).display()
+            elif view_config['type'] == 'barchart':
+                self._create_barchart_layout(view_id, view_config).display()
         """Muestra todas las vistas enlazadas en el notebook"""
         if not HAS_IPYTHON:
             print("Error: IPython no disponible")
