@@ -6,6 +6,13 @@ Permite que los datos se actualicen automáticamente sin re-ejecutar celdas
 import ipywidgets as widgets
 from traitlets import List, Dict, Int, observe
 
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
+    pd = None
+
 
 class ReactiveData(widgets.Widget):
     """
@@ -139,26 +146,34 @@ def create_reactive_variable(name="data"):
 
 class ReactiveMatrixLayout:
     """
-    Versión reactiva de MatrixLayout que actualiza automáticamente los datos.
+    Versión reactiva de MatrixLayout que actualiza automáticamente los datos
+    e integra LinkedViews dentro de la matriz ASCII.
     
     Uso:
         from BESTLIB.reactive import ReactiveMatrixLayout, SelectionModel
+        import pandas as pd
         
         # Crear modelo de selección
         selection = SelectionModel()
         
-        # Crear layout reactivo
-        layout = ReactiveMatrixLayout("S", selection_model=selection)
-        layout.map({'S': {...}})
+        # Crear layout reactivo con vistas enlazadas
+        layout = ReactiveMatrixLayout("SB", selection_model=selection)
+        
+        # Agregar scatter plot (vista principal)
+        layout.add_scatter('S', df, x_col='edad', y_col='salario', category_col='dept', interactive=True)
+        
+        # Agregar bar chart enlazado (se actualiza automáticamente)
+        layout.add_barchart('B', category_col='dept')
+        
         layout.display()
         
-        # Mostrar widget (se actualiza automáticamente)
-        display(selection.widget)
+        # Los datos seleccionados contienen filas completas del DataFrame
+        selected_rows = selection.get_items()  # Lista de diccionarios con todas las columnas
     """
     
     def __init__(self, ascii_layout=None, selection_model=None):
         """
-        Crea un MatrixLayout con soporte reactivo.
+        Crea un MatrixLayout con soporte reactivo y LinkedViews integrado.
         
         Args:
             ascii_layout: Layout ASCII (opcional)
@@ -174,6 +189,154 @@ class ReactiveMatrixLayout:
         
         # Conectar el modelo reactivo
         self._layout.connect_selection(self.selection_model)
+        
+        # Sistema de vistas enlazadas
+        self._views = {}  # {view_id: view_config}
+        self._data = None  # DataFrame o lista de diccionarios
+        self._selected_data = []  # Datos seleccionados actualmente
+        self._view_letters = {}  # {view_id: letter} - mapeo de vista a letra del layout
+    
+    def set_data(self, data):
+        """
+        Establece los datos originales para todas las vistas enlazadas.
+        
+        Args:
+            data: DataFrame de pandas o lista de diccionarios
+        """
+        self._data = data
+        return self
+    
+    def add_scatter(self, letter, data=None, x_col=None, y_col=None, category_col=None, interactive=True, **kwargs):
+        """
+        Agrega un scatter plot a la matriz con soporte para DataFrames.
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el scatter plot
+            data: DataFrame de pandas o lista de diccionarios
+            x_col: Nombre de columna para eje X
+            y_col: Nombre de columna para eje Y
+            category_col: Nombre de columna para categorías (opcional)
+            interactive: Si True, habilita brush selection
+            **kwargs: Argumentos adicionales (colorMap, pointRadius, axes, etc.)
+        
+        Returns:
+            self para encadenamiento
+        """
+        if data is not None:
+            self._data = data
+        elif self._data is None:
+            raise ValueError("Debe proporcionar datos con data= o usar set_data() primero")
+        
+        # Usar el método helper de MatrixLayout
+        from .matrix import MatrixLayout
+        MatrixLayout.map_scatter(
+            letter, 
+            self._data, 
+            x_col=x_col, 
+            y_col=y_col, 
+            category_col=category_col,
+            interactive=interactive,
+            **kwargs
+        )
+        
+        # Registrar vista para sistema de enlace
+        view_id = f"scatter_{letter}"
+        self._views[view_id] = {
+            'type': 'scatter',
+            'letter': letter,
+            'x_col': x_col,
+            'y_col': y_col,
+            'category_col': category_col,
+            'interactive': interactive,
+            'kwargs': kwargs
+        }
+        self._view_letters[view_id] = letter
+        
+        return self
+    
+    def add_barchart(self, letter, category_col=None, value_col=None, **kwargs):
+        """
+        Agrega un bar chart enlazado que se actualiza automáticamente cuando se selecciona en scatter.
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el bar chart
+            category_col: Nombre de columna para categorías
+            value_col: Nombre de columna para valores (opcional, si no se especifica cuenta)
+            **kwargs: Argumentos adicionales (color, colorMap, axes, etc.)
+        
+        Returns:
+            self para encadenamiento
+        """
+        if self._data is None:
+            raise ValueError("Debe usar set_data() o add_scatter() primero para establecer los datos")
+        
+        # Crear bar chart inicial con todos los datos
+        from .matrix import MatrixLayout
+        MatrixLayout.map_barchart(
+            letter,
+            self._data,
+            category_col=category_col,
+            value_col=value_col,
+            **kwargs
+        )
+        
+        # Registrar vista para sistema de enlace
+        view_id = f"barchart_{letter}"
+        self._views[view_id] = {
+            'type': 'barchart',
+            'letter': letter,
+            'category_col': category_col,
+            'value_col': value_col,
+            'kwargs': kwargs
+        }
+        self._view_letters[view_id] = letter
+        
+        # Configurar callback para actualizar bar chart cuando cambia selección
+        def update_barchart(items, count):
+            """Actualiza el bar chart cuando cambia la selección"""
+            try:
+                if not items or len(items) == 0:
+                    # Si no hay selección, mostrar todos los datos
+                    MatrixLayout.map_barchart(
+                        letter,
+                        self._data,
+                        category_col=category_col,
+                        value_col=value_col,
+                        **kwargs
+                    )
+                else:
+                    # Usar solo datos seleccionados (items ya contiene filas completas)
+                    # Convertir lista de dicts a DataFrame si es necesario para map_barchart
+                    if HAS_PANDAS and isinstance(items[0], dict):
+                        import pandas as pd
+                        items_df = pd.DataFrame(items)
+                        MatrixLayout.map_barchart(
+                            letter,
+                            items_df,
+                            category_col=category_col,
+                            value_col=value_col,
+                            **kwargs
+                        )
+                    else:
+                        MatrixLayout.map_barchart(
+                            letter,
+                            items,
+                            category_col=category_col,
+                            value_col=value_col,
+                            **kwargs
+                        )
+                
+                # Re-renderizar el layout (solo la celda del bar chart)
+                # En lugar de re-renderizar todo, actualizamos el mapping
+                # El usuario puede llamar display() manualmente si quiere
+            except Exception as e:
+                if MatrixLayout._debug:
+                    print(f"⚠️ Error actualizando bar chart: {e}")
+        
+        # Registrar callback en el modelo de selección
+        self.selection_model.on_change(update_barchart)
+        
+        return self
     
     def map(self, mapping):
         """Delega al MatrixLayout interno"""
@@ -186,8 +349,10 @@ class ReactiveMatrixLayout:
         return self
     
     def display(self, ascii_layout=None):
-        """Delega al MatrixLayout interno"""
-        self._layout.display(ascii_layout)
+        """Muestra el layout"""
+        if ascii_layout:
+            self._layout.ascii_layout = ascii_layout
+        self._layout.display()
         return self
     
     @property

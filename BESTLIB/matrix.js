@@ -343,10 +343,13 @@
       .on('click', function(event, d) {
         if (spec.interactive) {
           const index = data.indexOf(d);
+          // Enviar fila original completa si existe
+          const originalRow = d._original_row || d;
           sendEvent(divId, 'select', {
             type: 'select',
-            items: [d],
-            indices: [index]
+            items: [originalRow],
+            indices: [index],
+            original_items: [d]  // Mantener compatibilidad
           });
         }
       })
@@ -447,10 +450,13 @@
       .on('click', function(event, d) {
         if (spec.interactive) {
           const index = data.indexOf(d);
+          // Incluir fila original completa
+          const originalRow = d._original_row || d;
           sendEvent(divId, 'point_click', {
             type: 'point_click',
-            point: d,
-            index: index
+            point: originalRow,  // Fila original completa
+            index: index,
+            original_point: d  // Mantener compatibilidad
           });
         }
       })
@@ -551,11 +557,18 @@
             return px >= x0 && px <= x1 && py >= y0 && py <= y1;
           });
           
-          // Enviar el evento de selección
+          // Extraer filas originales completas si existen
+          const selectedItems = selected.map(d => {
+            // Si tiene _original_row, devolverlo; si no, devolver el item completo
+            return d._original_row || d;
+          });
+          
+          // Enviar el evento de selección con filas originales
           sendEvent(divId, 'select', {
             type: 'select',
-            items: selected,
-            count: selected.length
+            items: selectedItems,  // Filas originales completas
+            count: selected.length,
+            original_items: selected  // Mantener compatibilidad con datos del gráfico
           });
           
           // Resetear visualización de puntos
@@ -733,19 +746,27 @@
         const [x0, x1] = selection;
         const selectedIdx = [];
         const selectedItems = [];
+        const originalRows = [];
 
         data.forEach((d, i) => {
           const cx = (x(d.category ?? i) ?? 0) + x.bandwidth() / 2;
           if (cx >= x0 && cx <= x1) {
             selectedIdx.push(i);
             selectedItems.push(d);
+            // Extraer todas las filas originales de esta categoría
+            if (d._original_rows && Array.isArray(d._original_rows)) {
+              originalRows.push(...d._original_rows);
+            } else {
+              originalRows.push(d);
+            }
           }
         });
 
         sendEvent(divId, 'select', { 
           type: 'bar',
           indices: selectedIdx, 
-          items: selectedItems 
+          items: originalRows,  // Filas originales completas
+          original_items: selectedItems  // Mantener compatibilidad
         });
       }
     }
@@ -893,7 +914,7 @@
         .attr('class', 'brush')
         .call(brush);
 
-      function brushed({ selection }) {
+        function brushed({ selection }) {
         if (!selection) {
           points.attr('opacity', 0.7);
           sendEvent(divId, 'select', {
@@ -907,6 +928,7 @@
         const [[x0, y0], [x1, y1]] = selection;
         const selectedIdx = [];
         const selectedItems = [];
+        const originalRows = [];
 
         points.each(function(d, i) {
           const cx = x(d.x ?? 0);
@@ -918,13 +940,16 @@
           if (isSelected) {
             selectedIdx.push(i);
             selectedItems.push(d);
+            // Extraer fila original completa si existe
+            originalRows.push(d._original_row || d);
           }
         });
 
         sendEvent(divId, 'select', {
           type: 'scatter',
           indices: selectedIdx,
-          items: selectedItems
+          items: originalRows,  // Filas originales completas
+          original_items: selectedItems  // Mantener compatibilidad
         });
       }
     }

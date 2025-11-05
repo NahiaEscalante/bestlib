@@ -1,10 +1,20 @@
 ﻿"""
 Sistema de Vistas Enlazadas (Linked Views) para BESTLIB
 Permite que múltiples visualizaciones se actualicen automáticamente
+
+NOTA: Este módulo está siendo reemplazado por ReactiveMatrixLayout que integra
+LinkedViews dentro de la matriz ASCII. Se mantiene por compatibilidad.
 """
 
 from .matrix import MatrixLayout
 from collections import Counter
+
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
+    pd = None
 
 try:
     from IPython.display import display, HTML
@@ -54,21 +64,30 @@ class LinkedViews:
         return self
     
     def add_scatter(self, view_id, data=None, x_field='x', y_field='y', 
-                   category_field='category', interactive=True, **kwargs):
+                   category_field='category', interactive=True, 
+                   x_col=None, y_col=None, category_col=None, **kwargs):
         """
         Agrega un scatter plot a las vistas enlazadas.
         
         Args:
             view_id: Identificador único para esta vista
-            data: Datos a visualizar (opcional si ya se estableció con set_data)
-            x_field: Campo para el eje X
-            y_field: Campo para el eje Y
-            category_field: Campo de categoría para colores
+            data: DataFrame de pandas o lista de diccionarios (opcional si ya se estableció con set_data)
+            x_field: Campo para el eje X (deprecated, usar x_col)
+            y_field: Campo para el eje Y (deprecated, usar y_col)
+            category_field: Campo de categoría (deprecated, usar category_col)
             interactive: Si True, habilita brush selection
+            x_col: Nombre de columna para eje X (nuevo, preferido con DataFrames)
+            y_col: Nombre de columna para eje Y (nuevo, preferido con DataFrames)
+            category_col: Nombre de columna para categorías (nuevo, preferido con DataFrames)
             **kwargs: Argumentos adicionales (colorMap, pointRadius, etc.)
         """
         if data:
             self._data = data
+        
+        # Usar nuevos parámetros si están disponibles, sino usar los antiguos
+        x_field = x_col or x_field
+        y_field = y_col or y_field
+        category_field = category_col or category_field
         
         self._views[view_id] = {
             'type': 'scatter',
@@ -81,20 +100,27 @@ class LinkedViews:
         return self
     
     def add_barchart(self, view_id, category_field='category', 
-                    value_field=None, aggregation='count', **kwargs):
+                    value_field=None, aggregation='count',
+                    category_col=None, value_col=None, **kwargs):
         """
         Agrega un bar chart que se actualiza automáticamente.
         
         Args:
             view_id: Identificador único para esta vista
-            category_field: Campo de categoría para agrupar
-            value_field: Campo numérico para agregar (opcional)
+            category_field: Campo de categoría (deprecated, usar category_col)
+            value_field: Campo numérico (deprecated, usar value_col)
             aggregation: 'count', 'sum', 'mean' (solo si value_field está definido)
+            category_col: Nombre de columna para categorías (nuevo, preferido con DataFrames)
+            value_col: Nombre de columna para valores (nuevo, preferido con DataFrames)
             **kwargs: Argumentos adicionales
                 - colorMap: Diccionario {categoria: color} para colorear barras
                 - color: Color único para todas las barras (ignorado si colorMap está presente)
                 - axes: Mostrar ejes (default: True)
         """
+        # Usar nuevos parámetros si están disponibles
+        category_field = category_col or category_field
+        value_field = value_col or value_field
+        
         self._views[view_id] = {
             'type': 'barchart',
             'category_field': category_field,
@@ -105,42 +131,85 @@ class LinkedViews:
         return self
     
     def _prepare_scatter_data(self, view_config, data):
-        """Prepara datos para scatter plot"""
+        """Prepara datos para scatter plot, soportando DataFrames"""
         x_field = view_config['x_field']
         y_field = view_config['y_field']
         cat_field = view_config['category_field']
         
-        scatter_data = []
-        for item in data:
-            scatter_data.append({
-                'x': item.get(x_field, 0),
-                'y': item.get(y_field, 0),
-                'category': item.get(cat_field, 'default'),
-                '_original': item  # Guardar datos originales
-            })
-        
-        return scatter_data
+        # Si es DataFrame, usar el método helper de MatrixLayout
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            processed_data, original_data = MatrixLayout._prepare_data(
+                data, 
+                x_col=x_field, 
+                y_col=y_field, 
+                category_col=cat_field
+            )
+            return processed_data
+        else:
+            # Lista de diccionarios (comportamiento original)
+            scatter_data = []
+            for item in data:
+                scatter_data.append({
+                    'x': item.get(x_field, 0),
+                    'y': item.get(y_field, 0),
+                    'category': item.get(cat_field, 'default'),
+                    '_original': item  # Guardar datos originales
+                })
+            return scatter_data
     
     def _prepare_barchart_data(self, view_config, data):
-        """Prepara datos para bar chart"""
+        """Prepara datos para bar chart, soportando DataFrames"""
         cat_field = view_config['category_field']
+        value_field = view_config.get('value_field')
         
-        # Contar por categoría
-        categories = Counter([item.get(cat_field, 'unknown') for item in data])
-        
-        # Obtener colorMap si existe
-        color_map = view_config.get('kwargs', {}).get('colorMap', {})
-        
-        bar_data = [
-            {
-                'category': cat, 
-                'value': count,
-                'color': color_map.get(cat, '#9b59b6')  # Color por defecto si no está en el mapa
-            }
-            for cat, count in categories.items()
-        ]
-        
-        return bar_data
+        # Si es DataFrame, procesar directamente
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if value_field and value_field in data.columns:
+                # Agrupar y sumar
+                bar_data = data.groupby(cat_field)[value_field].sum().reset_index()
+                bar_data = bar_data.rename(columns={cat_field: 'category', value_field: 'value'})
+                bar_data = bar_data.to_dict('records')
+            elif cat_field and cat_field in data.columns:
+                # Contar por categoría
+                counts = data[cat_field].value_counts()
+                bar_data = [{'category': cat, 'value': count} for cat, count in counts.items()]
+            else:
+                raise ValueError(f"Debe especificar category_col. Columnas disponibles: {list(data.columns)}")
+            
+            # Obtener colorMap si existe
+            color_map = view_config.get('kwargs', {}).get('colorMap', {})
+            for bar_item in bar_data:
+                bar_item['color'] = color_map.get(bar_item['category'], '#9b59b6')
+            
+            return bar_data
+        else:
+            # Lista de diccionarios (comportamiento original)
+            if value_field:
+                # Agrupar y sumar
+                from collections import defaultdict
+                sums = defaultdict(float)
+                for item in data:
+                    cat = item.get(cat_field, 'unknown')
+                    val = item.get(value_field, 0)
+                    sums[cat] += val
+                categories = dict(sums)
+            else:
+                # Contar por categoría
+                categories = Counter([item.get(cat_field, 'unknown') for item in data])
+            
+            # Obtener colorMap si existe
+            color_map = view_config.get('kwargs', {}).get('colorMap', {})
+            
+            bar_data = [
+                {
+                    'category': cat, 
+                    'value': count,
+                    'color': color_map.get(cat, '#9b59b6')  # Color por defecto si no está en el mapa
+                }
+                for cat, count in categories.items()
+            ]
+            
+            return bar_data
     
     def _create_scatter_layout(self, view_id, view_config):
         """Crea layout para scatter plot"""

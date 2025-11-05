@@ -9,6 +9,13 @@ try:
 except ImportError:
     HAS_WIDGETS = False
 
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
+    pd = None
+
 class MatrixLayout:
     _map = {}
     _safe_html = True
@@ -18,6 +25,75 @@ class MatrixLayout:
     _global_handlers = {}  # dict[str, callable]
     _comm_registered = False
     _debug = False  # Modo debug para ver mensajes detallados
+    
+    @staticmethod
+    def _prepare_data(data, x_col=None, y_col=None, category_col=None, value_col=None):
+        """
+        Prepara datos para visualización, aceptando DataFrames de pandas o listas de diccionarios.
+        
+        Args:
+            data: DataFrame de pandas o lista de diccionarios
+            x_col: Nombre de columna para eje X (scatter plots)
+            y_col: Nombre de columna para eje Y (scatter plots)
+            category_col: Nombre de columna para categorías
+            value_col: Nombre de columna para valores (bar charts)
+        
+        Returns:
+            tuple: (datos_procesados, datos_originales)
+            - datos_procesados: Lista de diccionarios con formato estándar
+            - datos_originales: Lista de diccionarios con todas las columnas originales
+        """
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            # Convertir DataFrame a lista de diccionarios
+            original_data = data.to_dict('records')
+            
+            processed_data = []
+            for idx, row in data.iterrows():
+                item = {}
+                
+                # Mapear columnas según especificación
+                if x_col and x_col in data.columns:
+                    item['x'] = row[x_col]
+                elif 'x' in row:
+                    item['x'] = row['x']
+                
+                if y_col and y_col in data.columns:
+                    item['y'] = row[y_col]
+                elif 'y' in row:
+                    item['y'] = row['y']
+                
+                if category_col and category_col in data.columns:
+                    item['category'] = row[category_col]
+                elif 'category' in row:
+                    item['category'] = row['category']
+                
+                if value_col and value_col in data.columns:
+                    item['value'] = row[value_col]
+                elif 'value' in row:
+                    item['value'] = row['value']
+                
+                # Guardar referencia a la fila original completa
+                item['_original_row'] = original_data[idx]
+                item['_original_index'] = int(idx)
+                
+                processed_data.append(item)
+            
+            return processed_data, original_data
+        else:
+            # Si ya es lista de diccionarios, solo agregar referencias
+            if isinstance(data, list):
+                processed_data = []
+                for idx, item in enumerate(data):
+                    processed_item = item.copy()
+                    # Asegurar que existe _original_row
+                    if '_original_row' not in processed_item:
+                        processed_item['_original_row'] = item
+                    if '_original_index' not in processed_item:
+                        processed_item['_original_index'] = idx
+                    processed_data.append(processed_item)
+                return processed_data, data
+            else:
+                raise ValueError("Los datos deben ser un DataFrame de pandas o una lista de diccionarios")
     
     @classmethod
     def set_debug(cls, enabled: bool):
@@ -148,6 +224,115 @@ class MatrixLayout:
     @classmethod
     def map(cls, mapping):
         cls._map = mapping
+    
+    @classmethod
+    def map_scatter(cls, letter, data, x_col=None, y_col=None, category_col=None, **kwargs):
+        """
+        Método helper para crear scatter plot desde DataFrame de pandas.
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el gráfico
+            data: DataFrame de pandas o lista de diccionarios
+            x_col: Nombre de columna para eje X
+            y_col: Nombre de columna para eje Y
+            category_col: Nombre de columna para categorías (opcional)
+            **kwargs: Argumentos adicionales (colorMap, pointRadius, interactive, axes, etc.)
+        
+        Returns:
+            dict: Especificación del scatter plot para usar en map()
+        
+        Ejemplo:
+            import pandas as pd
+            df = pd.DataFrame({'edad': [20, 30, 40], 'salario': [5000, 8000, 12000], 'dept': ['A', 'B', 'A']})
+            
+            MatrixLayout.map_scatter('S', df, x_col='edad', y_col='salario', category_col='dept', interactive=True)
+            layout = MatrixLayout("S")
+        """
+        processed_data, original_data = cls._prepare_data(data, x_col=x_col, y_col=y_col, category_col=category_col)
+        
+        spec = {
+            'type': 'scatter',
+            'data': processed_data,
+            **kwargs
+        }
+        
+        # Actualizar el mapping
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        
+        return spec
+    
+    @classmethod
+    def map_barchart(cls, letter, data, category_col=None, value_col=None, **kwargs):
+        """
+        Método helper para crear bar chart desde DataFrame de pandas.
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el gráfico
+            data: DataFrame de pandas o lista de diccionarios
+            category_col: Nombre de columna para categorías
+            value_col: Nombre de columna para valores (opcional, si no se especifica cuenta)
+            **kwargs: Argumentos adicionales (color, colorMap, interactive, axes, etc.)
+        
+        Returns:
+            dict: Especificación del bar chart para usar en map()
+        
+        Ejemplo:
+            import pandas as pd
+            df = pd.DataFrame({'dept': ['A', 'B', 'C'], 'ventas': [100, 200, 150]})
+            
+            MatrixLayout.map_barchart('B', df, category_col='dept', value_col='ventas', interactive=True)
+            layout = MatrixLayout("B")
+        """
+        from collections import Counter
+        
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            # Si hay value_col, agrupar y sumar
+            if value_col and value_col in data.columns:
+                bar_data = data.groupby(category_col)[value_col].sum().reset_index()
+                bar_data = bar_data.rename(columns={category_col: 'category', value_col: 'value'})
+                bar_data = bar_data.to_dict('records')
+            elif category_col and category_col in data.columns:
+                # Contar por categoría
+                counts = data[category_col].value_counts()
+                bar_data = [{'category': cat, 'value': count} for cat, count in counts.items()]
+            else:
+                raise ValueError("Debe especificar category_col")
+            
+            # Agregar datos originales para referencia
+            original_data = data.to_dict('records')
+            for i, bar_item in enumerate(bar_data):
+                # Encontrar todas las filas con esta categoría
+                matching_rows = [row for row in original_data if row.get(category_col) == bar_item['category']]
+                bar_item['_original_rows'] = matching_rows
+        else:
+            # Lista de diccionarios
+            if category_col:
+                categories = Counter([item.get(category_col, 'unknown') for item in data])
+                bar_data = [{'category': cat, 'value': count} for cat, count in categories.items()]
+            else:
+                categories = Counter([item.get('category', 'unknown') for item in data])
+                bar_data = [{'category': cat, 'value': count} for cat, count in categories.items()]
+            
+            # Agregar datos originales
+            original_data = data if isinstance(data, list) else []
+            for bar_item in bar_data:
+                matching_rows = [row for row in original_data if row.get(category_col or 'category') == bar_item['category']]
+                bar_item['_original_rows'] = matching_rows
+        
+        spec = {
+            'type': 'bar',
+            'data': bar_data,
+            **kwargs
+        }
+        
+        # Actualizar el mapping
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        
+        return spec
 
     @classmethod
     def set_safe_html(cls, safe: bool):
@@ -216,7 +401,15 @@ class MatrixLayout:
         # Crear handler que actualiza el modelo reactivo
         def update_model(payload):
             items = payload.get('items', [])
-            reactive_model.update(items)
+            # Extraer filas originales completas si existen
+            original_rows = []
+            for item in items:
+                if '_original_row' in item:
+                    original_rows.append(item['_original_row'])
+                else:
+                    # Si no hay _original_row, usar el item completo
+                    original_rows.append(item)
+            reactive_model.update(original_rows)
         
         # Registrar el handler
         self.on('select', update_model)
