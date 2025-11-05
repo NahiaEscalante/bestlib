@@ -312,11 +312,119 @@
       renderScatterPlotD3(container, spec, d3, divId);
     } else if (spec.type === 'histogram') {
       renderHistogramD3(container, spec, d3, divId);
+    } else if (spec.type === 'boxplot') {
+      renderBoxplotD3(container, spec, d3, divId);
     } else {
       // Tipo de gráfico no soportado aún, mostrar mensaje
       container.innerHTML = `<div style="padding: 20px; text-align: center; color: #999;">
         Gráfico tipo '${spec.type}' no implementado aún
       </div>`;
+    }
+  }
+  
+  /**
+   * Boxplot con D3.js
+   */
+  function renderBoxplotD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const width = container.clientWidth || 400;
+    const availableHeight = Math.max(container.clientHeight - 30, 320);
+    const height = Math.min(availableHeight, 350);
+    const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+    
+    // Crear SVG con D3
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height);
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    // Escalas D3
+    const x = d3.scaleBand()
+      .domain(data.map(d => d.category))
+      .range([0, chartWidth])
+      .padding(0.2);
+    
+    const y = d3.scaleLinear()
+      .domain([d3.min(data, d => d.lower), d3.max(data, d => d.upper)])
+      .nice()
+      .range([chartHeight, 0]);
+    
+    // Dibujar boxplot para cada categoría
+    data.forEach((d) => {
+      const xPos = x(d.category);
+      const boxWidth = x.bandwidth();
+      const centerX = xPos + boxWidth / 2;
+      
+      // Bigotes (whiskers)
+      g.append('line')
+        .attr('x1', centerX)
+        .attr('x2', centerX)
+        .attr('y1', y(d.lower))
+        .attr('y2', y(d.q1))
+        .attr('stroke', '#000')
+        .attr('stroke-width', 2);
+      
+      g.append('line')
+        .attr('x1', centerX)
+        .attr('x2', centerX)
+        .attr('y1', y(d.q3))
+        .attr('y2', y(d.upper))
+        .attr('stroke', '#000')
+        .attr('stroke-width', 2);
+      
+      // Caja (box)
+      g.append('rect')
+        .attr('x', xPos)
+        .attr('y', y(d.q3))
+        .attr('width', boxWidth)
+        .attr('height', y(d.q1) - y(d.q3))
+        .attr('fill', spec.color || '#4a90e2')
+        .attr('stroke', '#000')
+        .attr('stroke-width', 2);
+      
+      // Mediana (median line)
+      g.append('line')
+        .attr('x1', xPos)
+        .attr('x2', xPos + boxWidth)
+        .attr('y1', y(d.median))
+        .attr('y2', y(d.median))
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 2);
+    });
+    
+    // Ejes
+    if (spec.axes !== false) {
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x));
+      
+      xAxis.selectAll('text')
+        .style('font-size', '12px')
+        .style('font-weight', '600')
+        .style('fill', '#000000')
+        .style('font-family', 'Arial, sans-serif');
+      
+      xAxis.selectAll('line, path')
+        .style('stroke', '#000000')
+        .style('stroke-width', '1.5px');
+      
+      const yAxis = g.append('g')
+        .call(d3.axisLeft(y));
+      
+      yAxis.selectAll('text')
+        .style('font-size', '12px')
+        .style('font-weight', '600')
+        .style('fill', '#000000')
+        .style('font-family', 'Arial, sans-serif');
+      
+      yAxis.selectAll('line, path')
+        .style('stroke', '#000000')
+        .style('stroke-width', '1.5px');
     }
   }
   

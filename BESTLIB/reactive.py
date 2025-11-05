@@ -885,6 +885,365 @@ class ReactiveMatrixLayout:
         
         return self
     
+    def add_boxplot(self, letter, column=None, category_col=None, linked_to=None, **kwargs):
+        """
+        Agrega un boxplot enlazado que se actualiza automáticamente cuando se selecciona en scatter.
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el boxplot
+            column: Nombre de columna numérica para el boxplot
+            category_col: Nombre de columna de categorías (opcional, para boxplot por categoría)
+            linked_to: Letra del scatter plot que debe actualizar este boxplot (opcional)
+            **kwargs: Argumentos adicionales (color, axes, etc.)
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        
+        if self._data is None:
+            raise ValueError("Debe usar set_data() o add_scatter() primero para establecer los datos")
+        
+        if column is None:
+            raise ValueError("Debe especificar 'column' para el boxplot")
+        
+        # Determinar a qué scatter plot enlazar
+        if linked_to:
+            if linked_to not in self._scatter_selection_models:
+                raise ValueError(f"Scatter plot '{linked_to}' no existe.")
+            scatter_letter = linked_to
+        else:
+            if not self._scatter_selection_models:
+                raise ValueError("No hay scatter plots disponibles.")
+            scatter_letter = list(self._scatter_selection_models.keys())[-1]
+        
+        # Guardar parámetros
+        boxplot_params = {
+            'letter': letter,
+            'column': column,
+            'category_col': category_col,
+            'kwargs': kwargs.copy(),
+            'layout_div_id': self._layout.div_id
+        }
+        
+        # Función de actualización del boxplot
+        def update_boxplot(items, count):
+            """Actualiza el boxplot cuando cambia la selección"""
+            try:
+                import json
+                from IPython.display import Javascript
+                
+                # Usar datos seleccionados o todos los datos
+                data_to_use = self._data
+                if items and len(items) > 0:
+                    if HAS_PANDAS and isinstance(items[0], dict):
+                        import pandas as pd
+                        data_to_use = pd.DataFrame(items)
+                    else:
+                        data_to_use = items
+                
+                # Preparar datos para boxplot
+                if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
+                    if category_col and category_col in data_to_use.columns:
+                        # Boxplot por categoría
+                        box_data = []
+                        for cat in data_to_use[category_col].unique():
+                            cat_data = data_to_use[data_to_use[category_col] == cat][column].dropna()
+                            if len(cat_data) > 0:
+                                q1 = cat_data.quantile(0.25)
+                                median = cat_data.quantile(0.5)
+                                q3 = cat_data.quantile(0.75)
+                                iqr = q3 - q1
+                                lower = max(q1 - 1.5 * iqr, cat_data.min())
+                                upper = min(q3 + 1.5 * iqr, cat_data.max())
+                                box_data.append({
+                                    'category': cat,
+                                    'q1': float(q1),
+                                    'median': float(median),
+                                    'q3': float(q3),
+                                    'lower': float(lower),
+                                    'upper': float(upper),
+                                    'min': float(cat_data.min()),
+                                    'max': float(cat_data.max())
+                                })
+                    else:
+                        # Boxplot simple
+                        values = data_to_use[column].dropna()
+                        if len(values) > 0:
+                            q1 = values.quantile(0.25)
+                            median = values.quantile(0.5)
+                            q3 = values.quantile(0.75)
+                            iqr = q3 - q1
+                            lower = max(q1 - 1.5 * iqr, values.min())
+                            upper = min(q3 + 1.5 * iqr, values.max())
+                            box_data = [{
+                                'category': 'All',
+                                'q1': float(q1),
+                                'median': float(median),
+                                'q3': float(q3),
+                                'lower': float(lower),
+                                'upper': float(upper),
+                                'min': float(values.min()),
+                                'max': float(values.max())
+                            }]
+                        else:
+                            box_data = []
+                else:
+                    # Fallback para listas de diccionarios
+                    values = [item.get(column, 0) for item in data_to_use if column in item]
+                    if values:
+                        sorted_vals = sorted(values)
+                        n = len(sorted_vals)
+                        q1 = sorted_vals[int(n * 0.25)]
+                        median = sorted_vals[int(n * 0.5)]
+                        q3 = sorted_vals[int(n * 0.75)]
+                        iqr = q3 - q1
+                        lower = max(q1 - 1.5 * iqr, min(values))
+                        upper = min(q3 + 1.5 * iqr, max(values))
+                        box_data = [{
+                            'category': 'All',
+                            'q1': float(q1),
+                            'median': float(median),
+                            'q3': float(q3),
+                            'lower': float(lower),
+                            'upper': float(upper),
+                            'min': float(min(values)),
+                            'max': float(max(values))
+                        }]
+                    else:
+                        box_data = []
+                
+                if not box_data:
+                    return
+                
+                # Actualizar mapping
+                MatrixLayout._map[letter] = {
+                    'type': 'boxplot',
+                    'data': box_data,
+                    'column': column,
+                    'category_col': category_col,
+                    **kwargs
+                }
+                
+                # JavaScript para actualizar el gráfico
+                div_id = boxplot_params['layout_div_id']
+                box_data_json = json.dumps(box_data)
+                default_color = kwargs.get('color', '#4a90e2')
+                show_axes = kwargs.get('axes', True)
+                
+                js_update = f"""
+                (function() {{
+                    function updateBoxplot() {{
+                        if (!window.d3) {{
+                            setTimeout(updateBoxplot, 100);
+                            return;
+                        }}
+                        
+                        const container = document.getElementById('{div_id}');
+                        if (!container) return;
+                        
+                        const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
+                        let targetCell = null;
+                        
+                        for (let cell of cells) {{
+                            const svg = cell.querySelector('svg');
+                            if (svg) {{
+                                targetCell = cell;
+                                break;
+                            }}
+                        }}
+                        
+                        if (!targetCell && cells.length > 0) {{
+                            targetCell = cells[0];
+                        }}
+                        
+                        if (!targetCell) return;
+                        
+                        targetCell.innerHTML = '';
+                        
+                        const width = Math.max(targetCell.clientWidth || 400, 200);
+                        const availableHeight = Math.max(targetCell.clientHeight - 30, 320);
+                        const height = Math.min(availableHeight, 350);
+                        const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
+                        const chartWidth = width - margin.left - margin.right;
+                        const chartHeight = height - margin.top - margin.bottom;
+                        
+                        const data = {box_data_json};
+                        
+                        if (data.length === 0) {{
+                            targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
+                            return;
+                        }}
+                        
+                        const svg = window.d3.select(targetCell)
+                            .append('svg')
+                            .attr('width', width)
+                            .attr('height', height);
+                        
+                        const g = svg.append('g')
+                            .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
+                        
+                        const x = window.d3.scaleBand()
+                            .domain(data.map(d => d.category))
+                            .range([0, chartWidth])
+                            .padding(0.2);
+                        
+                        const y = window.d3.scaleLinear()
+                            .domain([window.d3.min(data, d => d.lower), window.d3.max(data, d => d.upper)])
+                            .nice()
+                            .range([chartHeight, 0]);
+                        
+                        // Dibujar boxplot para cada categoría
+                        data.forEach((d, i) => {{
+                            const xPos = x(d.category);
+                            const boxWidth = x.bandwidth();
+                            const centerX = xPos + boxWidth / 2;
+                            
+                            // Bigotes (whiskers)
+                            g.append('line')
+                                .attr('x1', centerX)
+                                .attr('x2', centerX)
+                                .attr('y1', y(d.lower))
+                                .attr('y2', y(d.q1))
+                                .attr('stroke', '#000')
+                                .attr('stroke-width', 2);
+                            
+                            g.append('line')
+                                .attr('x1', centerX)
+                                .attr('x2', centerX)
+                                .attr('y1', y(d.q3))
+                                .attr('y2', y(d.upper))
+                                .attr('stroke', '#000')
+                                .attr('stroke-width', 2);
+                            
+                            // Caja (box)
+                            g.append('rect')
+                                .attr('x', xPos)
+                                .attr('y', y(d.q3))
+                                .attr('width', boxWidth)
+                                .attr('height', y(d.q1) - y(d.q3))
+                                .attr('fill', '{default_color}')
+                                .attr('stroke', '#000')
+                                .attr('stroke-width', 2);
+                            
+                            // Mediana (median line)
+                            g.append('line')
+                                .attr('x1', xPos)
+                                .attr('x2', xPos + boxWidth)
+                                .attr('y1', y(d.median))
+                                .attr('y2', y(d.median))
+                                .attr('stroke', '#fff')
+                                .attr('stroke-width', 2);
+                        }});
+                        
+                        if ({str(show_axes).lower()}) {{
+                            const xAxis = g.append('g')
+                                .attr('transform', `translate(0,${{chartHeight}})`)
+                                .call(window.d3.axisBottom(x));
+                            
+                            const yAxis = g.append('g')
+                                .call(window.d3.axisLeft(y));
+                        }}
+                    }}
+                    
+                    updateBoxplot();
+                }})();
+                """
+                
+                try:
+                    from IPython.display import Javascript, display
+                    display(Javascript(js_update), clear=False)
+                except:
+                    pass
+                    
+            except Exception as e:
+                from .matrix import MatrixLayout
+                if MatrixLayout._debug:
+                    print(f"⚠️ Error actualizando boxplot: {e}")
+        
+        # Registrar callback
+        scatter_selection = self._scatter_selection_models[scatter_letter]
+        scatter_selection.on_change(update_boxplot)
+        
+        # Crear boxplot inicial con todos los datos
+        if HAS_PANDAS and isinstance(self._data, pd.DataFrame):
+            if category_col and category_col in self._data.columns:
+                box_data = []
+                for cat in self._data[category_col].unique():
+                    cat_data = self._data[self._data[category_col] == cat][column].dropna()
+                    if len(cat_data) > 0:
+                        q1 = cat_data.quantile(0.25)
+                        median = cat_data.quantile(0.5)
+                        q3 = cat_data.quantile(0.75)
+                        iqr = q3 - q1
+                        lower = max(q1 - 1.5 * iqr, cat_data.min())
+                        upper = min(q3 + 1.5 * iqr, cat_data.max())
+                        box_data.append({
+                            'category': cat,
+                            'q1': float(q1),
+                            'median': float(median),
+                            'q3': float(q3),
+                            'lower': float(lower),
+                            'upper': float(upper),
+                            'min': float(cat_data.min()),
+                            'max': float(cat_data.max())
+                        })
+            else:
+                values = self._data[column].dropna()
+                if len(values) > 0:
+                    q1 = values.quantile(0.25)
+                    median = values.quantile(0.5)
+                    q3 = values.quantile(0.75)
+                    iqr = q3 - q1
+                    lower = max(q1 - 1.5 * iqr, values.min())
+                    upper = min(q3 + 1.5 * iqr, values.max())
+                    box_data = [{
+                        'category': 'All',
+                        'q1': float(q1),
+                        'median': float(median),
+                        'q3': float(q3),
+                        'lower': float(lower),
+                        'upper': float(upper),
+                        'min': float(values.min()),
+                        'max': float(values.max())
+                    }]
+                else:
+                    box_data = []
+        else:
+            values = [item.get(column, 0) for item in self._data if column in item]
+            if values:
+                sorted_vals = sorted(values)
+                n = len(sorted_vals)
+                q1 = sorted_vals[int(n * 0.25)]
+                median = sorted_vals[int(n * 0.5)]
+                q3 = sorted_vals[int(n * 0.75)]
+                iqr = q3 - q1
+                lower = max(q1 - 1.5 * iqr, min(values))
+                upper = min(q3 + 1.5 * iqr, max(values))
+                box_data = [{
+                    'category': 'All',
+                    'q1': float(q1),
+                    'median': float(median),
+                    'q3': float(q3),
+                    'lower': float(lower),
+                    'upper': float(upper),
+                    'min': float(min(values)),
+                    'max': float(max(values))
+                }]
+            else:
+                box_data = []
+        
+        if box_data:
+            MatrixLayout._map[letter] = {
+                'type': 'boxplot',
+                'data': box_data,
+                'column': column,
+                'category_col': category_col,
+                **kwargs
+            }
+        
+        return self
+    
     def _prepare_barchart_data(self, data, category_col, value_col, kwargs):
         """Helper para preparar datos del bar chart"""
         try:
