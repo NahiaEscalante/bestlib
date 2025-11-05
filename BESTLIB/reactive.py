@@ -195,6 +195,7 @@ class ReactiveMatrixLayout:
         self._data = None  # DataFrame o lista de diccionarios
         self._selected_data = []  # Datos seleccionados actualmente
         self._view_letters = {}  # {view_id: letter} - mapeo de vista a letra del layout
+        self._barchart_callbacks = {}  # {letter: callback_func} - para evitar duplicados
     
     def set_data(self, data):
         """
@@ -270,6 +271,13 @@ class ReactiveMatrixLayout:
         if self._data is None:
             raise ValueError("Debe usar set_data() o add_scatter() primero para establecer los datos")
         
+        # Evitar registrar múltiples callbacks para la misma letra
+        if letter in self._barchart_callbacks:
+            if MatrixLayout._debug:
+                print(f"⚠️ Bar chart para '{letter}' ya está registrado. Actualizando configuración.")
+            # Remover callback anterior
+            # (No podemos remover fácilmente, pero podemos evitar duplicados)
+        
         # Crear bar chart inicial con todos los datos
         from .matrix import MatrixLayout
         MatrixLayout.map_barchart(
@@ -291,49 +299,190 @@ class ReactiveMatrixLayout:
         }
         self._view_letters[view_id] = letter
         
+        # Guardar parámetros para el callback
+        barchart_params = {
+            'letter': letter,
+            'category_col': category_col,
+            'value_col': value_col,
+            'kwargs': kwargs
+        }
+        
         # Configurar callback para actualizar bar chart cuando cambia selección
         def update_barchart(items, count):
-            """Actualiza el bar chart cuando cambia la selección"""
+            """Actualiza el bar chart cuando cambia la selección usando JavaScript"""
             try:
-                if not items or len(items) == 0:
-                    # Si no hay selección, mostrar todos los datos
-                    MatrixLayout.map_barchart(
-                        letter,
-                        self._data,
-                        category_col=category_col,
-                        value_col=value_col,
-                        **kwargs
-                    )
-                else:
-                    # Usar solo datos seleccionados (items ya contiene filas completas)
-                    # Convertir lista de dicts a DataFrame si es necesario para map_barchart
+                import json
+                from IPython.display import display, Javascript
+                
+                # Usar datos seleccionados o todos los datos
+                data_to_use = self._data
+                if items and len(items) > 0:
+                    # Convertir lista de dicts a DataFrame si es necesario
                     if HAS_PANDAS and isinstance(items[0], dict):
                         import pandas as pd
-                        items_df = pd.DataFrame(items)
-                        MatrixLayout.map_barchart(
-                            letter,
-                            items_df,
-                            category_col=category_col,
-                            value_col=value_col,
-                            **kwargs
-                        )
+                        data_to_use = pd.DataFrame(items)
                     else:
-                        MatrixLayout.map_barchart(
-                            letter,
-                            items,
-                            category_col=category_col,
-                            value_col=value_col,
-                            **kwargs
-                        )
+                        data_to_use = items
                 
-                # Re-renderizar el layout (solo la celda del bar chart)
-                # En lugar de re-renderizar todo, actualizamos el mapping
-                # El usuario puede llamar display() manualmente si quiere
+                # Preparar datos del bar chart
+                if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
+                    if value_col and value_col in data_to_use.columns:
+                        bar_data = data_to_use.groupby(category_col)[value_col].sum().reset_index()
+                        bar_data = bar_data.rename(columns={category_col: 'category', value_col: 'value'})
+                        bar_data = bar_data.to_dict('records')
+                    elif category_col and category_col in data_to_use.columns:
+                        counts = data_to_use[category_col].value_counts()
+                        bar_data = [{'category': cat, 'value': count} for cat, count in counts.items()]
+                    else:
+                        return
+                else:
+                    from collections import Counter
+                    if value_col:
+                        from collections import defaultdict
+                        sums = defaultdict(float)
+                        for item in data_to_use:
+                            cat = item.get(category_col, 'unknown')
+                            val = item.get(value_col, 0)
+                            sums[cat] += val
+                        bar_data = [{'category': cat, 'value': val} for cat, val in sums.items()]
+                    else:
+                        categories = Counter([item.get(category_col, 'unknown') for item in data_to_use])
+                        bar_data = [{'category': cat, 'value': count} for cat, count in categories.items()]
+                
+                # Obtener colorMap
+                color_map = kwargs.get('colorMap', {})
+                for bar_item in bar_data:
+                    bar_item['color'] = color_map.get(bar_item['category'], kwargs.get('color', '#4a90e2'))
+                
+                # Actualizar también el mapping para consistencia
+                MatrixLayout.map_barchart(
+                    letter,
+                    data_to_use,
+                    category_col=category_col,
+                    value_col=value_col,
+                    **kwargs
+                )
+                
+                # Actualizar el gráfico usando JavaScript (sin re-renderizar todo)
+                div_id = self._layout.div_id
+                bar_data_json = json.dumps(bar_data)
+                color_map_json = json.dumps(color_map) if color_map else '{}'
+                
+                js_update = f"""
+                (function() {{
+                    const container = document.getElementById('{div_id}');
+                    if (!container) return;
+                    
+                    // Buscar todas las celdas
+                    const cells = container.querySelectorAll('.matrix-cell');
+                    
+                    // Encontrar la celda que tiene el bar chart (buscar por SVG con barras)
+                    let targetCell = null;
+                    let targetIndex = -1;
+                    
+                    cells.forEach((cell, idx) => {{
+                        const svg = cell.querySelector('svg');
+                        if (svg) {{
+                            const bars = svg.querySelectorAll('.bar');
+                            if (bars && bars.length > 0) {{
+                                targetCell = cell;
+                                targetIndex = idx;
+                            }}
+                        }}
+                    }});
+                    
+                    if (targetCell && window.d3) {{
+                        // Limpiar celda
+                        targetCell.innerHTML = '';
+                        
+                        // Re-renderizar bar chart con nuevos datos
+                        const width = targetCell.clientWidth || 400;
+                        const height = 250;
+                        const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
+                        const chartWidth = width - margin.left - margin.right;
+                        const chartHeight = height - margin.top - margin.bottom;
+                        
+                        const data = {bar_data_json};
+                        const colorMap = {color_map_json};
+                        
+                        const svg = d3.select(targetCell)
+                            .append('svg')
+                            .attr('width', width)
+                            .attr('height', height);
+                        
+                        const g = svg.append('g')
+                            .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
+                        
+                        const x = d3.scaleBand()
+                            .domain(data.map(d => d.category))
+                            .range([0, chartWidth])
+                            .padding(0.2);
+                        
+                        const y = d3.scaleLinear()
+                            .domain([0, d3.max(data, d => d.value) || 100])
+                            .nice()
+                            .range([chartHeight, 0]);
+                        
+                        g.selectAll('.bar')
+                            .data(data)
+                            .enter()
+                            .append('rect')
+                            .attr('class', 'bar')
+                            .attr('x', d => x(d.category))
+                            .attr('y', chartHeight)
+                            .attr('width', x.bandwidth())
+                            .attr('height', 0)
+                            .attr('fill', d => colorMap[d.category] || d.color || '{kwargs.get("color", "#4a90e2")}')
+                            .transition()
+                            .duration(500)
+                            .attr('y', d => y(d.value))
+                            .attr('height', d => chartHeight - y(d.value));
+                        
+                        if ({kwargs.get('axes', True)}) {{
+                            const xAxis = g.append('g')
+                                .attr('transform', `translate(0,${{chartHeight}})`)
+                                .call(d3.axisBottom(x));
+                            
+                            xAxis.selectAll('text')
+                                .style('font-size', '12px')
+                                .style('font-weight', '600')
+                                .style('fill', '#000000')
+                                .style('font-family', 'Arial, sans-serif');
+                            
+                            xAxis.selectAll('line, path')
+                                .style('stroke', '#000000')
+                                .style('stroke-width', '1.5px');
+                            
+                            const yAxis = g.append('g')
+                                .call(d3.axisLeft(y).ticks(5));
+                            
+                            yAxis.selectAll('text')
+                                .style('font-size', '12px')
+                                .style('font-weight', '600')
+                                .style('fill', '#000000')
+                                .style('font-family', 'Arial, sans-serif');
+                            
+                            yAxis.selectAll('line, path')
+                                .style('stroke', '#000000')
+                                .style('stroke-width', '1.5px');
+                        }}
+                    }}
+                }})();
+                """
+                
+                # Ejecutar JavaScript para actualizar solo el bar chart
+                display(Javascript(js_update))
+                
             except Exception as e:
                 if MatrixLayout._debug:
                     print(f"⚠️ Error actualizando bar chart: {e}")
+                    import traceback
+                    traceback.print_exc()
         
-        # Registrar callback en el modelo de selección
+        # Guardar callback para referencia
+        self._barchart_callbacks[letter] = update_barchart
+        
+        # Registrar callback en el modelo de selección (solo una vez)
         self.selection_model.on_change(update_barchart)
         
         return self
