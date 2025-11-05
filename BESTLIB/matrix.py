@@ -256,7 +256,7 @@ class MatrixLayout:
         cls._map = mapping
     
     @classmethod
-    def map_scatter(cls, letter, data, x_col=None, y_col=None, category_col=None, **kwargs):
+    def map_scatter(cls, letter, data, x_col=None, y_col=None, category_col=None, size_col=None, color_col=None, **kwargs):
         """
         Método helper para crear scatter plot desde DataFrame de pandas.
         
@@ -278,7 +278,33 @@ class MatrixLayout:
             MatrixLayout.map_scatter('S', df, x_col='edad', y_col='salario', category_col='dept', interactive=True)
             layout = MatrixLayout("S")
         """
-        processed_data, original_data = cls._prepare_data(data, x_col=x_col, y_col=y_col, category_col=category_col)
+        processed_data, original_data = cls._prepare_data(data, x_col=x_col, y_col=y_col, category_col=category_col, value_col=size_col)
+
+        # Enriquecer con tamaño y color por punto si se especifican columnas
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if size_col and size_col in data.columns:
+                for idx, row in data.iterrows():
+                    if idx < len(processed_data):
+                        try:
+                            processed_data[idx]['size'] = float(row[size_col])
+                        except Exception:
+                            pass
+            if color_col and color_col in data.columns:
+                for idx, row in data.iterrows():
+                    if idx < len(processed_data):
+                        processed_data[idx]['color'] = row[color_col]
+        else:
+            # Lista de dicts
+            if isinstance(data, list):
+                for idx, item in enumerate(data):
+                    if idx < len(processed_data):
+                        if size_col and size_col in item:
+                            try:
+                                processed_data[idx]['size'] = float(item.get(size_col))
+                            except Exception:
+                                pass
+                        if color_col and color_col in item:
+                            processed_data[idx]['color'] = item.get(color_col)
         
         spec = {
             'type': 'scatter',
@@ -364,6 +390,466 @@ class MatrixLayout:
         
         return spec
 
+    @classmethod
+    def map_grouped_barchart(cls, letter, data, main_col=None, sub_col=None, value_col=None, **kwargs):
+        """
+        Crea barplot anidado: categorías principales (main_col) con subcategorías (sub_col).
+        Estructura: {
+          type: 'bar', grouped: True,
+          groups: [mainCat1, mainCat2, ...],
+          series: [sub1, sub2, ...],
+          data: [{ group: mainCat, series: sub, value: v }, ...]
+        }
+        """
+        if main_col is None or sub_col is None:
+            raise ValueError("Se requieren main_col y sub_col para grouped barplot")
+        rows = []
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if value_col and value_col in data.columns:
+                agg = data.groupby([main_col, sub_col])[value_col].sum().reset_index()
+                for _, r in agg.iterrows():
+                    rows.append({'group': r[main_col], 'series': r[sub_col], 'value': float(r[value_col])})
+            else:
+                # contar ocurrencias por combinación
+                counts = data.groupby([main_col, sub_col]).size().reset_index(name='value')
+                for _, r in counts.iterrows():
+                    rows.append({'group': r[main_col], 'series': r[sub_col], 'value': float(r['value'])})
+            groups = agg[main_col].unique().tolist() if 'agg' in locals() else counts[main_col].unique().tolist()
+            series = agg[sub_col].unique().tolist() if 'agg' in locals() else counts[sub_col].unique().tolist()
+        else:
+            # lista de dicts
+            from collections import defaultdict
+            if not isinstance(data, list):
+                raise ValueError("Datos inválidos para grouped barplot")
+            if value_col:
+                sums = defaultdict(lambda: defaultdict(float))
+                for it in data:
+                    g = it.get(main_col, 'unknown')
+                    s = it.get(sub_col, 'unknown')
+                    sums[g][s] += float(it.get(value_col, 0))
+                for g, submap in sums.items():
+                    for s, v in submap.items():
+                        rows.append({'group': g, 'series': s, 'value': float(v)})
+            else:
+                counts = defaultdict(lambda: defaultdict(int))
+                for it in data:
+                    g = it.get(main_col, 'unknown')
+                    s = it.get(sub_col, 'unknown')
+                    counts[g][s] += 1
+                for g, submap in counts.items():
+                    for s, v in submap.items():
+                        rows.append({'group': g, 'series': s, 'value': int(v)})
+            groups = sorted(list({r['group'] for r in rows}))
+            series = sorted(list({r['series'] for r in rows}))
+        spec = {
+            'type': 'bar',
+            'grouped': True,
+            'groups': groups,
+            'series': series,
+            'data': rows,
+            **kwargs
+        }
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+
+    @classmethod
+    def map_histogram(cls, letter, data, value_col=None, bins=10, **kwargs):
+        """
+        Método helper para crear histograma desde DataFrame o lista de dicts.
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el gráfico
+            data: DataFrame de pandas o lista de diccionarios
+            value_col: Columna numérica a binnear (requerida si data es DataFrame)
+            bins: Número de bins (int) o secuencia de bordes
+            **kwargs: color, axes, etc.
+        """
+        import math
+        import itertools
+        values = []
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if not value_col or value_col not in data.columns:
+                raise ValueError("Debe especificar value_col para histograma con DataFrame")
+            # Extraer valores numéricos limpiando NaN
+            series = data[value_col].dropna()
+            try:
+                values = series.astype(float).tolist()
+            except Exception:
+                values = [float(v) for v in series.tolist()]
+        else:
+            # Lista de diccionarios
+            if not isinstance(data, list):
+                raise ValueError("Datos inválidos para histograma: se requiere DataFrame o lista de dicts")
+            col = value_col or 'value'
+            for item in data:
+                v = item.get(col)
+                if v is not None:
+                    try:
+                        values.append(float(v))
+                    except Exception:
+                        continue
+        if not values:
+            hist_data = []
+        else:
+            vmin = min(values)
+            vmax = max(values)
+            if isinstance(bins, int):
+                if bins <= 0:
+                    bins = 10
+                step = (vmax - vmin) / bins if vmax > vmin else 1.0
+                edges = [vmin + i * step for i in range(bins + 1)]
+            else:
+                edges = list(bins)
+                edges.sort()
+            counts = [0] * (len(edges) - 1)
+            for v in values:
+                # Asignar bin; incluir borde derecho en el último bin
+                idx = None
+                for i in range(len(edges) - 1):
+                    left, right = edges[i], edges[i + 1]
+                    if (v >= left and v < right) or (i == len(edges) - 2 and v == right):
+                        idx = i
+                        break
+                if idx is not None:
+                    counts[idx] += 1
+            # Centro del bin para etiqueta; D3 usa 'bin' y 'count'
+            hist_data = [
+                {
+                    'bin': float((edges[i] + edges[i + 1]) / 2.0),
+                    'count': int(counts[i])
+                }
+                for i in range(len(counts))
+            ]
+        spec = {
+            'type': 'histogram',
+            'data': hist_data,
+            **kwargs
+        }
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+
+    @classmethod
+    def map_boxplot(cls, letter, data, category_col=None, value_col=None, **kwargs):
+        """
+        Método helper para crear boxplot por categoría.
+        
+        Args:
+            letter: Letra del layout ASCII
+            data: DataFrame o lista de diccionarios
+            category_col: Columna categórica (opcional; si None, usa una sola categoría)
+            value_col: Columna numérica para calcular cuantiles (requerida con DataFrame)
+            **kwargs: color, axes, etc.
+        """
+        import statistics
+        def five_num_summary(values_list):
+            vals = sorted([float(v) for v in values_list if v is not None])
+            if not vals:
+                return None
+            n = len(vals)
+            median = statistics.median(vals)
+            # Cuartiles usando método mediana-excluida
+            if n < 4:
+                q1 = vals[max(0, (n//4) - 1)] if n > 1 else vals[0]
+                q3 = vals[min(n-1, (3*n)//4)] if n > 1 else vals[-1]
+            else:
+                mid = n // 2
+                lower = vals[:mid]
+                upper = vals[mid+1:] if n % 2 == 1 else vals[mid:]
+                q1 = statistics.median(lower) if lower else vals[0]
+                q3 = statistics.median(upper) if upper else vals[-1]
+            iqr = q3 - q1
+            lower_whisker = max(min(vals), q1 - 1.5 * iqr)
+            upper_whisker = min(max(vals), q3 + 1.5 * iqr)
+            return {
+                'lower': float(lower_whisker),
+                'q1': float(q1),
+                'median': float(median),
+                'q3': float(q3),
+                'upper': float(upper_whisker)
+            }
+        box_data = []
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if value_col is None or value_col not in data.columns:
+                raise ValueError("Debe especificar value_col para boxplot con DataFrame")
+            if category_col and category_col in data.columns:
+                grouped = data.groupby(category_col)
+                for cat, subdf in grouped:
+                    summary = five_num_summary(subdf[value_col].dropna().tolist())
+                    if summary:
+                        box_data.append({'category': cat, **summary})
+            else:
+                summary = five_num_summary(data[value_col].dropna().tolist())
+                if summary:
+                    box_data.append({'category': 'All', **summary})
+        else:
+            # Lista de diccionarios
+            if not isinstance(data, list):
+                raise ValueError("Datos inválidos para boxplot: se requiere DataFrame o lista de dicts")
+            val_key = value_col or 'value'
+            if category_col:
+                from collections import defaultdict
+                groups = defaultdict(list)
+                for item in data:
+                    groups[item.get(category_col, 'unknown')].append(item.get(val_key))
+                for cat, vals in groups.items():
+                    summary = five_num_summary(vals)
+                    if summary:
+                        box_data.append({'category': cat, **summary})
+            else:
+                summary = five_num_summary([item.get(val_key) for item in data])
+                if summary:
+                    box_data.append({'category': 'All', **summary})
+        spec = {
+            'type': 'boxplot',
+            'data': box_data,
+            **kwargs
+        }
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+
+    @classmethod
+    def map_heatmap(cls, letter, data, x_col=None, y_col=None, value_col=None, **kwargs):
+        """
+        Crea heatmap a partir de DataFrame/lista: devuelve celdas {x,y,value}.
+        """
+        cells = []
+        x_labels, y_labels = [], []
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if value_col and x_col and y_col:
+                # Tabla larga → celdas directas
+                df = data[[x_col, y_col, value_col]].dropna()
+                x_labels = df[x_col].astype(str).unique().tolist()
+                y_labels = df[y_col].astype(str).unique().tolist()
+                cells = [
+                    {'x': str(r[x_col]), 'y': str(r[y_col]), 'value': float(r[value_col])}
+                    for _, r in df.iterrows()
+                ]
+            else:
+                raise ValueError("Especifique x_col, y_col y value_col para heatmap")
+        else:
+            # Lista de dicts
+            if not isinstance(data, list):
+                raise ValueError("Datos inválidos para heatmap")
+            for item in data:
+                if x_col in item and y_col in item and value_col in item:
+                    cells.append({'x': str(item[x_col]), 'y': str(item[y_col]), 'value': float(item[value_col])})
+                    x_labels.append(str(item[x_col]))
+                    y_labels.append(str(item[y_col]))
+            x_labels = sorted(list(set(x_labels)))
+            y_labels = sorted(list(set(y_labels)))
+        spec = {
+            'type': 'heatmap',
+            'data': cells,
+            'xLabels': x_labels,
+            'yLabels': y_labels,
+            **kwargs
+        }
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+
+    @classmethod
+    def map_correlation_heatmap(cls, letter, data, **kwargs):
+        """
+        Calcula matriz de correlación (pearson) para columnas numéricas del DataFrame.
+        """
+        if not (HAS_PANDAS and isinstance(data, pd.DataFrame)):
+            raise ValueError("map_correlation_heatmap requiere DataFrame de pandas")
+        num_df = data.select_dtypes(include=['number'])
+        if num_df.shape[1] == 0:
+            raise ValueError("No hay columnas numéricas para correlación")
+        corr = num_df.corr().fillna(0.0)
+        cols = corr.columns.tolist()
+        cells = []
+        for i, xi in enumerate(cols):
+            for j, yj in enumerate(cols):
+                cells.append({'x': xi, 'y': yj, 'value': float(corr.iloc[j, i])})
+        spec = {
+            'type': 'heatmap',
+            'data': cells,
+            'xLabels': cols,
+            'yLabels': cols,
+            'isCorrelation': True,
+            **kwargs
+        }
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+
+    @classmethod
+    def map_line(cls, letter, data, x_col=None, y_col=None, series_col=None, **kwargs):
+        """
+        Crea line chart. Si series_col está definido, múltiples series.
+        """
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if x_col is None or y_col is None:
+                raise ValueError("x_col e y_col son requeridos para line plot")
+            df = data[[x_col, y_col] + ([series_col] if series_col else [])].dropna()
+            if series_col:
+                series_names = df[series_col].unique().tolist()
+                series = {}
+                for name in series_names:
+                    sdf = df[df[series_col] == name].sort_values(by=x_col)
+                    series[name] = [{ 'x': float(x), 'y': float(y), 'series': str(name) } for x, y in zip(sdf[x_col], sdf[y_col])]
+                payload = {'series': series}
+            else:
+                sdf = df.sort_values(by=x_col)
+                payload = {'series': { 'default': [{ 'x': float(x), 'y': float(y) } for x, y in zip(sdf[x_col], sdf[y_col])] }}
+        else:
+            # Lista de dicts
+            items = [d for d in (data or []) if x_col in d and y_col in d]
+            if series_col:
+                series = {}
+                for item in items:
+                    key = str(item.get(series_col))
+                    series.setdefault(key, []).append({'x': float(item[x_col]), 'y': float(item[y_col]), 'series': key})
+                # ordenar por x
+                for k in series:
+                    series[k] = sorted(series[k], key=lambda p: p['x'])
+                payload = {'series': series}
+            else:
+                pts = sorted([{'x': float(i[x_col]), 'y': float(i[y_col])} for i in items], key=lambda p: p['x'])
+                payload = {'series': { 'default': pts }}
+        spec = { 'type': 'line', **payload, **kwargs }
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+
+    @classmethod
+    def map_pie(cls, letter, data, category_col=None, value_col=None, **kwargs):
+        """
+        Crea pie/donut chart.
+        """
+        from collections import Counter, defaultdict
+        slices = []
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if category_col is None:
+                raise ValueError("category_col requerido para pie")
+            if value_col and value_col in data.columns:
+                agg = data.groupby(category_col)[value_col].sum().reset_index()
+                slices = [{'category': r[category_col], 'value': float(r[value_col])} for _, r in agg.iterrows()]
+            else:
+                counts = data[category_col].value_counts()
+                slices = [{'category': cat, 'value': int(cnt)} for cat, cnt in counts.items()]
+        else:
+            items = data or []
+            if value_col:
+                sums = defaultdict(float)
+                for it in items:
+                    sums[str(it.get(category_col, 'unknown'))] += float(it.get(value_col, 0))
+                slices = [{'category': k, 'value': float(v)} for k, v in sums.items()]
+            else:
+                counts = Counter([str(it.get(category_col, 'unknown')) for it in items])
+                slices = [{'category': k, 'value': int(v)} for k, v in counts.items()]
+        spec = { 'type': 'pie', 'data': slices, **kwargs }
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+
+    @classmethod
+    def map_violin(cls, letter, data, value_col=None, category_col=None, bins=20, **kwargs):
+        """
+        Crea datos para violin: para cada categoría, calcula histograma normalizado
+        y retorna perfiles (x: bin, width: densidad) para render (aproximación).
+        """
+        if value_col is None:
+            raise ValueError("value_col es requerido para violin")
+        def build_profile(values):
+            values = [float(v) for v in values if v is not None]
+            if not values:
+                return []
+            try:
+                import numpy as np
+                hist, edges = np.histogram(values, bins=bins)
+                dens = hist / (np.max(hist) if np.max(hist) > 0 else 1)
+                centers = [(edges[i] + edges[i+1]) / 2 for i in range(len(edges)-1)]
+                return [{'y': float(c), 'w': float(d)} for c, d in zip(centers, dens)]
+            except Exception:
+                mn, mx = min(values), max(values)
+                step = (mx - mn) / bins if mx > mn else 1
+                counts = [0]*bins
+                edges = [mn + i*step for i in range(bins+1)]
+                for v in values:
+                    idx = min(int((v - mn)/step), bins-1) if step>0 else 0
+                    counts[idx] += 1
+                m = max(counts) or 1
+                dens = [c/m for c in counts]
+                centers = [(edges[i] + edges[i+1]) / 2 for i in range(bins)]
+                return [{'y': float(c), 'w': float(d)} for c, d in zip(centers, dens)]
+        violins = []
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if category_col and category_col in data.columns:
+                for cat, sub in data.groupby(category_col):
+                    prof = build_profile(sub[value_col].dropna().tolist())
+                    violins.append({'category': cat, 'profile': prof})
+            else:
+                prof = build_profile(data[value_col].dropna().tolist())
+                violins.append({'category': 'All', 'profile': prof})
+        else:
+            items = data or []
+            if category_col:
+                from collections import defaultdict
+                groups = defaultdict(list)
+                for it in items:
+                    groups[str(it.get(category_col, 'unknown'))].append(it.get(value_col))
+                for cat, vals in groups.items():
+                    violins.append({'category': cat, 'profile': build_profile(vals)})
+            else:
+                violins.append({'category': 'All', 'profile': build_profile([it.get(value_col) for it in items])})
+        spec = { 'type': 'violin', 'data': violins, **kwargs }
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+
+    @classmethod
+    def map_radviz(cls, letter, data, features=None, class_col=None, **kwargs):
+        """
+        Crea datos para RadViz simple: anclas uniformes y proyección ponderada.
+        Retorna puntos {x,y,category} normalizados en [0,1].
+        """
+        if not (HAS_PANDAS and isinstance(data, pd.DataFrame)):
+            raise ValueError("map_radviz requiere DataFrame")
+        import math
+        df = data.copy()
+        feats = features or df.select_dtypes(include=['number']).columns.tolist()
+        if len(feats) < 2:
+            raise ValueError("Se requieren al menos 2 features para RadViz")
+        # normalizar 0-1
+        for c in feats:
+            col = df[c].astype(float)
+            mn, mx = col.min(), col.max()
+            if mx > mn:
+                df[c] = (col - mn) / (mx - mn)
+            else:
+                df[c] = 0.5
+        k = len(feats)
+        anchors = []
+        for i in range(k):
+            ang = 2*math.pi * i / k
+            anchors.append((math.cos(ang), math.sin(ang)))
+        points = []
+        for _, row in df.iterrows():
+            weights = [row[c] for c in feats]
+            s = sum(weights) or 1.0
+            x = sum(w * anchors[i][0] for i, w in enumerate(weights)) / s
+            y = sum(w * anchors[i][1] for i, w in enumerate(weights)) / s
+            points.append({'x': float(x), 'y': float(y), 'category': str(row[class_col]) if class_col and class_col in df.columns else None})
+        spec = { 'type': 'radviz', 'data': points, 'features': feats, **kwargs }
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
     @classmethod
     def set_safe_html(cls, safe: bool):
         cls._safe_html = bool(safe)

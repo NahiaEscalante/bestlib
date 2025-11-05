@@ -74,6 +74,62 @@ layout
 ```
 
 ### Scatter Plot
+### Grouped/Nested Bar Chart
+```python
+# main_col: categoría principal, sub_col: subcategoría, value_col opcional (si se omite, cuenta)
+layout = ReactiveMatrixLayout("GB", selection_model=SelectionModel()).set_data(df)
+layout.add_scatter('G', df, x_col='x', y_col='y', interactive=True)
+layout.add_grouped_barchart('B', main_col='region', sub_col='producto', value_col='ventas', linked_to='G', axes=True)
+layout.display()
+```
+
+### Heatmap
+```python
+layout = ReactiveMatrixLayout("SH", selection_model=SelectionModel()).set_data(df_long)
+layout.add_scatter('S', df_long, x_col='valX', y_col='valY', interactive=True)
+layout.add_heatmap('H', x_col='col', y_col='row', value_col='val', linked_to='S', axes=True)
+layout.display()
+```
+
+### Correlation Heatmap
+```python
+layout = ReactiveMatrixLayout("CH", selection_model=SelectionModel()).set_data(df)
+layout.add_scatter('C', df, x_col='x', y_col='y', interactive=True)
+layout.add_correlation_heatmap('H', linked_to='C', colorScale='diverging')
+layout.display()
+```
+
+### Line (multi-series) con hover sincronizado
+```python
+layout = ReactiveMatrixLayout("SL", selection_model=SelectionModel()).set_data(df)
+layout.add_scatter('S', df, x_col='x', y_col='y', interactive=True)
+layout.add_line('L', x_col='time', y_col='value', series_col='serie', linked_to='S')
+layout.display()
+```
+
+### Pie / Donut Interactivo
+```python
+layout = ReactiveMatrixLayout("SP", selection_model=SelectionModel()).set_data(df)
+layout.add_scatter('S', df, x_col='x', y_col='y', category_col='cat', interactive=True)
+layout.add_pie('P', category_col='cat', value_col='val', donut=True, innerRadius=60, linked_to='S', interactive=True)
+layout.display()
+```
+
+### Violin Plot
+```python
+layout = ReactiveMatrixLayout("SV", selection_model=SelectionModel()).set_data(df)
+layout.add_scatter('S', df, x_col='x', y_col='y', interactive=True)
+layout.add_violin('V', value_col='salario', category_col='dept', bins=20, linked_to='S')
+layout.display()
+```
+
+### RadViz / Star Coordinates
+```python
+layout = ReactiveMatrixLayout("SR", selection_model=SelectionModel()).set_data(df)
+layout.add_scatter('S', df, x_col='x', y_col='y', interactive=True)
+layout.add_radviz('R', features=['f1','f2','f3','f4'], class_col='label', linked_to='S')
+layout.display()
+```
 ```python
 data = [
     {"x": 1, "y": 2, "label": "P1"},

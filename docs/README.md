@@ -239,6 +239,33 @@ MatrixLayout.on_global('select', global_handler)
 ```
 
 ### Usar Datos Seleccionados
+## 🔧 Nuevos Gráficos y Enlaces
+
+### Grouped Barplot
+```python
+layout = ReactiveMatrixLayout("GB", selection_model=SelectionModel()).set_data(df)
+layout.add_scatter('G', df, x_col='x', y_col='y', interactive=True)
+layout.add_grouped_barchart('B', main_col='region', sub_col='producto', value_col='ventas', linked_to='G', axes=True)
+layout.display()
+```
+
+### Heatmaps y Correlación
+```python
+layout = ReactiveMatrixLayout("HC", selection_model=SelectionModel()).set_data(df)
+layout.add_heatmap('H', x_col='col', y_col='row', value_col='val', axes=True)
+layout.add_correlation_heatmap('C')
+layout.display()
+```
+
+### Line, Pie/Donut, Violin, RadViz
+```python
+layout = ReactiveMatrixLayout("LPVR", selection_model=SelectionModel()).set_data(df)
+layout.add_line('L', x_col='time', y_col='value', series_col='serie')
+layout.add_pie('P', category_col='cat', value_col='val', donut=True, innerRadius=50, interactive=True)
+layout.add_violin('V', value_col='salario', category_col='dept', bins=20)
+layout.add_radviz('R', features=['f1','f2','f3'], class_col='label')
+layout.display()
+```
 
 ```python
 # Variable global para almacenar selección

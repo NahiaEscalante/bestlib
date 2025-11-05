@@ -323,12 +323,269 @@
       renderHistogramD3(container, spec, d3, divId);
     } else if (spec.type === 'boxplot') {
       renderBoxplotD3(container, spec, d3, divId);
+    } else if (spec.type === 'heatmap') {
+      renderHeatmapD3(container, spec, d3, divId);
+    } else if (spec.type === 'line') {
+      renderLineD3(container, spec, d3, divId);
+    } else if (spec.type === 'pie') {
+      renderPieD3(container, spec, d3, divId);
+    } else if (spec.type === 'violin') {
+      renderViolinD3(container, spec, d3, divId);
+    } else if (spec.type === 'radviz') {
+      renderRadVizD3(container, spec, d3, divId);
     } else {
       // Tipo de gráfico no soportado aún, mostrar mensaje
       container.innerHTML = `<div style="padding: 20px; text-align: center; color: #999;">
         Gráfico tipo '${spec.type}' no implementado aún
       </div>`;
     }
+  }
+
+  /**
+   * Heatmap con D3.js
+   */
+  function renderHeatmapD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const width = container.clientWidth || 500;
+    const availableHeight = Math.max(container.clientHeight - 30, 320);
+    const height = Math.min(availableHeight, 400);
+    const margin = { top: 30, right: 20, bottom: 60, left: 70 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+
+    const xLabels = spec.xLabels || Array.from(new Set(data.map(d => d.x)));
+    const yLabels = spec.yLabels || Array.from(new Set(data.map(d => d.y)));
+
+    const svg = d3.select(container).append('svg')
+      .attr('width', width)
+      .attr('height', height);
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const x = d3.scaleBand().domain(xLabels).range([0, chartWidth]).padding(0.05);
+    const y = d3.scaleBand().domain(yLabels).range([0, chartHeight]).padding(0.05);
+
+    const vmin = d3.min(data, d => d.value) ?? 0;
+    const vmax = d3.max(data, d => d.value) ?? 1;
+    const color = (spec.colorScale === 'diverging')
+      ? d3.scaleDiverging([ -1, 0, 1 ], d3.interpolateRdBu)
+      : d3.scaleSequential([vmin, vmax], d3.interpolateViridis);
+
+    g.selectAll('rect')
+      .data(data)
+      .enter()
+      .append('rect')
+      .attr('x', d => x(d.x))
+      .attr('y', d => y(d.y))
+      .attr('width', x.bandwidth())
+      .attr('height', y.bandwidth())
+      .attr('fill', d => color(d.value))
+      .attr('opacity', 0)
+      .transition()
+      .duration(500)
+      .attr('opacity', 1);
+
+    if (spec.axes !== false) {
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x));
+      xAxis.selectAll('text').style('font-size', '10px').style('fill', '#000');
+      const yAxis = g.append('g').call(d3.axisLeft(y));
+      yAxis.selectAll('text').style('font-size', '10px').style('fill', '#000');
+    }
+  }
+
+  /**
+   * Line chart (multi-series) con hover sincronizado
+   */
+  function renderLineD3(container, spec, d3, divId) {
+    const seriesMap = spec.series || {};
+    const width = container.clientWidth || 520;
+    const availableHeight = Math.max(container.clientHeight - 30, 320);
+    const height = Math.min(availableHeight, 380);
+    const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+
+    const allPoints = Object.values(seriesMap).flat();
+    const x = d3.scaleLinear().domain(d3.extent(allPoints, d => d.x)).nice().range([0, chartWidth]);
+    const y = d3.scaleLinear().domain(d3.extent(allPoints, d => d.y)).nice().range([chartHeight, 0]);
+
+    const svg = d3.select(container).append('svg').attr('width', width).attr('height', height);
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const color = d3.scaleOrdinal(d3.schemeCategory10).domain(Object.keys(seriesMap));
+    const line = d3.line().x(d => x(d.x)).y(d => y(d.y));
+
+    Object.entries(seriesMap).forEach(([name, pts]) => {
+      g.append('path')
+        .datum(pts)
+        .attr('fill', 'none')
+        .attr('stroke', color(name))
+        .attr('stroke-width', 2)
+        .attr('d', line)
+        .attr('opacity', 0)
+        .transition().duration(500).attr('opacity', 1);
+    });
+
+    // puntos invisibles para hover sincronizado
+    Object.entries(seriesMap).forEach(([name, pts]) => {
+      g.selectAll(`.pt-${name}`)
+        .data(pts)
+        .enter()
+        .append('circle')
+        .attr('class', `pt pt-${name}`)
+        .attr('cx', d => x(d.x))
+        .attr('cy', d => y(d.y))
+        .attr('r', 4)
+        .attr('fill', color(name))
+        .attr('opacity', 0)
+        .on('mouseenter', function(event, d) {
+          // resaltar puntos con mismo x (hover sincronizado)
+          const xVal = d.x;
+          g.selectAll('.pt')
+            .attr('opacity', p => (Math.abs(p.x - xVal) < 1e-9 ? 1 : 0.2))
+            .attr('r', p => (Math.abs(p.x - xVal) < 1e-9 ? 5 : 3));
+        })
+        .on('mouseleave', function() {
+          g.selectAll('.pt').attr('opacity', 0).attr('r', 4);
+        });
+    });
+
+    if (spec.axes !== false) {
+      g.append('g').attr('transform', `translate(0,${chartHeight})`).call(d3.axisBottom(x));
+      g.append('g').call(d3.axisLeft(y));
+    }
+  }
+
+  /**
+   * Pie / Donut con click que emite selección por categoría
+   */
+  function renderPieD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const width = container.clientWidth || 320;
+    const height = Math.max(container.clientHeight || 240, 240);
+    const radius = Math.min(width, height) / 2 - 10;
+    const innerR = spec.innerRadius != null ? spec.innerRadius : (spec.donut ? radius * 0.5 : 0);
+    const color = d3.scaleOrdinal(d3.schemeCategory10).domain(data.map(d => d.category));
+
+    const svg = d3.select(container).append('svg').attr('width', width).attr('height', height);
+    const g = svg.append('g').attr('transform', `translate(${width/2},${height/2})`);
+
+    const arc = d3.arc().innerRadius(innerR).outerRadius(radius);
+    const pie = d3.pie().value(d => d.value);
+    const arcs = pie(data);
+
+    g.selectAll('path')
+      .data(arcs)
+      .enter()
+      .append('path')
+      .attr('d', arc)
+      .attr('fill', d => color(d.data.category))
+      .attr('opacity', 0.9)
+      .style('cursor', spec.interactive ? 'pointer' : 'default')
+      .on('click', function(event, d) {
+        if (!spec.interactive) return;
+        const category = d.data.category;
+        // Emitir evento select con items filtrados si existen en spec._original_rows
+        // Compatibilidad: payload simple con categoría
+        sendEvent(divId, 'select', {
+          type: 'pie',
+          items: [{ category }],
+          indices: [],
+          selected_category: category
+        });
+      });
+  }
+
+  /**
+   * Violin plot simplificado (perfiles de densidad normalizada)
+   */
+  function renderViolinD3(container, spec, d3, divId) {
+    const violins = spec.data || [];
+    const width = container.clientWidth || 520;
+    const availableHeight = Math.max(container.clientHeight - 30, 320);
+    const height = Math.min(availableHeight, 380);
+    const margin = { top: 20, right: 20, bottom: 60, left: 60 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+
+    const svg = d3.select(container).append('svg').attr('width', width).attr('height', height);
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const categories = violins.map(v => v.category);
+    const yAll = violins.flatMap(v => v.profile.map(p => p.y));
+    const x = d3.scaleBand().domain(categories).range([0, chartWidth]).padding(0.2);
+    const y = d3.scaleLinear().domain(d3.extent(yAll)).nice().range([chartHeight, 0]);
+    const wScale = d3.scaleLinear().domain([0, 1]).range([0, (x.bandwidth() / 2) || 20]);
+    const color = d3.scaleOrdinal(d3.schemeSet2).domain(categories);
+
+    violins.forEach(v => {
+      const cx = x(v.category) + x.bandwidth() / 2;
+      const area = d3.area()
+        .x0(p => cx - wScale(p.w))
+        .x1(p => cx + wScale(p.w))
+        .y(p => y(p.y))
+        .curve(d3.curveCatmullRom.alpha(0.5));
+      g.append('path')
+        .datum(v.profile)
+        .attr('d', area)
+        .attr('fill', color(v.category))
+        .attr('opacity', 0.7)
+        .attr('stroke', '#333')
+        .attr('stroke-width', 1);
+    });
+
+    if (spec.axes !== false) {
+      g.append('g').attr('transform', `translate(0,${chartHeight})`).call(d3.axisBottom(x));
+      g.append('g').call(d3.axisLeft(y));
+    }
+  }
+
+  /**
+   * RadViz simple
+   */
+  function renderRadVizD3(container, spec, d3, divId) {
+    const points = spec.data || [];
+    const width = container.clientWidth || 520;
+    const height = Math.max(container.clientHeight || 380, 380);
+    const margin = { top: 20, right: 20, bottom: 40, left: 40 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+
+    const svg = d3.select(container).append('svg').attr('width', width).attr('height', height);
+    const g = svg.append('g').attr('transform', `translate(${margin.left + chartWidth/2},${margin.top + chartHeight/2})`);
+
+    const radius = Math.min(chartWidth, chartHeight) / 2 - 10;
+    // circle axis
+    g.append('circle').attr('r', radius).attr('fill', 'none').attr('stroke', '#aaa');
+
+    // anchors (features)
+    const feats = spec.features || [];
+    const anchorPos = feats.map((f, i) => {
+      const ang = 2 * Math.PI * i / Math.max(1, feats.length);
+      return { x: radius * Math.cos(ang), y: radius * Math.sin(ang), name: f };
+    });
+    g.selectAll('.anchor').data(anchorPos).enter().append('circle')
+      .attr('class', 'anchor').attr('r', 3).attr('cx', d => d.x).attr('cy', d => d.y).attr('fill', '#555');
+    g.selectAll('.alabel').data(anchorPos).enter().append('text')
+      .attr('class', 'alabel').attr('x', d => d.x).attr('y', d => d.y)
+      .attr('dx', 4).attr('dy', -4).style('font-size', '10px').text(d => d.name);
+
+    // scale from [-1,1] to circle radius (points expected in that range)
+    const toX = d3.scaleLinear().domain([-1, 1]).range([-radius, radius]);
+    const toY = d3.scaleLinear().domain([-1, 1]).range([-radius, radius]);
+    const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+    g.selectAll('.rvpt')
+      .data(points)
+      .enter()
+      .append('circle')
+      .attr('class', 'rvpt')
+      .attr('cx', d => toX(d.x))
+      .attr('cy', d => toY(d.y))
+      .attr('r', 4)
+      .attr('fill', d => d.category ? color(d.category) : '#4a90e2')
+      .attr('opacity', 0.7);
   }
   
   /**
@@ -550,7 +807,53 @@
       .nice()
       .range([chartHeight, 0]);
     
-    // Barras con D3
+  if (spec.grouped) {
+    // Grouped/nested bars
+    const groups = spec.groups || [];
+    const series = spec.series || [];
+    const x0 = d3.scaleBand().domain(groups).range([0, chartWidth]).padding(0.2);
+    const x1 = d3.scaleBand().domain(series).range([0, x0.bandwidth()]).padding(0.1);
+    const y2 = d3.scaleLinear().domain([0, d3.max(spec.data, d => d.value) || 100]).nice().range([chartHeight, 0]);
+    const color = d3.scaleOrdinal(d3.schemeCategory10).domain(series);
+
+    const groupG = g.selectAll('.g-group')
+      .data(groups)
+      .enter()
+      .append('g')
+      .attr('class', 'g-group')
+      .attr('transform', d => `translate(${x0(d)},0)`);
+
+    groupG.selectAll('rect')
+      .data(gname => series.map(sname => ({ group: gname, series: sname, value: (spec.data.find(d => d.group === gname && d.series === sname)?.value) || 0 })))
+      .enter()
+      .append('rect')
+      .attr('x', d => x1(d.series))
+      .attr('y', chartHeight)
+      .attr('width', x1.bandwidth())
+      .attr('height', 0)
+      .attr('fill', d => color(d.series))
+      .style('cursor', spec.interactive ? 'pointer' : 'default')
+      .on('click', function(event, d) {
+        if (!spec.interactive) return;
+        sendEvent(divId, 'select', {
+          type: 'select',
+          items: [{ group: d.group, series: d.series }],
+          indices: [],
+          original_items: [d]
+        });
+      })
+      .transition()
+      .duration(700)
+      .attr('y', d => y2(d.value))
+      .attr('height', d => chartHeight - y2(d.value));
+
+    // axes for grouped version
+    if (spec.axes) {
+      g.append('g').attr('transform', `translate(0,${chartHeight})`).call(d3.axisBottom(x0));
+      g.append('g').call(d3.axisLeft(y2));
+    }
+  } else {
+    // Simple bars
     g.selectAll('.bar')
       .data(data)
       .enter()
@@ -565,13 +868,12 @@
       .on('click', function(event, d) {
         if (spec.interactive) {
           const index = data.indexOf(d);
-          // Enviar fila original completa si existe
           const originalRow = d._original_row || d;
           sendEvent(divId, 'select', {
             type: 'select',
             items: [originalRow],
             indices: [index],
-            original_items: [d]  // Mantener compatibilidad
+            original_items: [d]
           });
         }
       })
@@ -589,6 +891,7 @@
       .duration(800)
       .attr('y', d => y(d.value))
       .attr('height', d => chartHeight - y(d.value));
+  }
     
     // Ejes con D3 - Texto NEGRO y visible
     if (spec.axes) {
@@ -654,6 +957,20 @@
       .nice()
       .range([chartHeight, 0]);
     
+    // Optional size scale from data.size
+    const hasSize = data.length > 0 && data[0] && (data[0].size !== undefined && data[0].size !== null);
+    const sizeRange = spec.sizeRange || [3, 9];
+    const sizeScale = hasSize
+      ? d3.scaleLinear()
+          .domain(d3.extent(data, d => +d.size))
+          .range(sizeRange)
+          .nice()
+      : null;
+    const getRadius = d => {
+      if (sizeScale) return sizeScale(+d.size);
+      return spec.pointRadius || 4;
+    };
+
     // Puntos con D3
     g.selectAll('.dot')
       .data(data)
@@ -662,10 +979,11 @@
       .attr('class', 'dot')
       .attr('cx', d => x(d.x))
       .attr('cy', d => y(d.y))
-      .attr('r', spec.pointRadius || 4)
+      .attr('r', d => getRadius(d))
       .attr('fill', d => {
+        if (d.color) return d.color;
         if (spec.colorMap && d.category) {
-          return spec.colorMap[d.category] || '#4a90e2';
+          return spec.colorMap[d.category] || spec.color || '#4a90e2';
         }
         return spec.color || '#4a90e2';
       })
@@ -689,7 +1007,7 @@
           d3.select(this)
             .transition()
             .duration(200)
-            .attr('r', (spec.pointRadius || 4) * 1.5)
+            .attr('r', d => (getRadius(d)) * 1.5)
             .attr('opacity', 1);
         }
       })
@@ -698,7 +1016,7 @@
           d3.select(this)
             .transition()
             .duration(200)
-            .attr('r', spec.pointRadius || 4)
+            .attr('r', d => getRadius(d))
             .attr('opacity', 0.7);
         }
       });
@@ -759,7 +1077,8 @@
               const px = x(d.x);
               const py = y(d.y);
               const inSelection = px >= x0 && px <= x1 && py >= y0 && py <= y1;
-              return inSelection ? (spec.pointRadius || 4) * 1.5 : (spec.pointRadius || 4);
+              const base = getRadius(d);
+              return inSelection ? base * 1.5 : base;
             });
         })
         .on('end', function(event) {
@@ -767,7 +1086,7 @@
           if (!event.selection) {
             g.selectAll('.dot')
               .style('opacity', 0.7)
-              .attr('r', spec.pointRadius || 4);
+              .attr('r', d => getRadius(d));
             return;
           }
           
@@ -804,7 +1123,7 @@
             .transition()
             .duration(300)
             .style('opacity', 0.7)
-            .attr('r', spec.pointRadius || 4);
+            .attr('r', d => getRadius(d));
           
           // Limpiar el brush visual
           brushGroup.call(brush.move, null);

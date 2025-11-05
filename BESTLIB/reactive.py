@@ -579,6 +579,31 @@ class ReactiveMatrixLayout:
         scatter_selection.on_change(update_barchart)
         
         return self
+
+    def add_grouped_barchart(self, letter, main_col=None, sub_col=None, value_col=None, linked_to=None, **kwargs):
+        """
+        Barplot anidado enlazado a selección.
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() o add_scatter() primero")
+        if main_col is None or sub_col is None:
+            raise ValueError("main_col y sub_col son requeridos")
+        # inicial
+        MatrixLayout.map_grouped_barchart(letter, self._data, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
+        # enlazar
+        if not self._scatter_selection_models:
+            return self
+        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
+        sel = self._scatter_selection_models[scatter_letter]
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_grouped_barchart(letter, data_to_use, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
     
     def link_chart(self, letter, chart_type, linked_to=None, update_func=None, **kwargs):
         """
@@ -1293,6 +1318,125 @@ class ReactiveMatrixLayout:
     def on(self, event, func):
         """Delega al MatrixLayout interno"""
         self._layout.on(event, func)
+        return self
+
+    # ==========================
+    # Nuevos gráficos dependientes
+    # ==========================
+    def add_heatmap(self, letter, x_col=None, y_col=None, value_col=None, linked_to=None, **kwargs):
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        # initial render
+        MatrixLayout.map_heatmap(letter, self._data, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
+        # link to selection
+        if not self._scatter_selection_models:
+            return self
+        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
+        sel = self._scatter_selection_models[scatter_letter]
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_heatmap(letter, data_to_use, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+
+    def add_correlation_heatmap(self, letter, linked_to=None, **kwargs):
+        from .matrix import MatrixLayout
+        if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
+            raise ValueError("add_correlation_heatmap requiere DataFrame")
+        MatrixLayout.map_correlation_heatmap(letter, self._data, **kwargs)
+        # link
+        if not self._scatter_selection_models:
+            return self
+        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
+        sel = self._scatter_selection_models[scatter_letter]
+        def update(items, count):
+            df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+            if df is None:
+                return
+            try:
+                MatrixLayout.map_correlation_heatmap(letter, df, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+
+    def add_line(self, letter, x_col=None, y_col=None, series_col=None, linked_to=None, **kwargs):
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        MatrixLayout.map_line(letter, self._data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
+        if not self._scatter_selection_models:
+            return self
+        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
+        sel = self._scatter_selection_models[scatter_letter]
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_line(letter, data_to_use, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+
+    def add_pie(self, letter, category_col=None, value_col=None, linked_to=None, **kwargs):
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        MatrixLayout.map_pie(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
+        if not self._scatter_selection_models:
+            return self
+        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
+        sel = self._scatter_selection_models[scatter_letter]
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_pie(letter, data_to_use, category_col=category_col, value_col=value_col, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+
+    def add_violin(self, letter, value_col=None, category_col=None, bins=20, linked_to=None, **kwargs):
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        MatrixLayout.map_violin(letter, self._data, value_col=value_col, category_col=category_col, bins=bins, **kwargs)
+        if not self._scatter_selection_models:
+            return self
+        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
+        sel = self._scatter_selection_models[scatter_letter]
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_violin(letter, data_to_use, value_col=value_col, category_col=category_col, bins=bins, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+
+    def add_radviz(self, letter, features=None, class_col=None, linked_to=None, **kwargs):
+        from .matrix import MatrixLayout
+        if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
+            raise ValueError("add_radviz requiere DataFrame")
+        MatrixLayout.map_radviz(letter, self._data, features=features, class_col=class_col, **kwargs)
+        # RadViz como dependiente: redibujar con selección
+        if not self._scatter_selection_models:
+            return self
+        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
+        sel = self._scatter_selection_models[scatter_letter]
+        def update(items, count):
+            df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+            if df is None:
+                return
+            try:
+                MatrixLayout.map_radviz(letter, df, features=features, class_col=class_col, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
         return self
     
     def display(self, ascii_layout=None):
