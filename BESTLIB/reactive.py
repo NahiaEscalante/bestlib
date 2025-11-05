@@ -246,7 +246,7 @@ class ReactiveMatrixLayout:
         scatter_selection_capture = scatter_selection
         
         def scatter_handler(payload):
-            """Handler que actualiza solo el SelectionModel de este scatter plot"""
+            """Handler que actualiza el SelectionModel de este scatter plot Y el modelo principal"""
             # Filtrar eventos: solo procesar si viene de este scatter plot
             event_scatter_letter = payload.get('__scatter_letter__')
             if event_scatter_letter != scatter_letter_capture:
@@ -255,7 +255,16 @@ class ReactiveMatrixLayout:
             
             # El payload ya viene con __scatter_letter__ del JavaScript
             items = payload.get('items', [])
+            
+            # Actualizar el SelectionModel específico de este scatter plot
             scatter_selection_capture.update(items)
+            
+            # IMPORTANTE: También actualizar el selection_model principal para que selected_data se actualice
+            # Esto asegura que los datos seleccionados estén disponibles globalmente
+            self.selection_model.update(items)
+            
+            # Actualizar también _selected_data para compatibilidad
+            self._selected_data = items
         
         # Registrar handler en el layout principal
         # Nota: Usamos el mismo layout pero cada scatter tiene su propio SelectionModel
@@ -317,6 +326,9 @@ class ReactiveMatrixLayout:
             layout.add_barchart('B1', linked_to='S1')  # Bar chart enlazado a S1
             layout.add_barchart('B2', linked_to='S2')  # Bar chart enlazado a S2
         """
+        # Importar MatrixLayout al inicio para evitar UnboundLocalError
+        from .matrix import MatrixLayout
+        
         if self._data is None:
             raise ValueError("Debe usar set_data() o add_scatter() primero para establecer los datos")
         
@@ -343,7 +355,6 @@ class ReactiveMatrixLayout:
         self._barchart_to_scatter[letter] = scatter_letter
         
         # Crear bar chart inicial con todos los datos
-        from .matrix import MatrixLayout
         MatrixLayout.map_barchart(
             letter,
             self._data,
@@ -672,6 +683,14 @@ class ReactiveMatrixLayout:
     @property
     def items(self):
         """Retorna los items seleccionados"""
+        return self.selection_model.get_items()
+    
+    @property
+    def selected_data(self):
+        """
+        Retorna los datos seleccionados (alias para items).
+        Se actualiza automáticamente cuando se hace brush selection en el scatter plot.
+        """
         return self.selection_model.get_items()
     
     @property
