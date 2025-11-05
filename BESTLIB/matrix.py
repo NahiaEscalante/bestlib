@@ -174,21 +174,38 @@ class MatrixLayout:
                         inst_ref = cls._instances.get(div_id)
                         inst = inst_ref() if inst_ref else None
                         
-                        # Buscar handler: primero en instancia, luego global
-                        handler = None
+                        # Buscar handlers: primero en instancia (puede haber múltiples), luego global
+                        handlers = []
+                        
+                        # Obtener todos los handlers de la instancia (puede haber múltiples para LinkedViews)
                         if inst and hasattr(inst, "_handlers"):
                             handler = inst._handlers.get(event_type)
-                            if handler and cls._debug:
-                                print(f"   ✓ Usando handler de instancia")
+                            if handler:
+                                # Handler puede ser una función o lista de funciones
+                                if isinstance(handler, list):
+                                    handlers.extend(handler)
+                                else:
+                                    handlers.append(handler)
+                                if cls._debug:
+                                    print(f"   ✓ {len(handlers)} handler(s) de instancia encontrado(s)")
                         
-                        if not handler:
-                            handler = cls._global_handlers.get(event_type)
-                            if handler and cls._debug:
-                                print(f"   ✓ Usando handler global")
+                        # Agregar handler global si existe
+                        global_handler = cls._global_handlers.get(event_type)
+                        if global_handler:
+                            handlers.append(global_handler)
+                            if cls._debug:
+                                print(f"   ✓ Handler global encontrado")
                         
-                        # Ejecutar callback
-                        if handler:
-                            handler(payload)
+                        # Ejecutar todos los callbacks (múltiples para soportar múltiples scatter plots)
+                        if handlers:
+                            for handler in handlers:
+                                try:
+                                    handler(payload)
+                                except Exception as e:
+                                    if cls._debug:
+                                        print(f"   ❌ Error en handler: {e}")
+                                        import traceback
+                                        traceback.print_exc()
                         else:
                             if cls._debug:
                                 print(f"   ⚠️ No hay handler registrado para '{event_type}'")
@@ -215,10 +232,23 @@ class MatrixLayout:
             return False
     
     def on(self, event, func):
-        """Registra un callback específico para esta instancia."""
+        """
+        Registra un callback específico para esta instancia.
+        
+        Nota: Si se registran múltiples handlers para el mismo evento,
+        todos se ejecutarán (útil para LinkedViews con múltiples scatter plots).
+        """
         if not hasattr(self, "_handlers"):
             self._handlers = {}
-        self._handlers[event] = func
+        
+        # Permitir múltiples handlers para el mismo evento
+        if event not in self._handlers:
+            self._handlers[event] = []
+        elif not isinstance(self._handlers[event], list):
+            # Convertir handler único a lista
+            self._handlers[event] = [self._handlers[event]]
+        
+        self._handlers[event].append(func)
         return self
 
     @classmethod
@@ -375,12 +405,13 @@ class MatrixLayout:
         # Asegurar que el comm esté registrado
         MatrixLayout._ensure_comm_target()
     
-    def connect_selection(self, reactive_model):
+    def connect_selection(self, reactive_model, scatter_letter=None):
         """
         Conecta un modelo reactivo para actualizar automáticamente.
         
         Args:
             reactive_model: Instancia de ReactiveData o SelectionModel
+            scatter_letter: Letra del scatter plot (opcional, para enrutamiento específico)
         
         Ejemplo:
             from BESTLIB.reactive import SelectionModel
@@ -389,7 +420,7 @@ class MatrixLayout:
             selection.on_change(lambda items, count: print(f"{count} seleccionados"))
             
             layout = MatrixLayout("S")
-            layout.connect_selection(selection)
+            layout.connect_selection(selection, scatter_letter='S')
             layout.display()
         """
         if not HAS_WIDGETS:
@@ -397,9 +428,16 @@ class MatrixLayout:
             return
         
         self._reactive_model = reactive_model
+        self._scatter_letter = scatter_letter  # Guardar letra del scatter para enrutamiento
         
         # Crear handler que actualiza el modelo reactivo
         def update_model(payload):
+            # Verificar si el evento viene del scatter plot correcto
+            event_scatter_letter = payload.get('__scatter_letter__')
+            if scatter_letter and event_scatter_letter and event_scatter_letter != scatter_letter:
+                # Este evento no es para este scatter plot
+                return
+            
             items = payload.get('items', [])
             # Extraer filas originales completas si existen
             original_rows = []

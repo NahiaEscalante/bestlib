@@ -197,6 +197,8 @@ class ReactiveMatrixLayout:
         self._view_letters = {}  # {view_id: letter} - mapeo de vista a letra del layout
         self._barchart_callbacks = {}  # {letter: callback_func} - para evitar duplicados
         self._barchart_cell_ids = {}  # {letter: cell_id} - IDs de celdas de bar charts
+        self._scatter_selection_models = {}  # {scatter_letter: SelectionModel} - Modelos por scatter
+        self._barchart_to_scatter = {}  # {barchart_letter: scatter_letter} - Enlaces scatter->bar
     
     def set_data(self, data):
         """
@@ -229,9 +231,40 @@ class ReactiveMatrixLayout:
         elif self._data is None:
             raise ValueError("Debe proporcionar datos con data= o usar set_data() primero")
         
-        # Usar el método helper de MatrixLayout
+        # Crear un SelectionModel específico para este scatter plot
+        # Esto permite que cada scatter plot actualice solo sus bar charts asociados
+        scatter_selection = SelectionModel()
+        self._scatter_selection_models[letter] = scatter_selection
+        
+        # Crear un handler personalizado para este scatter plot específico
+        # El handler se conecta directamente al layout principal pero filtra por letra
         from .matrix import MatrixLayout
-        MatrixLayout.map_scatter(
+        
+        # Crear handler que filtra eventos por letra del scatter
+        # Usar closure para capturar la letra
+        scatter_letter_capture = letter
+        scatter_selection_capture = scatter_selection
+        
+        def scatter_handler(payload):
+            """Handler que actualiza solo el SelectionModel de este scatter plot"""
+            # Filtrar eventos: solo procesar si viene de este scatter plot
+            event_scatter_letter = payload.get('__scatter_letter__')
+            if event_scatter_letter != scatter_letter_capture:
+                # Este evento no es para este scatter plot, ignorar
+                return
+            
+            # El payload ya viene con __scatter_letter__ del JavaScript
+            items = payload.get('items', [])
+            scatter_selection_capture.update(items)
+        
+        # Registrar handler en el layout principal
+        # Nota: Usamos el mismo layout pero cada scatter tiene su propio SelectionModel
+        # El JavaScript enviará __scatter_letter__ en el payload
+        self._layout.on('select', scatter_handler)
+        
+        # Configurar el scatter plot en el mapping
+        # Agregar la letra del scatter en el spec para identificar eventos
+        scatter_spec = MatrixLayout.map_scatter(
             letter, 
             self._data, 
             x_col=x_col, 
@@ -240,6 +273,12 @@ class ReactiveMatrixLayout:
             interactive=interactive,
             **kwargs
         )
+        
+        # Agregar identificador del scatter plot para enrutamiento de eventos
+        if scatter_spec:
+            scatter_spec['__scatter_letter__'] = letter
+            scatter_spec['__selection_model_id__'] = id(scatter_selection)  # ID único para identificar
+            MatrixLayout._map[letter] = scatter_spec
         
         # Registrar vista para sistema de enlace
         view_id = f"scatter_{letter}"
@@ -250,13 +289,14 @@ class ReactiveMatrixLayout:
             'y_col': y_col,
             'category_col': category_col,
             'interactive': interactive,
-            'kwargs': kwargs
+            'kwargs': kwargs,
+            'selection_model': scatter_selection  # Guardar el modelo de selección específico
         }
         self._view_letters[view_id] = letter
         
         return self
     
-    def add_barchart(self, letter, category_col=None, value_col=None, **kwargs):
+    def add_barchart(self, letter, category_col=None, value_col=None, linked_to=None, **kwargs):
         """
         Agrega un bar chart enlazado que se actualiza automáticamente cuando se selecciona en scatter.
         
@@ -264,10 +304,18 @@ class ReactiveMatrixLayout:
             letter: Letra del layout ASCII donde irá el bar chart
             category_col: Nombre de columna para categorías
             value_col: Nombre de columna para valores (opcional, si no se especifica cuenta)
+            linked_to: Letra del scatter plot que debe actualizar este bar chart (opcional)
+                      Si no se especifica, se enlaza al último scatter plot agregado
             **kwargs: Argumentos adicionales (color, colorMap, axes, etc.)
         
         Returns:
             self para encadenamiento
+        
+        Ejemplo:
+            layout.add_scatter('S1', df, ...)  # Scatter plot 1
+            layout.add_scatter('S2', df, ...)  # Scatter plot 2
+            layout.add_barchart('B1', linked_to='S1')  # Bar chart enlazado a S1
+            layout.add_barchart('B2', linked_to='S2')  # Bar chart enlazado a S2
         """
         if self._data is None:
             raise ValueError("Debe usar set_data() o add_scatter() primero para establecer los datos")
@@ -277,6 +325,22 @@ class ReactiveMatrixLayout:
             if MatrixLayout._debug:
                 print(f"⚠️ Bar chart para '{letter}' ya está registrado. Ignorando registro duplicado.")
             return self
+        
+        # Determinar a qué scatter plot enlazar
+        if linked_to:
+            if linked_to not in self._scatter_selection_models:
+                raise ValueError(f"Scatter plot '{linked_to}' no existe. Agrega el scatter plot primero.")
+            scatter_letter = linked_to
+        else:
+            # Si no se especifica, usar el último scatter plot agregado
+            if not self._scatter_selection_models:
+                raise ValueError("No hay scatter plots disponibles. Agrega un scatter plot primero con add_scatter().")
+            scatter_letter = list(self._scatter_selection_models.keys())[-1]
+            if MatrixLayout._debug:
+                print(f"💡 Bar chart '{letter}' enlazado automáticamente a scatter '{scatter_letter}'")
+        
+        # Guardar el enlace
+        self._barchart_to_scatter[letter] = scatter_letter
         
         # Crear bar chart inicial con todos los datos
         from .matrix import MatrixLayout
@@ -494,8 +558,10 @@ class ReactiveMatrixLayout:
         # Guardar callback para referencia
         self._barchart_callbacks[letter] = update_barchart
         
-        # Registrar callback en el modelo de selección (solo una vez)
-        self.selection_model.on_change(update_barchart)
+        # Registrar callback en el modelo de selección ESPECÍFICO del scatter plot
+        # Esto permite que cada scatter plot actualice solo sus bar charts asociados
+        scatter_selection = self._scatter_selection_models[scatter_letter]
+        scatter_selection.on_change(update_barchart)
         
         return self
     

@@ -111,8 +111,9 @@
     
     container.style.display = "grid";
     container.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
-    container.style.gridTemplateRows = `repeat(${R}, 140px)`;
-    container.style.gap = "8px";
+    // Aumentar altura de filas para evitar superposición (280px mínimo)
+    container.style.gridTemplateRows = `repeat(${R}, 280px)`;
+    container.style.gap = "12px";  // Aumentar gap para mejor separación
 
     const safeHtml = mapping.__safe_html__ !== false;
     const divIdFromMapping = mapping.__div_id__ || divId;
@@ -566,12 +567,16 @@
             return d._original_row || d;
           });
           
+          // Obtener letra del scatter plot desde el spec
+          const scatterLetter = spec.__scatter_letter__ || null;
+          
           // Enviar el evento de selección con filas originales
           sendEvent(divId, 'select', {
             type: 'select',
             items: selectedItems,  // Filas originales completas
             count: selected.length,
-            original_items: selected  // Mantener compatibilidad con datos del gráfico
+            original_items: selected,  // Mantener compatibilidad con datos del gráfico
+            __scatter_letter__: scatterLetter  // Identificador del scatter plot
           });
           
           // Resetear visualización de puntos
@@ -948,11 +953,15 @@
           }
         });
 
+        // Obtener letra del scatter plot desde el spec
+        const scatterLetter = spec.__scatter_letter__ || null;
+        
         sendEvent(divId, 'select', {
           type: 'scatter',
           indices: selectedIdx,
           items: originalRows,  // Filas originales completas
-          original_items: selectedItems  // Mantener compatibilidad
+          original_items: selectedItems,  // Mantener compatibilidad
+          __scatter_letter__: scatterLetter  // Identificador del scatter plot
         });
       }
     }
