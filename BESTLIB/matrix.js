@@ -119,13 +119,28 @@
     const safeHtml = mapping.__safe_html__ !== false;
     const divIdFromMapping = mapping.__div_id__ || divId;
     
-    // Soporte para merge de celdas
+    // Soporte para merge de celdas - MERGE AUTOMÁTICO POR DEFECTO
+    // El sistema detecta automáticamente regiones contiguas y las fusiona
+    // Puede desactivarse o controlarse con __merge__
     const mergeOpt = mapping.__merge__;
-    const mergeAll = mergeOpt === true;
+    
+    // Lógica de merge:
+    // - Si __merge__ es undefined → Merge automático para TODAS las letras (comportamiento por defecto)
+    // - Si __merge__ es false → Desactivar merge automático
+    // - Si __merge__ es true → Merge para todas las letras (explícito)
+    // - Si __merge__ es array → Solo merge para las letras en el array
+    const mergeDisabled = mergeOpt === false;
+    const mergeAllExplicit = mergeOpt === true;
     const mergeSet = Array.isArray(mergeOpt) ? new Set(mergeOpt) : null;
+    const autoMergeEnabled = mergeOpt === undefined; // Merge automático cuando no se especifica
+    
     const shouldMerge = (letter) => {
-      if (letter === '.') return false;
-      return mergeAll || (mergeSet ? mergeSet.has(letter) : false);
+      if (letter === '.') return false; // Nunca fusionar espacios vacíos
+      if (mergeDisabled) return false; // Merge desactivado explícitamente
+      if (mergeAllExplicit) return true; // Merge para todas (explícito)
+      if (mergeSet) return mergeSet.has(letter); // Solo las letras especificadas
+      // Por defecto: merge automático para todas las letras contiguas
+      return autoMergeEnabled;
     };
 
     function isD3Spec(value) {
