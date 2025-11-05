@@ -183,6 +183,9 @@
         const spec = mapping[letter];
         const cell = document.createElement("div");
         cell.className = "matrix-cell";
+        // Agregar ID único basado en letra y posición para LinkedViews
+        cell.id = `${divId}-cell-${letter}-${r}-${c}`;
+        cell.setAttribute('data-letter', letter);
         cell.style.gridRow = `${r + 1} / span ${height}`;
         cell.style.gridColumn = `${c + 1} / span ${width}`;
 

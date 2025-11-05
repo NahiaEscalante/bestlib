@@ -196,6 +196,7 @@ class ReactiveMatrixLayout:
         self._selected_data = []  # Datos seleccionados actualmente
         self._view_letters = {}  # {view_id: letter} - mapeo de vista a letra del layout
         self._barchart_callbacks = {}  # {letter: callback_func} - para evitar duplicados
+        self._barchart_cell_ids = {}  # {letter: cell_id} - IDs de celdas de bar charts
     
     def set_data(self, data):
         """
@@ -274,9 +275,8 @@ class ReactiveMatrixLayout:
         # Evitar registrar múltiples callbacks para la misma letra
         if letter in self._barchart_callbacks:
             if MatrixLayout._debug:
-                print(f"⚠️ Bar chart para '{letter}' ya está registrado. Actualizando configuración.")
-            # Remover callback anterior
-            # (No podemos remover fácilmente, pero podemos evitar duplicados)
+                print(f"⚠️ Bar chart para '{letter}' ya está registrado. Ignorando registro duplicado.")
+            return self
         
         # Crear bar chart inicial con todos los datos
         from .matrix import MatrixLayout
@@ -299,12 +299,13 @@ class ReactiveMatrixLayout:
         }
         self._view_letters[view_id] = letter
         
-        # Guardar parámetros para el callback
+        # Guardar parámetros para el callback (closure)
         barchart_params = {
             'letter': letter,
             'category_col': category_col,
             'value_col': value_col,
-            'kwargs': kwargs
+            'kwargs': kwargs.copy(),  # Copia para evitar mutaciones
+            'layout_div_id': self._layout.div_id
         }
         
         # Configurar callback para actualizar bar chart cuando cambia selección
@@ -312,7 +313,7 @@ class ReactiveMatrixLayout:
             """Actualiza el bar chart cuando cambia la selección usando JavaScript"""
             try:
                 import json
-                from IPython.display import display, Javascript
+                from IPython.display import Javascript
                 
                 # Usar datos seleccionados o todos los datos
                 data_to_use = self._data
@@ -325,78 +326,73 @@ class ReactiveMatrixLayout:
                         data_to_use = items
                 
                 # Preparar datos del bar chart
-                if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
-                    if value_col and value_col in data_to_use.columns:
-                        bar_data = data_to_use.groupby(category_col)[value_col].sum().reset_index()
-                        bar_data = bar_data.rename(columns={category_col: 'category', value_col: 'value'})
-                        bar_data = bar_data.to_dict('records')
-                    elif category_col and category_col in data_to_use.columns:
-                        counts = data_to_use[category_col].value_counts()
-                        bar_data = [{'category': cat, 'value': count} for cat, count in counts.items()]
-                    else:
-                        return
-                else:
-                    from collections import Counter
-                    if value_col:
-                        from collections import defaultdict
-                        sums = defaultdict(float)
-                        for item in data_to_use:
-                            cat = item.get(category_col, 'unknown')
-                            val = item.get(value_col, 0)
-                            sums[cat] += val
-                        bar_data = [{'category': cat, 'value': val} for cat, val in sums.items()]
-                    else:
-                        categories = Counter([item.get(category_col, 'unknown') for item in data_to_use])
-                        bar_data = [{'category': cat, 'value': count} for cat, count in categories.items()]
+                bar_data = self._prepare_barchart_data(
+                    data_to_use, 
+                    barchart_params['category_col'], 
+                    barchart_params['value_col'],
+                    barchart_params['kwargs']
+                )
                 
-                # Obtener colorMap
-                color_map = kwargs.get('colorMap', {})
-                for bar_item in bar_data:
-                    bar_item['color'] = color_map.get(bar_item['category'], kwargs.get('color', '#4a90e2'))
+                if not bar_data:
+                    return
                 
                 # Actualizar también el mapping para consistencia
                 MatrixLayout.map_barchart(
                     letter,
                     data_to_use,
-                    category_col=category_col,
-                    value_col=value_col,
-                    **kwargs
+                    category_col=barchart_params['category_col'],
+                    value_col=barchart_params['value_col'],
+                    **barchart_params['kwargs']
                 )
                 
-                # Actualizar el gráfico usando JavaScript (sin re-renderizar todo)
-                div_id = self._layout.div_id
+                # Crear JavaScript para actualizar el gráfico de forma más robusta
+                div_id = barchart_params['layout_div_id']
                 bar_data_json = json.dumps(bar_data)
-                color_map_json = json.dumps(color_map) if color_map else '{}'
+                color_map = barchart_params['kwargs'].get('colorMap', {})
+                color_map_json = json.dumps(color_map)
+                default_color = barchart_params['kwargs'].get('color', '#4a90e2')
+                show_axes = barchart_params['kwargs'].get('axes', True)
                 
                 js_update = f"""
                 (function() {{
-                    const container = document.getElementById('{div_id}');
-                    if (!container) return;
-                    
-                    // Buscar todas las celdas
-                    const cells = container.querySelectorAll('.matrix-cell');
-                    
-                    // Encontrar la celda que tiene el bar chart (buscar por SVG con barras)
-                    let targetCell = null;
-                    let targetIndex = -1;
-                    
-                    cells.forEach((cell, idx) => {{
-                        const svg = cell.querySelector('svg');
-                        if (svg) {{
-                            const bars = svg.querySelectorAll('.bar');
-                            if (bars && bars.length > 0) {{
+                    // Esperar a que D3 esté disponible
+                    function updateBarchart() {{
+                        if (!window.d3) {{
+                            setTimeout(updateBarchart, 100);
+                            return;
+                        }}
+                        
+                        const container = document.getElementById('{div_id}');
+                        if (!container) return;
+                        
+                        // Buscar celda por data-letter attribute (más robusto)
+                        const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
+                        let targetCell = null;
+                        
+                        // Si hay múltiples celdas con la misma letra, buscar la que tiene barras
+                        for (let cell of cells) {{
+                            const svg = cell.querySelector('svg');
+                            if (svg && svg.querySelector('.bar')) {{
                                 targetCell = cell;
-                                targetIndex = idx;
+                                break;
                             }}
                         }}
-                    }});
-                    
-                    if (targetCell && window.d3) {{
-                        // Limpiar celda
+                        
+                        // Si no encontramos, usar la primera celda con la letra
+                        if (!targetCell && cells.length > 0) {{
+                            targetCell = cells[0];
+                        }}
+                        
+                        if (!targetCell) {{
+                            console.warn('No se encontró celda para bar chart {letter}');
+                            return;
+                        }}
+                        
+                        // Limpiar celda completamente
                         targetCell.innerHTML = '';
                         
                         // Re-renderizar bar chart con nuevos datos
-                        const width = targetCell.clientWidth || 400;
+                        const width = Math.max(targetCell.clientWidth || 400, 200);
                         const height = 250;
                         const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
                         const chartWidth = width - margin.left - margin.right;
@@ -405,7 +401,12 @@ class ReactiveMatrixLayout:
                         const data = {bar_data_json};
                         const colorMap = {color_map_json};
                         
-                        const svg = d3.select(targetCell)
+                        if (data.length === 0) {{
+                            targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
+                            return;
+                        }}
+                        
+                        const svg = window.d3.select(targetCell)
                             .append('svg')
                             .attr('width', width)
                             .attr('height', height);
@@ -413,16 +414,17 @@ class ReactiveMatrixLayout:
                         const g = svg.append('g')
                             .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
                         
-                        const x = d3.scaleBand()
+                        const x = window.d3.scaleBand()
                             .domain(data.map(d => d.category))
                             .range([0, chartWidth])
                             .padding(0.2);
                         
-                        const y = d3.scaleLinear()
-                            .domain([0, d3.max(data, d => d.value) || 100])
+                        const y = window.d3.scaleLinear()
+                            .domain([0, window.d3.max(data, d => d.value) || 100])
                             .nice()
                             .range([chartHeight, 0]);
                         
+                        // Renderizar barras
                         g.selectAll('.bar')
                             .data(data)
                             .enter()
@@ -432,16 +434,18 @@ class ReactiveMatrixLayout:
                             .attr('y', chartHeight)
                             .attr('width', x.bandwidth())
                             .attr('height', 0)
-                            .attr('fill', d => colorMap[d.category] || d.color || '{kwargs.get("color", "#4a90e2")}')
+                            .attr('fill', d => colorMap[d.category] || d.color || '{default_color}')
                             .transition()
                             .duration(500)
+                            .ease(window.d3.easeCubicOut)
                             .attr('y', d => y(d.value))
                             .attr('height', d => chartHeight - y(d.value));
                         
-                        if ({kwargs.get('axes', True)}) {{
+                        // Renderizar ejes si se requiere
+                        if ({str(show_axes).lower()}) {{
                             const xAxis = g.append('g')
                                 .attr('transform', `translate(0,${{chartHeight}})`)
-                                .call(d3.axisBottom(x));
+                                .call(window.d3.axisBottom(x));
                             
                             xAxis.selectAll('text')
                                 .style('font-size', '12px')
@@ -454,7 +458,7 @@ class ReactiveMatrixLayout:
                                 .style('stroke-width', '1.5px');
                             
                             const yAxis = g.append('g')
-                                .call(d3.axisLeft(y).ticks(5));
+                                .call(window.d3.axisLeft(y).ticks(5));
                             
                             yAxis.selectAll('text')
                                 .style('font-size', '12px')
@@ -467,11 +471,19 @@ class ReactiveMatrixLayout:
                                 .style('stroke-width', '1.5px');
                         }}
                     }}
+                    
+                    updateBarchart();
                 }})();
                 """
                 
                 # Ejecutar JavaScript para actualizar solo el bar chart
-                display(Javascript(js_update))
+                # Usar eval_js en lugar de display para evitar duplicación
+                try:
+                    from IPython.display import Javascript, display
+                    display(Javascript(js_update), clear=False)
+                except:
+                    # Fallback si no está disponible
+                    pass
                 
             except Exception as e:
                 if MatrixLayout._debug:
@@ -487,6 +499,46 @@ class ReactiveMatrixLayout:
         
         return self
     
+    def _prepare_barchart_data(self, data, category_col, value_col, kwargs):
+        """Helper para preparar datos del bar chart"""
+        try:
+            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+                if value_col and value_col in data.columns:
+                    bar_data = data.groupby(category_col)[value_col].sum().reset_index()
+                    bar_data = bar_data.rename(columns={category_col: 'category', value_col: 'value'})
+                    bar_data = bar_data.to_dict('records')
+                elif category_col and category_col in data.columns:
+                    counts = data[category_col].value_counts()
+                    bar_data = [{'category': cat, 'value': count} for cat, count in counts.items()]
+                else:
+                    return []
+            else:
+                from collections import Counter
+                if value_col:
+                    from collections import defaultdict
+                    sums = defaultdict(float)
+                    for item in data:
+                        cat = item.get(category_col, 'unknown')
+                        val = item.get(value_col, 0)
+                        sums[cat] += val
+                    bar_data = [{'category': cat, 'value': val} for cat, val in sums.items()]
+                else:
+                    categories = Counter([item.get(category_col, 'unknown') for item in data])
+                    bar_data = [{'category': cat, 'value': count} for cat, count in categories.items()]
+            
+            # Obtener colorMap
+            color_map = kwargs.get('colorMap', {})
+            default_color = kwargs.get('color', '#4a90e2')
+            for bar_item in bar_data:
+                bar_item['color'] = color_map.get(bar_item['category'], default_color)
+            
+            return bar_data
+        except Exception as e:
+            from .matrix import MatrixLayout
+            if MatrixLayout._debug:
+                print(f"⚠️ Error preparando datos del bar chart: {e}")
+            return []
+    
     def map(self, mapping):
         """Delega al MatrixLayout interno"""
         self._layout.map(mapping)
@@ -498,9 +550,19 @@ class ReactiveMatrixLayout:
         return self
     
     def display(self, ascii_layout=None):
-        """Muestra el layout"""
+        """
+        Muestra el layout.
+        
+        IMPORTANTE: Solo llama este método UNA VEZ después de configurar todos los gráficos.
+        Llamar display() múltiples veces causará duplicación de gráficos.
+        
+        El bar chart se actualiza automáticamente cuando seleccionas en el scatter plot,
+        NO necesitas llamar display() nuevamente después de cada selección.
+        """
         if ascii_layout:
             self._layout.ascii_layout = ascii_layout
+        
+        # Solo mostrar una vez - el bar chart se actualiza automáticamente vía JavaScript
         self._layout.display()
         return self
     
@@ -548,4 +610,5 @@ class ReactiveMatrixLayout:
     def count(self):
         """Retorna el número de items seleccionados"""
         return self.selection_model.get_count()
+
 
