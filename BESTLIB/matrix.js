@@ -111,8 +111,9 @@
     
     container.style.display = "grid";
     container.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
-    // Aumentar altura de filas para evitar superposición (280px mínimo)
-    container.style.gridTemplateRows = `repeat(${R}, 280px)`;
+    // Aumentar altura de filas para evitar recorte - altura mínima para gráficos completos
+    // Considerando: padding (30px) + gráfico (320px) + espacio para ejes (20px extra)
+    container.style.gridTemplateRows = `repeat(${R}, minmax(350px, auto))`;
     container.style.gap = "12px";  // Aumentar gap para mejor separación
 
     const safeHtml = mapping.__safe_html__ !== false;
@@ -307,7 +308,9 @@
   function renderBarChartD3(container, spec, d3, divId) {
     const data = spec.data || [];
     const width = container.clientWidth || 400;
-    const height = 250;  // Altura fija más compacta
+    // Calcular altura disponible: considerar padding del contenedor (30px total) y espacio para ejes
+    const availableHeight = Math.max(container.clientHeight - 30, 320);  // Altura mínima de 320px
+    const height = Math.min(availableHeight, 350);  // Altura máxima de 350px para mantener proporción
     const margin = { top: 20, right: 20, bottom: 40, left: 50 };
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
@@ -409,7 +412,9 @@
   function renderScatterPlotD3(container, spec, d3, divId) {
     const data = spec.data || [];
     const width = container.clientWidth || 400;
-    const height = 250;  // Altura fija más compacta
+    // Calcular altura disponible: considerar padding del contenedor (30px total) y espacio para ejes
+    const availableHeight = Math.max(container.clientHeight - 30, 320);  // Altura mínima de 320px
+    const height = Math.min(availableHeight, 350);  // Altura máxima de 350px para mantener proporción
     const margin = { top: 20, right: 20, bottom: 40, left: 50 };
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;

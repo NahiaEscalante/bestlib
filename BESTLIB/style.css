@@ -12,10 +12,10 @@
   border-radius: 6px;
   padding: 15px;
   overflow: visible;  /* Cambiado de hidden a visible para evitar cortes */
-  min-height: 280px;
+  min-height: 350px;  /* Aumentado para acomodar gráficos completos con ejes */
   max-height: none;  /* Removido límite máximo para evitar cortes */
   display: flex;
-  align-items: center;
+  align-items: flex-start;  /* Cambiado de center a flex-start para evitar recorte vertical */
   justify-content: center;
 }
 
@@ -24,10 +24,12 @@
   background: #f8f9fa;
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;  /* Cambiado de center a flex-start para evitar recorte vertical */
   font-family: sans-serif;
   font-size: 14px;
   border-radius: 6px;
   overflow: visible;  /* Asegurar que el contenido no se corte */
-  min-height: 260px;  /* Altura mínima para evitar superposición */
+  min-height: 320px;  /* Aumentado para acomodar gráficos completos con ejes */
+  width: 100%;  /* Asegurar que ocupe todo el ancho disponible */
+  height: 100%;  /* Asegurar que ocupe toda la altura disponible */
 }

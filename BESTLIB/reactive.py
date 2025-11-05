@@ -457,7 +457,9 @@ class ReactiveMatrixLayout:
                         
                         // Re-renderizar bar chart con nuevos datos
                         const width = Math.max(targetCell.clientWidth || 400, 200);
-                        const height = 250;
+                        // Calcular altura disponible: considerar padding del contenedor (30px total) y espacio para ejes
+                        const availableHeight = Math.max(targetCell.clientHeight - 30, 320);  // Altura mínima de 320px
+                        const height = Math.min(availableHeight, 350);  // Altura máxima de 350px para mantener proporción
                         const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
                         const chartWidth = width - margin.left - margin.right;
                         const chartHeight = height - margin.top - margin.bottom;
