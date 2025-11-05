@@ -1330,6 +1330,11 @@ class ReactiveMatrixLayout:
         self._layout.merge_off()
         return self
 
+    def merge_only(self, letters):
+        """Activa merge solo para las letras indicadas."""
+        self._layout.merge_only(letters)
+        return self
+
 
 # ==========================
 # Utilidades compartidas
