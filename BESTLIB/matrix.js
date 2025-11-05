@@ -129,7 +129,14 @@
     };
 
     function isD3Spec(value) {
-      return value && typeof value === 'object' && (value.type === 'bar' || value.type === 'scatter');
+      return value && typeof value === 'object' && (
+        value.type === 'bar' || 
+        value.type === 'scatter' || 
+        value.type === 'histogram' ||
+        value.type === 'pie' ||
+        value.type === 'boxplot' ||
+        value.type === 'heatmap'
+      );
     }
     
     function isSimpleViz(value) {
@@ -138,7 +145,7 @@
       return type === 'circle' || type === 'rect' || type === 'line';
     }
 
-    // Sistema de merge: marcar celdas visitadas
+    // Sistema de merge mejorado: marcar celdas visitadas
     const visited = Array.from({length: R}, () => Array(C).fill(false));
     
     for (let r = 0; r < R; r++) {
@@ -154,23 +161,26 @@
         let width = 1;
         let height = 1;
         
-        // Si debe hacer merge, calcular el área rectangular
+        // Si debe hacer merge, calcular el área rectangular completa
         if (shouldMerge(letter)) {
-          // Expandir horizontalmente
+          // Expandir horizontalmente primero
           while (c + width < C && !visited[r][c + width] && rows[r][c + width] === letter) {
             width++;
           }
           
-          // Expandir verticalmente
+          // Expandir verticalmente: verificar que todas las filas debajo tengan la misma letra en el mismo rango
           let canGrow = true;
           while (r + height < R && canGrow) {
+            // Verificar que todas las celdas en la fila siguiente dentro del rango sean la misma letra
             for (let cc = c; cc < c + width; cc++) {
               if (visited[r + height][cc] || rows[r + height][cc] !== letter) {
                 canGrow = false;
                 break;
               }
             }
-            if (canGrow) height++;
+            if (canGrow) {
+              height++;
+            }
           }
         }
         
@@ -188,6 +198,7 @@
         // Agregar ID único basado en letra y posición para LinkedViews
         cell.id = `${divId}-cell-${letter}-${r}-${c}`;
         cell.setAttribute('data-letter', letter);
+        // Usar grid-row y grid-column con span para fusionar celdas
         cell.style.gridRow = `${r + 1} / span ${height}`;
         cell.style.gridColumn = `${c + 1} / span ${width}`;
 
@@ -299,6 +310,93 @@
       renderBarChartD3(container, spec, d3, divId);
     } else if (spec.type === 'scatter') {
       renderScatterPlotD3(container, spec, d3, divId);
+    } else if (spec.type === 'histogram') {
+      renderHistogramD3(container, spec, d3, divId);
+    } else {
+      // Tipo de gráfico no soportado aún, mostrar mensaje
+      container.innerHTML = `<div style="padding: 20px; text-align: center; color: #999;">
+        Gráfico tipo '${spec.type}' no implementado aún
+      </div>`;
+    }
+  }
+  
+  /**
+   * Histograma con D3.js
+   */
+  function renderHistogramD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const width = container.clientWidth || 400;
+    // Calcular altura disponible: considerar padding del contenedor (30px total) y espacio para ejes
+    const availableHeight = Math.max(container.clientHeight - 30, 320);  // Altura mínima de 320px
+    const height = Math.min(availableHeight, 350);  // Altura máxima de 350px para mantener proporción
+    const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+    
+    // Crear SVG con D3
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height);
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    // Escalas D3
+    const x = d3.scaleBand()
+      .domain(data.map(d => d.bin))
+      .range([0, chartWidth])
+      .padding(0.1);
+    
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d.count) || 100])
+      .nice()
+      .range([chartHeight, 0]);
+    
+    // Barras del histograma
+    g.selectAll('.bar')
+      .data(data)
+      .enter()
+      .append('rect')
+      .attr('class', 'bar')
+      .attr('x', d => x(d.bin))
+      .attr('y', chartHeight)
+      .attr('width', x.bandwidth())
+      .attr('height', 0)
+      .attr('fill', spec.color || '#4a90e2')
+      .transition()
+      .duration(800)
+      .attr('y', d => y(d.count))
+      .attr('height', d => chartHeight - y(d.count));
+    
+    // Ejes
+    if (spec.axes !== false) {
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x).tickFormat(d => d.toFixed(2)));
+      
+      xAxis.selectAll('text')
+        .style('font-size', '12px')
+        .style('font-weight', '600')
+        .style('fill', '#000000')
+        .style('font-family', 'Arial, sans-serif');
+      
+      xAxis.selectAll('line, path')
+        .style('stroke', '#000000')
+        .style('stroke-width', '1.5px');
+      
+      const yAxis = g.append('g')
+        .call(d3.axisLeft(y).ticks(5));
+      
+      yAxis.selectAll('text')
+        .style('font-size', '12px')
+        .style('font-weight', '600')
+        .style('fill', '#000000')
+        .style('font-family', 'Arial, sans-serif');
+      
+      yAxis.selectAll('line, path')
+        .style('stroke', '#000000')
+        .style('stroke-width', '1.5px');
     }
   }
   

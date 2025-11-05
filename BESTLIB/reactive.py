@@ -199,6 +199,7 @@ class ReactiveMatrixLayout:
         self._barchart_cell_ids = {}  # {letter: cell_id} - IDs de celdas de bar charts
         self._scatter_selection_models = {}  # {scatter_letter: SelectionModel} - Modelos por scatter
         self._barchart_to_scatter = {}  # {barchart_letter: scatter_letter} - Enlaces scatter->bar
+        self._linked_charts = {}  # {chart_letter: {'type': str, 'linked_to': str, 'callback': func}} - Gráficos enlazados genéricos
     
     def set_data(self, data):
         """
@@ -575,6 +576,312 @@ class ReactiveMatrixLayout:
         # Esto permite que cada scatter plot actualice solo sus bar charts asociados
         scatter_selection = self._scatter_selection_models[scatter_letter]
         scatter_selection.on_change(update_barchart)
+        
+        return self
+    
+    def link_chart(self, letter, chart_type, linked_to=None, update_func=None, **kwargs):
+        """
+        Método genérico para enlazar cualquier tipo de gráfico a un scatter plot.
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el gráfico
+            chart_type: Tipo de gráfico ('bar', 'histogram', 'pie', 'boxplot', 'heatmap', etc.)
+            linked_to: Letra del scatter plot que debe actualizar este gráfico (opcional)
+            update_func: Función personalizada para actualizar el gráfico cuando cambia la selección
+                       Debe recibir (items, count) como argumentos
+            **kwargs: Argumentos adicionales específicos del tipo de gráfico
+        
+        Returns:
+            self para encadenamiento
+        
+        Ejemplo:
+            # Enlazar histograma
+            layout.link_chart('H', 'histogram', linked_to='S', 
+                             column='edad', bins=10)
+            
+            # Enlazar pie chart
+            layout.link_chart('P', 'pie', linked_to='S',
+                             category_col='departamento')
+        """
+        from .matrix import MatrixLayout
+        
+        if self._data is None:
+            raise ValueError("Debe usar set_data() o add_scatter() primero para establecer los datos")
+        
+        # Determinar a qué scatter plot enlazar
+        if linked_to:
+            if linked_to not in self._scatter_selection_models:
+                raise ValueError(f"Scatter plot '{linked_to}' no existe. Agrega el scatter plot primero.")
+            scatter_letter = linked_to
+        else:
+            # Si no se especifica, usar el último scatter plot agregado
+            if not self._scatter_selection_models:
+                raise ValueError("No hay scatter plots disponibles. Agrega un scatter plot primero con add_scatter().")
+            scatter_letter = list(self._scatter_selection_models.keys())[-1]
+            if MatrixLayout._debug:
+                print(f"💡 Gráfico '{letter}' ({chart_type}) enlazado automáticamente a scatter '{scatter_letter}'")
+        
+        # Guardar información del gráfico enlazado
+        self._linked_charts[letter] = {
+            'type': chart_type,
+            'linked_to': scatter_letter,
+            'kwargs': kwargs.copy(),
+            'update_func': update_func
+        }
+        
+        # Crear función de actualización genérica si no se proporciona una personalizada
+        if update_func is None:
+            def generic_update(items, count):
+                """Función genérica de actualización que puede ser extendida"""
+                # Por defecto, actualizar el mapping del gráfico
+                # Los gráficos específicos pueden sobrescribir este comportamiento
+                if MatrixLayout._debug:
+                    print(f"🔄 Actualizando gráfico '{letter}' ({chart_type}) con {count} elementos seleccionados")
+            
+            update_func = generic_update
+        
+        # Registrar callback en el modelo de selección del scatter plot
+        scatter_selection = self._scatter_selection_models[scatter_letter]
+        scatter_selection.on_change(update_func)
+        
+        return self
+    
+    def add_histogram(self, letter, column=None, bins=20, linked_to=None, **kwargs):
+        """
+        Agrega un histograma enlazado que se actualiza automáticamente cuando se selecciona en scatter.
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el histograma
+            column: Nombre de columna numérica para el histograma
+            bins: Número de bins (default: 20)
+            linked_to: Letra del scatter plot que debe actualizar este histograma (opcional)
+            **kwargs: Argumentos adicionales (color, axes, etc.)
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        
+        if self._data is None:
+            raise ValueError("Debe usar set_data() o add_scatter() primero para establecer los datos")
+        
+        if column is None:
+            raise ValueError("Debe especificar 'column' para el histograma")
+        
+        # Determinar a qué scatter plot enlazar
+        if linked_to:
+            if linked_to not in self._scatter_selection_models:
+                raise ValueError(f"Scatter plot '{linked_to}' no existe.")
+            scatter_letter = linked_to
+        else:
+            if not self._scatter_selection_models:
+                raise ValueError("No hay scatter plots disponibles.")
+            scatter_letter = list(self._scatter_selection_models.keys())[-1]
+        
+        # Guardar parámetros
+        hist_params = {
+            'letter': letter,
+            'column': column,
+            'bins': bins,
+            'kwargs': kwargs.copy(),
+            'layout_div_id': self._layout.div_id
+        }
+        
+        # Función de actualización del histograma
+        def update_histogram(items, count):
+            """Actualiza el histograma cuando cambia la selección"""
+            try:
+                import json
+                from IPython.display import Javascript
+                
+                # Usar datos seleccionados o todos los datos
+                data_to_use = self._data
+                if items and len(items) > 0:
+                    if HAS_PANDAS and isinstance(items[0], dict):
+                        import pandas as pd
+                        data_to_use = pd.DataFrame(items)
+                    else:
+                        data_to_use = items
+                
+                # Preparar datos para histograma
+                if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
+                    values = data_to_use[column].dropna().tolist()
+                else:
+                    values = [item.get(column, 0) for item in data_to_use if column in item]
+                
+                if not values:
+                    return
+                
+                # Calcular bins
+                try:
+                    import numpy as np
+                    hist, bin_edges = np.histogram(values, bins=bins)
+                except ImportError:
+                    # Fallback: calcular bins manualmente si numpy no está disponible
+                    min_val, max_val = min(values), max(values)
+                    bin_width = (max_val - min_val) / bins if max_val > min_val else 1
+                    hist = [0] * bins
+                    bin_edges = [min_val + i * bin_width for i in range(bins + 1)]
+                    
+                    for val in values:
+                        bin_idx = min(int((val - min_val) / bin_width), bins - 1) if bin_width > 0 else 0
+                        hist[bin_idx] += 1
+                bin_centers = [(bin_edges[i] + bin_edges[i+1]) / 2 for i in range(len(bin_edges)-1)]
+                
+                hist_data = [{'bin': center, 'count': count} for center, count in zip(bin_centers, hist)]
+                
+                # Actualizar mapping
+                from .matrix import MatrixLayout
+                MatrixLayout._map[letter] = {
+                    'type': 'histogram',
+                    'data': hist_data,
+                    'column': column,
+                    'bins': bins,
+                    **kwargs
+                }
+                
+                # JavaScript para actualizar el gráfico (similar a bar chart)
+                div_id = hist_params['layout_div_id']
+                hist_data_json = json.dumps(hist_data)
+                default_color = kwargs.get('color', '#4a90e2')
+                show_axes = kwargs.get('axes', True)
+                
+                js_update = f"""
+                (function() {{
+                    function updateHistogram() {{
+                        if (!window.d3) {{
+                            setTimeout(updateHistogram, 100);
+                            return;
+                        }}
+                        
+                        const container = document.getElementById('{div_id}');
+                        if (!container) return;
+                        
+                        const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
+                        let targetCell = null;
+                        
+                        for (let cell of cells) {{
+                            const svg = cell.querySelector('svg');
+                            if (svg) {{
+                                targetCell = cell;
+                                break;
+                            }}
+                        }}
+                        
+                        if (!targetCell && cells.length > 0) {{
+                            targetCell = cells[0];
+                        }}
+                        
+                        if (!targetCell) return;
+                        
+                        targetCell.innerHTML = '';
+                        
+                        const width = Math.max(targetCell.clientWidth || 400, 200);
+                        const availableHeight = Math.max(targetCell.clientHeight - 30, 320);
+                        const height = Math.min(availableHeight, 350);
+                        const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
+                        const chartWidth = width - margin.left - margin.right;
+                        const chartHeight = height - margin.top - margin.bottom;
+                        
+                        const data = {hist_data_json};
+                        
+                        if (data.length === 0) {{
+                            targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
+                            return;
+                        }}
+                        
+                        const svg = window.d3.select(targetCell)
+                            .append('svg')
+                            .attr('width', width)
+                            .attr('height', height);
+                        
+                        const g = svg.append('g')
+                            .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
+                        
+                        const x = window.d3.scaleBand()
+                            .domain(data.map(d => d.bin))
+                            .range([0, chartWidth])
+                            .padding(0.1);
+                        
+                        const y = window.d3.scaleLinear()
+                            .domain([0, window.d3.max(data, d => d.count) || 100])
+                            .nice()
+                            .range([chartHeight, 0]);
+                        
+                        g.selectAll('.bar')
+                            .data(data)
+                            .enter()
+                            .append('rect')
+                            .attr('class', 'bar')
+                            .attr('x', d => x(d.bin))
+                            .attr('y', chartHeight)
+                            .attr('width', x.bandwidth())
+                            .attr('height', 0)
+                            .attr('fill', '{default_color}')
+                            .transition()
+                            .duration(500)
+                            .attr('y', d => y(d.count))
+                            .attr('height', d => chartHeight - y(d.count));
+                        
+                        if ({str(show_axes).lower()}) {{
+                            const xAxis = g.append('g')
+                                .attr('transform', `translate(0,${{chartHeight}})`)
+                                .call(window.d3.axisBottom(x));
+                            
+                            const yAxis = g.append('g')
+                                .call(window.d3.axisLeft(y));
+                        }}
+                    }}
+                    
+                    updateHistogram();
+                }})();
+                """
+                
+                try:
+                    from IPython.display import Javascript, display
+                    display(Javascript(js_update), clear=False)
+                except:
+                    pass
+                    
+            except Exception as e:
+                from .matrix import MatrixLayout
+                if MatrixLayout._debug:
+                    print(f"⚠️ Error actualizando histograma: {e}")
+        
+        # Registrar callback
+        scatter_selection = self._scatter_selection_models[scatter_letter]
+        scatter_selection.on_change(update_histogram)
+        
+        # Crear histograma inicial con todos los datos
+        if HAS_PANDAS and isinstance(self._data, pd.DataFrame):
+            values = self._data[column].dropna().tolist()
+        else:
+            values = [item.get(column, 0) for item in self._data if column in item]
+        
+        if values:
+            try:
+                import numpy as np
+                hist, bin_edges = np.histogram(values, bins=bins)
+            except ImportError:
+                # Fallback: calcular bins manualmente si numpy no está disponible
+                min_val, max_val = min(values), max(values)
+                bin_width = (max_val - min_val) / bins if max_val > min_val else 1
+                hist = [0] * bins
+                bin_edges = [min_val + i * bin_width for i in range(bins + 1)]
+                
+                for val in values:
+                    bin_idx = min(int((val - min_val) / bin_width), bins - 1) if bin_width > 0 else 0
+                    hist[bin_idx] += 1
+            bin_centers = [(bin_edges[i] + bin_edges[i+1]) / 2 for i in range(len(bin_edges)-1)]
+            hist_data = [{'bin': center, 'count': count} for center, count in zip(bin_centers, hist)]
+            
+            MatrixLayout._map[letter] = {
+                'type': 'histogram',
+                'data': hist_data,
+                'column': column,
+                'bins': bins,
+                **kwargs
+            }
         
         return self
     
