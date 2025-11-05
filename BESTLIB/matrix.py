@@ -401,6 +401,7 @@ class MatrixLayout:
         MatrixLayout._instances[self.div_id] = weakref.ref(self)
         self._handlers = {}
         self._reactive_model = None  # Para modelo reactivo
+        self._merge_opt = None  # Merge explícito por instancia (True | False | [letras])
         
         # Asegurar que el comm esté registrado
         MatrixLayout._ensure_comm_target()
@@ -486,7 +487,12 @@ class MatrixLayout:
             "__safe_html__": bool(self._safe_html),
             "__div_id__": self.div_id
         }
-        mapping_js = json.dumps({**self._map, **meta})
+        # Si hay merge explícito por instancia, sobreescribir en el mapping
+        mapping_merged = {**self._map, **meta}
+        if self._merge_opt is not None:
+            mapping_merged["__merge__"] = self._merge_opt
+
+        mapping_js = json.dumps(_sanitize_for_json(mapping_merged))
 
         # Render HTML con contenedor + CSS + JS inline (compatible con Notebook clásico)
         html = f"""
@@ -532,7 +538,10 @@ class MatrixLayout:
             "__safe_html__": bool(self._safe_html),
             "__div_id__": self.div_id
         }
-        mapping_js = json.dumps({**self._map, **meta})
+        mapping_merged = {**self._map, **meta}
+        if self._merge_opt is not None:
+            mapping_merged["__merge__"] = self._merge_opt
+        mapping_js = json.dumps(_sanitize_for_json(mapping_merged))
 
         js = (
             js_code
@@ -579,7 +588,10 @@ class MatrixLayout:
                 "__safe_html__": bool(self._safe_html),
                 "__div_id__": self.div_id
             }
-            mapping_js = json.dumps({**self._map, **meta})
+            mapping_merged = {**self._map, **meta}
+            if self._merge_opt is not None:
+                mapping_merged["__merge__"] = self._merge_opt
+            mapping_js = json.dumps(_sanitize_for_json(mapping_merged))
             
             html_content = f"""
             <style>{css_code}</style>
@@ -621,3 +633,59 @@ class MatrixLayout:
             
         except Exception as e:
             print(f"❌ Error: {e}")
+
+    # ==========================
+    # API de Merge por Instancia
+    # ==========================
+    def merge(self, letters=True):
+        """Configura merge explícito para este layout.
+
+        Args:
+            letters: True para todas las letras, False para desactivar, o lista de letras ["A", "B"].
+        """
+        self._merge_opt = letters
+        return self
+
+    def merge_all(self):
+        """Activa merge para todas las letras (equivalente a merge(True))."""
+        self._merge_opt = True
+        return self
+
+    def merge_off(self):
+        """Desactiva merge (equivalente a merge(False))."""
+        self._merge_opt = False
+        return self
+
+    def merge_only(self, letters):
+        """Activa merge solo para las letras indicadas (equivalente a merge([...]))."""
+        self._merge_opt = list(letters) if letters is not None else []
+        return self
+
+
+# ==========================
+# Utilidades
+# ==========================
+def _sanitize_for_json(obj):
+    """Convierte recursivamente tipos numpy y no serializables a tipos JSON puros."""
+    try:
+        import numpy as _np  # opcional
+    except Exception:
+        _np = None
+
+    if obj is None:
+        return None
+    if isinstance(obj, (str, bool, int, float)):
+        return int(obj) if type(obj).__name__ in ("int64", "int32") else (float(obj) if type(obj).__name__ in ("float32", "float64") else obj)
+    if _np is not None:
+        if isinstance(obj, _np.integer):
+            return int(obj)
+        if isinstance(obj, _np.floating):
+            return float(obj)
+        if isinstance(obj, _np.ndarray):
+            return _sanitize_for_json(obj.tolist())
+    if isinstance(obj, dict):
+        return {str(k): _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_sanitize_for_json(v) for v in obj]
+    # Fallback a string para objetos desconocidos
+    return str(obj)

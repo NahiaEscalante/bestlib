@@ -423,7 +423,8 @@ class ReactiveMatrixLayout:
                 
                 # Crear JavaScript para actualizar el gráfico de forma más robusta
                 div_id = barchart_params['layout_div_id']
-                bar_data_json = json.dumps(bar_data)
+                # Sanitizar para evitar numpy.int64 en JSON
+                bar_data_json = json.dumps(_sanitize_for_json(bar_data))
                 color_map = barchart_params['kwargs'].get('colorMap', {})
                 color_map_json = json.dumps(color_map)
                 default_color = barchart_params['kwargs'].get('color', '#4a90e2')
@@ -742,7 +743,7 @@ class ReactiveMatrixLayout:
                 
                 # JavaScript para actualizar el gráfico (similar a bar chart)
                 div_id = hist_params['layout_div_id']
-                hist_data_json = json.dumps(hist_data)
+                hist_data_json = json.dumps(_sanitize_for_json(hist_data))
                 default_color = kwargs.get('color', '#4a90e2')
                 show_axes = kwargs.get('axes', True)
                 
@@ -1027,7 +1028,7 @@ class ReactiveMatrixLayout:
                 
                 # JavaScript para actualizar el gráfico
                 div_id = boxplot_params['layout_div_id']
-                box_data_json = json.dumps(box_data)
+                box_data_json = json.dumps(_sanitize_for_json(box_data))
                 default_color = kwargs.get('color', '#4a90e2')
                 show_axes = kwargs.get('axes', True)
                 
@@ -1310,6 +1311,54 @@ class ReactiveMatrixLayout:
         # Solo mostrar una vez - el bar chart se actualiza automáticamente vía JavaScript
         self._layout.display()
         return self
+
+    # ==========================
+    # Passthrough de Merge
+    # ==========================
+    def merge(self, letters=True):
+        """Configura merge explícito (delegado a MatrixLayout interno)."""
+        self._layout.merge(letters)
+        return self
+
+    def merge_all(self):
+        """Activa merge para todas las letras."""
+        self._layout.merge_all()
+        return self
+
+    def merge_off(self):
+        """Desactiva merge."""
+        self._layout.merge_off()
+        return self
+
+
+# ==========================
+# Utilidades compartidas
+# ==========================
+def _sanitize_for_json(obj):
+    """Convierte recursivamente tipos numpy y no serializables a tipos JSON puros.
+    (copia local para uso desde reactive.py)
+    """
+    try:
+        import numpy as _np  # opcional
+    except Exception:
+        _np = None
+
+    if obj is None:
+        return None
+    if isinstance(obj, (str, bool, int, float)):
+        return int(obj) if type(obj).__name__ in ("int64", "int32") else (float(obj) if type(obj).__name__ in ("float32", "float64") else obj)
+    if _np is not None:
+        if isinstance(obj, _np.integer):
+            return int(obj)
+        if isinstance(obj, _np.floating):
+            return float(obj)
+        if isinstance(obj, _np.ndarray):
+            return _sanitize_for_json(obj.tolist())
+    if isinstance(obj, dict):
+        return {str(k): _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_sanitize_for_json(v) for v in obj]
+    return str(obj)
     
     @property
     def selection_widget(self):

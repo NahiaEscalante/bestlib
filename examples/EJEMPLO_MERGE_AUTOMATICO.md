@@ -43,13 +43,14 @@ Para cada celda (r, c) en la matriz:
     celda.gridColumn = c+1 / span width
 ```
 
-## 📝 Ejemplo 1: Merge Automático Básico (Sin `__merge__`)
+## 📝 Ejemplo 1: Merge Explícito Básico
 
 ```python
 from BESTLIB.matrix import MatrixLayout
 
-# NO necesitas especificar __merge__ - el sistema detecta automáticamente
+# Activar MERGE explícito para A y B
 MatrixLayout.map({
+    "__merge__": ["A", "B"],
     "A": "<b style='color:blue'>Título Principal</b>",
     "B": "<b style='color:red'>ROJO</b>",
     "C": "<i>Control</i>"
@@ -64,7 +65,7 @@ BBB
 layout.display()
 ```
 
-**Resultado automático:**
+**Resultado:**
 - Las celdas `A` se fusionan automáticamente en un bloque 2x2
 - Las celdas `B` se fusionan automáticamente en un bloque 1x3
 - La celda `C` permanece individual
@@ -85,7 +86,7 @@ df = pd.DataFrame({
     'experiencia': np.random.randint(1, 20, 100)
 })
 
-# Layout con merge automático
+# Layout con merge explícito
 # SS = Scatter plot grande (2x2)
 # BB = Bar chart ancho (1x2)
 # HH = Histogram ancho (1x2)
@@ -94,7 +95,8 @@ SSBB
 SSHH
 """)
 
-# NO necesitas especificar __merge__ - funciona automáticamente!
+# Activar MERGE explícito para S, B y H
+layout._layout.merge(["S", "B", "H"])  # o MatrixLayout.map({"__merge__": ["S","B","H"]})
 
 # Scatter plot (se fusionará automáticamente en 2x2)
 layout.add_scatter(
@@ -127,7 +129,7 @@ layout.add_histogram(
 layout.display()
 ```
 
-## 📝 Ejemplo 3: Control Manual del Merge (Opcional)
+## 📝 Ejemplo 3: Control del Merge (Explícito)
 
 Si necesitas **desactivar** el merge automático o controlarlo manualmente:
 
@@ -148,7 +150,7 @@ MatrixLayout.map({
     "B": "Individual"
 })
 
-# Opción 3: Merge explícito para todas (igual que automático)
+# Opción 3: Merge explícito para todas
 MatrixLayout.map({
     "__merge__": True,  # Fusiona todas explícitamente
     "A": "Contenido A",
@@ -174,7 +176,7 @@ df = pd.DataFrame({
     'satisfaccion': np.random.uniform(1, 10, n)
 })
 
-# Layout complejo con múltiples regiones fusionadas
+# Layout complejo con múltiples regiones fusionadas (merge explícito)
 # S = Scatter plot grande (3x2)
 # B = Bar chart (1x2)
 # H = Histogram (1x2)
@@ -186,6 +188,7 @@ SSHH
 SSPP
 TTPP
 """)
+layout._layout.merge(["S","B","H","P","T"])  # Activar merge
 
 # Scatter plot principal (3x2 fusionado automáticamente)
 layout.add_scatter(

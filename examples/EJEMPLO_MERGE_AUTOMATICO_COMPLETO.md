@@ -1,8 +1,8 @@
-# 🎯 Ejemplo Completo: Merge Automático con Scatter, Bar y Heatmap
+# 🎯 Ejemplo Completo: Merge Explícito con Scatter, Bar y Heatmap
 
 Este ejemplo demuestra el sistema de **merge automático** funcionando con diferentes tipos de gráficos, incluyendo un ejemplo de heatmap.
 
-## 📝 Ejemplo Completo: Dashboard con 3 Gráficos
+## 📝 Ejemplo Completo: Dashboard con 3 Gráficos (merge explícito)
 
 ```python
 # ============================================
@@ -45,8 +45,12 @@ SSBB
 SSHH
 """)
 
+# Activar MERGE explícito para S, B y H (por defecto está desactivado)
+from BESTLIB.matrix import MatrixLayout
+layout._layout.merge(["S", "B", "H"])  # o MatrixLayout.map({"__merge__": ["S","B","H"]})
+
 # ============================================
-# CELDA 4: Agregar gráficos (NO necesitas __merge__)
+# CELDA 4: Agregar gráficos (merge activado manualmente arriba)
 # ============================================
 
 # 1. Scatter Plot Principal (se fusiona automáticamente en 2x2)
