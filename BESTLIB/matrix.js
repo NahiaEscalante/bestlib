@@ -389,8 +389,36 @@
         .attr('transform', `translate(0,${chartHeight})`)
         .call(d3.axisBottom(x));
       xAxis.selectAll('text').style('font-size', '10px').style('fill', '#000');
+      
+      // Agregar etiqueta del eje X
+      if (spec.xLabel) {
+        g.append('text')
+          .attr('x', chartWidth / 2)
+          .attr('y', chartHeight + 50)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '13px')
+          .style('font-weight', '700')
+          .style('fill', '#000000')
+          .style('font-family', 'Arial, sans-serif')
+          .text(spec.xLabel);
+      }
+      
       const yAxis = g.append('g').call(d3.axisLeft(y));
       yAxis.selectAll('text').style('font-size', '10px').style('fill', '#000');
+      
+      // Agregar etiqueta del eje Y
+      if (spec.yLabel) {
+        g.append('text')
+          .attr('transform', 'rotate(-90)')
+          .attr('x', -chartHeight / 2)
+          .attr('y', -55)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '13px')
+          .style('font-weight', '700')
+          .style('fill', '#000000')
+          .style('font-family', 'Arial, sans-serif')
+          .text(spec.yLabel);
+      }
     }
   }
 
@@ -452,8 +480,58 @@
     });
 
     if (spec.axes !== false) {
-      g.append('g').attr('transform', `translate(0,${chartHeight})`).call(d3.axisBottom(x));
-      g.append('g').call(d3.axisLeft(y));
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x));
+      
+      xAxis.selectAll('text')
+        .style('font-size', '12px')
+        .style('font-weight', '600')
+        .style('fill', '#000000')
+        .style('font-family', 'Arial, sans-serif');
+      
+      xAxis.selectAll('line, path')
+        .style('stroke', '#000000')
+        .style('stroke-width', '1.5px');
+      
+      // Agregar etiqueta del eje X
+      if (spec.xLabel) {
+        g.append('text')
+          .attr('x', chartWidth / 2)
+          .attr('y', chartHeight + 35)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '13px')
+          .style('font-weight', '700')
+          .style('fill', '#000000')
+          .style('font-family', 'Arial, sans-serif')
+          .text(spec.xLabel);
+      }
+      
+      const yAxis = g.append('g').call(d3.axisLeft(y));
+      
+      yAxis.selectAll('text')
+        .style('font-size', '12px')
+        .style('font-weight', '600')
+        .style('fill', '#000000')
+        .style('font-family', 'Arial, sans-serif');
+      
+      yAxis.selectAll('line, path')
+        .style('stroke', '#000000')
+        .style('stroke-width', '1.5px');
+      
+      // Agregar etiqueta del eje Y
+      if (spec.yLabel) {
+        g.append('text')
+          .attr('transform', 'rotate(-90)')
+          .attr('x', -chartHeight / 2)
+          .attr('y', -40)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '13px')
+          .style('font-weight', '700')
+          .style('fill', '#000000')
+          .style('font-family', 'Arial, sans-serif')
+          .text(spec.yLabel);
+      }
     }
   }
 
@@ -679,6 +757,19 @@
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
       
+      // Agregar etiqueta del eje X
+      if (spec.xLabel) {
+        g.append('text')
+          .attr('x', chartWidth / 2)
+          .attr('y', chartHeight + 35)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '13px')
+          .style('font-weight', '700')
+          .style('fill', '#000000')
+          .style('font-family', 'Arial, sans-serif')
+          .text(spec.xLabel);
+      }
+      
       const yAxis = g.append('g')
         .call(d3.axisLeft(y));
       
@@ -691,6 +782,20 @@
       yAxis.selectAll('line, path')
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
+      
+      // Agregar etiqueta del eje Y
+      if (spec.yLabel) {
+        g.append('text')
+          .attr('transform', 'rotate(-90)')
+          .attr('x', -chartHeight / 2)
+          .attr('y', -40)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '13px')
+          .style('font-weight', '700')
+          .style('fill', '#000000')
+          .style('font-family', 'Arial, sans-serif')
+          .text(spec.yLabel);
+      }
     }
   }
   
@@ -759,6 +864,19 @@
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
       
+      // Agregar etiqueta del eje X
+      if (spec.xLabel) {
+        g.append('text')
+          .attr('x', chartWidth / 2)
+          .attr('y', chartHeight + 35)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '13px')
+          .style('font-weight', '700')
+          .style('fill', '#000000')
+          .style('font-family', 'Arial, sans-serif')
+          .text(spec.xLabel);
+      }
+      
       const yAxis = g.append('g')
         .call(d3.axisLeft(y).ticks(5));
       
@@ -771,6 +889,20 @@
       yAxis.selectAll('line, path')
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
+      
+      // Agregar etiqueta del eje Y
+      if (spec.yLabel) {
+        g.append('text')
+          .attr('transform', 'rotate(-90)')
+          .attr('x', -chartHeight / 2)
+          .attr('y', -40)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '13px')
+          .style('font-weight', '700')
+          .style('fill', '#000000')
+          .style('font-family', 'Arial, sans-serif')
+          .text(spec.yLabel);
+      }
     }
   }
   
@@ -909,6 +1041,19 @@
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
       
+      // Agregar etiqueta del eje X
+      if (spec.xLabel) {
+        g.append('text')
+          .attr('x', chartWidth / 2)
+          .attr('y', chartHeight + 35)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '13px')
+          .style('font-weight', '700')
+          .style('fill', '#000000')
+          .style('font-family', 'Arial, sans-serif')
+          .text(spec.xLabel);
+      }
+      
       const yAxis = g.append('g')
         .call(d3.axisLeft(y).ticks(5));
       
@@ -921,6 +1066,20 @@
       yAxis.selectAll('line, path')
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
+      
+      // Agregar etiqueta del eje Y
+      if (spec.yLabel) {
+        g.append('text')
+          .attr('transform', 'rotate(-90)')
+          .attr('x', -chartHeight / 2)
+          .attr('y', -40)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '13px')
+          .style('font-weight', '700')
+          .style('fill', '#000000')
+          .style('font-family', 'Arial, sans-serif')
+          .text(spec.yLabel);
+      }
     }
   }
   
@@ -1037,6 +1196,19 @@
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
       
+      // Agregar etiqueta del eje X
+      if (spec.xLabel) {
+        g.append('text')
+          .attr('x', chartWidth / 2)
+          .attr('y', chartHeight + 35)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '13px')
+          .style('font-weight', '700')
+          .style('fill', '#000000')
+          .style('font-family', 'Arial, sans-serif')
+          .text(spec.xLabel);
+      }
+      
       const yAxis = g.append('g')
         .call(d3.axisLeft(y).ticks(6));
       
@@ -1049,6 +1221,20 @@
       yAxis.selectAll('line, path')
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
+      
+      // Agregar etiqueta del eje Y
+      if (spec.yLabel) {
+        g.append('text')
+          .attr('transform', 'rotate(-90)')
+          .attr('x', -chartHeight / 2)
+          .attr('y', -40)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '13px')
+          .style('font-weight', '700')
+          .style('fill', '#000000')
+          .style('font-family', 'Arial, sans-serif')
+          .text(spec.yLabel);
+      }
     }
     
     // BRUSH para selección de área (MEJORADO)
