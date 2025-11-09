@@ -306,6 +306,12 @@ class MatrixLayout:
                         if color_col and color_col in item:
                             processed_data[idx]['color'] = item.get(color_col)
         
+        # Agregar etiquetas de ejes automáticamente si no están en kwargs
+        if 'xLabel' not in kwargs and x_col:
+            kwargs['xLabel'] = x_col
+        if 'yLabel' not in kwargs and y_col:
+            kwargs['yLabel'] = y_col
+        
         spec = {
             'type': 'scatter',
             'data': processed_data,
@@ -376,6 +382,12 @@ class MatrixLayout:
             for bar_item in bar_data:
                 matching_rows = [row for row in original_data if row.get(category_col or 'category') == bar_item['category']]
                 bar_item['_original_rows'] = matching_rows
+        
+        # Agregar etiquetas de ejes automáticamente si no están en kwargs
+        if 'xLabel' not in kwargs and category_col:
+            kwargs['xLabel'] = category_col
+        if 'yLabel' not in kwargs:
+            kwargs['yLabel'] = value_col if value_col else 'Count'
         
         spec = {
             'type': 'bar',
@@ -522,6 +534,13 @@ class MatrixLayout:
                 }
                 for i in range(len(counts))
             ]
+        
+        # Agregar etiquetas de ejes automáticamente si no están en kwargs
+        if 'xLabel' not in kwargs and value_col:
+            kwargs['xLabel'] = value_col
+        if 'yLabel' not in kwargs:
+            kwargs['yLabel'] = 'Frequency'
+        
         spec = {
             'type': 'histogram',
             'data': hist_data,
@@ -603,6 +622,13 @@ class MatrixLayout:
                 summary = five_num_summary([item.get(val_key) for item in data])
                 if summary:
                     box_data.append({'category': 'All', **summary})
+        
+        # Agregar etiquetas de ejes automáticamente si no están en kwargs
+        if 'xLabel' not in kwargs and category_col:
+            kwargs['xLabel'] = category_col
+        if 'yLabel' not in kwargs and value_col:
+            kwargs['yLabel'] = value_col
+        
         spec = {
             'type': 'boxplot',
             'data': box_data,
@@ -643,6 +669,13 @@ class MatrixLayout:
                     y_labels.append(str(item[y_col]))
             x_labels = sorted(list(set(x_labels)))
             y_labels = sorted(list(set(y_labels)))
+        
+        # Agregar etiquetas de ejes automáticamente si no están en kwargs
+        if 'xLabel' not in kwargs and x_col:
+            kwargs['xLabel'] = x_col
+        if 'yLabel' not in kwargs and y_col:
+            kwargs['yLabel'] = y_col
+        
         spec = {
             'type': 'heatmap',
             'data': cells,
@@ -718,6 +751,13 @@ class MatrixLayout:
             else:
                 pts = sorted([{'x': float(i[x_col]), 'y': float(i[y_col])} for i in items], key=lambda p: p['x'])
                 payload = {'series': { 'default': pts }}
+        
+        # Agregar etiquetas de ejes automáticamente si no están en kwargs
+        if 'xLabel' not in kwargs and x_col:
+            kwargs['xLabel'] = x_col
+        if 'yLabel' not in kwargs and y_col:
+            kwargs['yLabel'] = y_col
+        
         spec = { 'type': 'line', **payload, **kwargs }
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
