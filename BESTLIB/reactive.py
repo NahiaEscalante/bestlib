@@ -1439,6 +1439,70 @@ class ReactiveMatrixLayout:
         sel.on_change(update)
         return self
     
+def add_confusion_matrix(self, letter, y_true_col=None, y_pred_col=None, linked_to=None, normalize=True, **kwargs):
+    """
+    Agrega una matriz de confusión enlazada que se actualiza automáticamente 
+    cuando cambia la selección en un scatter plot.
+
+    Args:
+        letter: Letra del layout ASCII donde irá la matriz.
+        y_true_col: Columna con las etiquetas reales.
+        y_pred_col: Columna con las etiquetas predichas.
+        linked_to: Letra del scatter plot que controla este gráfico.
+        normalize: Si True, muestra proporciones en lugar de conteos.
+        **kwargs: Parámetros adicionales para MatrixLayout.map_confusion_matrix().
+
+    Requiere que los datos provengan de un DataFrame de pandas.
+    """
+    from .matrix import MatrixLayout
+    if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
+        raise ValueError("add_confusion_matrix requiere un DataFrame de pandas")
+    if y_true_col is None or y_pred_col is None:
+        raise ValueError("Debes especificar y_true_col y y_pred_col")
+
+    try:
+        from sklearn.metrics import confusion_matrix
+    except ImportError:
+        raise ImportError("scikit-learn es necesario para add_confusion_matrix")
+
+    # Función auxiliar para graficar
+    def render_confusion(df):
+        y_true = df[y_true_col]
+        y_pred = df[y_pred_col]
+        labels = sorted(list(set(y_true) | set(y_pred)))
+        cm = confusion_matrix(y_true, y_pred, labels=labels, normalize='true' if normalize else None)
+        cm_df = pd.DataFrame(cm, index=labels, columns=labels)
+        MatrixLayout.map_heatmap(
+            letter, cm_df.reset_index().melt(id_vars='index', var_name='Pred', value_name='Value'),
+            x_col='Pred', y_col='index', value_col='Value',
+            colorMap=kwargs.get('colorMap', 'Blues'),
+            **kwargs
+        )
+
+    # Render inicial
+    render_confusion(self._data)
+
+    # Enlace a scatter seleccionado
+    if not self._scatter_selection_models:
+        return self
+    scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
+    sel = self._scatter_selection_models[scatter_letter]
+
+    def update(items, count):
+        if not items:
+            render_confusion(self._data)
+            return
+        df_sel = pd.DataFrame(items) if isinstance(items[0], dict) else self._data
+        try:
+            render_confusion(df_sel)
+        except Exception:
+            pass
+
+    sel.on_change(update)
+    return self
+
+
+    
     def display(self, ascii_layout=None):
         """
         Muestra el layout.
