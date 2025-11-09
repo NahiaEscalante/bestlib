@@ -1,4 +1,4 @@
-﻿"""
+"""
 Sistema de Variables Reactivas para BESTLIB
 Permite que los datos se actualicen automáticamente sin re-ejecutar celdas
 """
@@ -1439,67 +1439,67 @@ class ReactiveMatrixLayout:
         sel.on_change(update)
         return self
     
-def add_confusion_matrix(self, letter, y_true_col=None, y_pred_col=None, linked_to=None, normalize=True, **kwargs):
-    """
-    Agrega una matriz de confusión enlazada que se actualiza automáticamente 
-    cuando cambia la selección en un scatter plot.
+    def add_confusion_matrix(self, letter, y_true_col=None, y_pred_col=None, linked_to=None, normalize=True, **kwargs):
+        """
+        Agrega una matriz de confusión enlazada que se actualiza automáticamente 
+        cuando cambia la selección en un scatter plot.
 
-    Args:
-        letter: Letra del layout ASCII donde irá la matriz.
-        y_true_col: Columna con las etiquetas reales.
-        y_pred_col: Columna con las etiquetas predichas.
-        linked_to: Letra del scatter plot que controla este gráfico.
-        normalize: Si True, muestra proporciones en lugar de conteos.
-        **kwargs: Parámetros adicionales para MatrixLayout.map_confusion_matrix().
+        Args:
+            letter: Letra del layout ASCII donde irá la matriz.
+            y_true_col: Columna con las etiquetas reales.
+            y_pred_col: Columna con las etiquetas predichas.
+            linked_to: Letra del scatter plot que controla este gráfico.
+            normalize: Si True, muestra proporciones en lugar de conteos.
+            **kwargs: Parámetros adicionales para MatrixLayout.map_confusion_matrix().
 
-    Requiere que los datos provengan de un DataFrame de pandas.
-    """
-    from .matrix import MatrixLayout
-    if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
-        raise ValueError("add_confusion_matrix requiere un DataFrame de pandas")
-    if y_true_col is None or y_pred_col is None:
-        raise ValueError("Debes especificar y_true_col y y_pred_col")
+        Requiere que los datos provengan de un DataFrame de pandas.
+        """
+        from .matrix import MatrixLayout
+        if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
+            raise ValueError("add_confusion_matrix requiere un DataFrame de pandas")
+        if y_true_col is None or y_pred_col is None:
+            raise ValueError("Debes especificar y_true_col y y_pred_col")
 
-    try:
-        from sklearn.metrics import confusion_matrix
-    except ImportError:
-        raise ImportError("scikit-learn es necesario para add_confusion_matrix")
-
-    # Función auxiliar para graficar
-    def render_confusion(df):
-        y_true = df[y_true_col]
-        y_pred = df[y_pred_col]
-        labels = sorted(list(set(y_true) | set(y_pred)))
-        cm = confusion_matrix(y_true, y_pred, labels=labels, normalize='true' if normalize else None)
-        cm_df = pd.DataFrame(cm, index=labels, columns=labels)
-        MatrixLayout.map_heatmap(
-            letter, cm_df.reset_index().melt(id_vars='index', var_name='Pred', value_name='Value'),
-            x_col='Pred', y_col='index', value_col='Value',
-            colorMap=kwargs.get('colorMap', 'Blues'),
-            **kwargs
-        )
-
-    # Render inicial
-    render_confusion(self._data)
-
-    # Enlace a scatter seleccionado
-    if not self._scatter_selection_models:
-        return self
-    scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
-    sel = self._scatter_selection_models[scatter_letter]
-
-    def update(items, count):
-        if not items:
-            render_confusion(self._data)
-            return
-        df_sel = pd.DataFrame(items) if isinstance(items[0], dict) else self._data
         try:
-            render_confusion(df_sel)
-        except Exception:
-            pass
+            from sklearn.metrics import confusion_matrix
+        except ImportError:
+            raise ImportError("scikit-learn es necesario para add_confusion_matrix")
 
-    sel.on_change(update)
-    return self
+        # Función auxiliar para graficar
+        def render_confusion(df):
+            y_true = df[y_true_col]
+            y_pred = df[y_pred_col]
+            labels = sorted(list(set(y_true) | set(y_pred)))
+            cm = confusion_matrix(y_true, y_pred, labels=labels, normalize='true' if normalize else None)
+            cm_df = pd.DataFrame(cm, index=labels, columns=labels)
+            MatrixLayout.map_heatmap(
+                letter, cm_df.reset_index().melt(id_vars='index', var_name='Pred', value_name='Value'),
+                x_col='Pred', y_col='index', value_col='Value',
+                colorMap=kwargs.get('colorMap', 'Blues'),
+                **kwargs
+            )
+
+        # Render inicial
+        render_confusion(self._data)
+
+        # Enlace a scatter seleccionado
+        if not self._scatter_selection_models:
+            return self
+        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
+        sel = self._scatter_selection_models[scatter_letter]
+
+        def update(items, count):
+            if not items:
+                render_confusion(self._data)
+                return
+            df_sel = pd.DataFrame(items) if isinstance(items[0], dict) else self._data
+            try:
+                render_confusion(df_sel)
+            except Exception:
+                pass
+
+        sel.on_change(update)
+        return self
 
 
     
@@ -1542,36 +1542,6 @@ def add_confusion_matrix(self, letter, y_true_col=None, y_pred_col=None, linked_
         """Activa merge solo para las letras indicadas."""
         self._layout.merge_only(letters)
         return self
-
-
-# ==========================
-# Utilidades compartidas
-# ==========================
-def _sanitize_for_json(obj):
-    """Convierte recursivamente tipos numpy y no serializables a tipos JSON puros.
-    (copia local para uso desde reactive.py)
-    """
-    try:
-        import numpy as _np  # opcional
-    except Exception:
-        _np = None
-
-    if obj is None:
-        return None
-    if isinstance(obj, (str, bool, int, float)):
-        return int(obj) if type(obj).__name__ in ("int64", "int32") else (float(obj) if type(obj).__name__ in ("float32", "float64") else obj)
-    if _np is not None:
-        if isinstance(obj, _np.integer):
-            return int(obj)
-        if isinstance(obj, _np.floating):
-            return float(obj)
-        if isinstance(obj, _np.ndarray):
-            return _sanitize_for_json(obj.tolist())
-    if isinstance(obj, dict):
-        return {str(k): _sanitize_for_json(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple, set)):
-        return [_sanitize_for_json(v) for v in obj]
-    return str(obj)
     
     @property
     def selection_widget(self):
@@ -1581,8 +1551,13 @@ def _sanitize_for_json(obj):
         Uso:
             display(layout.selection_widget)
         """
+        if not HAS_WIDGETS:
+            print("⚠️ ipywidgets no está instalado")
+            return None
+            
         if not hasattr(self.selection_model, '_widget'):
             # Crear widget visual
+            import ipywidgets as widgets
             self.selection_model._widget = widgets.VBox([
                 widgets.HTML('<h4>📊 Datos Seleccionados</h4>'),
                 widgets.Label(value='Esperando selección...'),
@@ -1625,5 +1600,35 @@ def _sanitize_for_json(obj):
     def count(self):
         """Retorna el número de items seleccionados"""
         return self.selection_model.get_count()
+
+
+# ==========================
+# Utilidades compartidas
+# ==========================
+def _sanitize_for_json(obj):
+    """Convierte recursivamente tipos numpy y no serializables a tipos JSON puros.
+    (copia local para uso desde reactive.py)
+    """
+    try:
+        import numpy as _np  # opcional
+    except Exception:
+        _np = None
+
+    if obj is None:
+        return None
+    if isinstance(obj, (str, bool, int, float)):
+        return int(obj) if type(obj).__name__ in ("int64", "int32") else (float(obj) if type(obj).__name__ in ("float32", "float64") else obj)
+    if _np is not None:
+        if isinstance(obj, _np.integer):
+            return int(obj)
+        if isinstance(obj, _np.floating):
+            return float(obj)
+        if isinstance(obj, _np.ndarray):
+            return _sanitize_for_json(obj.tolist())
+    if isinstance(obj, dict):
+        return {str(k): _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_sanitize_for_json(v) for v in obj]
+    return str(obj)
 
 
