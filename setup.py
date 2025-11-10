@@ -10,11 +10,8 @@ setup(
     package_data={
         "BESTLIB": ["*.js", "*.css"],
     },
-    install_requires=[
-        "ipython>=8",
-        "jupyterlab>=4",
-        "ipywidgets>=8",
-        "pandas>=1.3.0",
-        "numpy>=1.20.0",
-    ],
+    # No instalamos dependencias automáticamente para evitar conflictos
+    # El código maneja las importaciones de forma opcional (try/except)
+    # Los usuarios deben instalar las dependencias manualmente según su entorno
+    install_requires=[],
 )
