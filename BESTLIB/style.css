@@ -1,18 +1,33 @@
+:root {
+  /* Variables CSS para personalización */
+  --matrix-gap: 12px;
+  --matrix-max-width: 1200px;
+  --matrix-cell-padding: 15px;
+  --matrix-cell-min-height: 350px;
+  --matrix-cell-border-radius: 6px;
+  --matrix-cell-border-color: #ddd;
+  --matrix-cell-background: white;
+  --matrix-cell-inner-background: #f8f9fa;
+  --matrix-cell-inner-border-color: #bbb;
+  --matrix-font-family: sans-serif;
+  --matrix-font-size: 14px;
+}
+
 .matrix-layout {
   display: grid;
-  gap: 12px;
+  gap: var(--matrix-gap);
   width: 100%;
-  max-width: 1200px;
+  max-width: var(--matrix-max-width);
   margin: 0 auto;
 }
 
 .matrix-layout > div {
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  padding: 15px;
+  background: var(--matrix-cell-background);
+  border: 1px solid var(--matrix-cell-border-color);
+  border-radius: var(--matrix-cell-border-radius);
+  padding: var(--matrix-cell-padding);
   overflow: visible;  /* Cambiado de hidden a visible para evitar cortes */
-  min-height: 350px;  /* Aumentado para acomodar gráficos completos con ejes */
+  min-height: var(--matrix-cell-min-height);
   max-height: none;  /* Removido límite máximo para evitar cortes */
   display: flex;
   align-items: flex-start;  /* Cambiado de center a flex-start para evitar recorte vertical */
@@ -20,16 +35,37 @@
 }
 
 .matrix-cell {
-  border: 1px solid #bbb;
-  background: #f8f9fa;
+  border: 1px solid var(--matrix-cell-inner-border-color);
+  background: var(--matrix-cell-inner-background);
   display: flex;
   justify-content: center;
   align-items: flex-start;  /* Cambiado de center a flex-start para evitar recorte vertical */
-  font-family: sans-serif;
-  font-size: 14px;
-  border-radius: 6px;
+  font-family: var(--matrix-font-family);
+  font-size: var(--matrix-font-size);
+  border-radius: var(--matrix-cell-border-radius);
   overflow: visible;  /* Asegurar que el contenido no se corte */
   min-height: 320px;  /* Aumentado para acomodar gráficos completos con ejes */
   width: 100%;  /* Asegurar que ocupe todo el ancho disponible */
   height: 100%;  /* Asegurar que ocupe toda la altura disponible */
+}
+
+/* Media queries para responsividad */
+@media (max-width: 768px) {
+  :root {
+    --matrix-gap: 8px;
+    --matrix-cell-padding: 10px;
+    --matrix-cell-min-height: 300px;
+  }
+  
+  .matrix-layout {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --matrix-gap: 6px;
+    --matrix-cell-padding: 8px;
+    --matrix-cell-min-height: 250px;
+  }
 }

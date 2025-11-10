@@ -8,54 +8,114 @@
    * Obtiene o crea un comm de Jupyter para comunicación con Python
    * Compatible con Jupyter Notebook clásico y Google Colab
    * @param {string} divId - ID del contenedor matrix
-   * @returns {object|null} Comm de Jupyter o null si no está disponible
+   * @param {number} maxRetries - Número máximo de intentos (por defecto 3)
+   * @returns {object|Promise|null} Comm de Jupyter, Promise, o null si no está disponible
    */
-  function getComm(divId) {
+  function getComm(divId, maxRetries = 3) {
     // Cache global de comms por div_id
     if (!global._bestlibComms) {
       global._bestlibComms = {};
     }
     
+    // Si ya existe un comm en cache, retornarlo
     if (global._bestlibComms[divId]) {
-      return global._bestlibComms[divId];
+      const cachedComm = global._bestlibComms[divId];
+      // Si es una promesa, verificar si ya se resolvió
+      if (cachedComm instanceof Promise) {
+        return cachedComm;
+      }
+      // Si es un comm válido, retornarlo
+      if (cachedComm && typeof cachedComm.send === 'function') {
+        return cachedComm;
+      }
+      // Si el comm es inválido, limpiarlo y crear uno nuevo
+      delete global._bestlibComms[divId];
     }
     
-    try {
-      // Intentar primero con Jupyter clásico
-      const J = global.Jupyter;
-      if (J && J.notebook && J.notebook.kernel) {
-        const comm = J.notebook.kernel.comm_manager.new_comm("bestlib_matrix", { div_id: divId });
-        global._bestlibComms[divId] = comm;
-        return comm;
-      }
-      
-      // Si no funciona, intentar con Google Colab (retorna Promise)
-      if (global.google && global.google.colab && global.google.colab.kernel) {
-        const commPromise = global.google.colab.kernel.comms.open("bestlib_matrix", { div_id: divId });
+    // Función interna para crear comm con retry
+    function createComm(attempt = 1) {
+      try {
+        // Intentar primero con Jupyter clásico
+        const J = global.Jupyter;
+        if (J && J.notebook && J.notebook.kernel) {
+          try {
+            const comm = J.notebook.kernel.comm_manager.new_comm("bestlib_matrix", { div_id: divId });
+            global._bestlibComms[divId] = comm;
+            return comm;
+          } catch (e) {
+            if (attempt < maxRetries) {
+              console.warn(`Intento ${attempt} fallido para crear comm, reintentando...`);
+              setTimeout(() => createComm(attempt + 1), 100 * attempt);
+              return null;
+            }
+            throw e;
+          }
+        }
         
-        // Guardar la promesa y resolverla
-        commPromise.then(comm => {
-          global._bestlibComms[divId] = comm;
-        }).catch(err => {
-          console.error('Error al crear comm:', err);
-        });
+        // Si no funciona, intentar con Google Colab (retorna Promise)
+        if (global.google && global.google.colab && global.google.colab.kernel) {
+          const commPromise = global.google.colab.kernel.comms.open("bestlib_matrix", { div_id: divId });
+          
+          // Guardar la promesa en cache
+          global._bestlibComms[divId] = commPromise;
+          
+          // Manejar errores de la promesa
+          commPromise.then(comm => {
+            global._bestlibComms[divId] = comm;
+          }).catch(err => {
+            console.error('Error al crear comm en Colab:', err);
+            // Limpiar cache en caso de error
+            delete global._bestlibComms[divId];
+            // Mostrar mensaje visual en el contenedor si existe
+            const container = document.getElementById(divId);
+            if (container) {
+              const errorDiv = document.createElement('div');
+              errorDiv.style.cssText = 'color: red; padding: 10px; border: 1px solid red; background: #ffeeee;';
+              errorDiv.textContent = 'Error al establecer comunicación con Python. Algunas funciones interactivas pueden no funcionar.';
+              container.appendChild(errorDiv);
+            }
+          });
+          
+          return commPromise;
+        }
         
-        return commPromise;
+        // Último intento: buscar kernel en window
+        if (global.IPython && global.IPython.notebook && global.IPython.notebook.kernel) {
+          try {
+            const comm = global.IPython.notebook.kernel.comm_manager.new_comm("bestlib_matrix", { div_id: divId });
+            global._bestlibComms[divId] = comm;
+            return comm;
+          } catch (e) {
+            if (attempt < maxRetries) {
+              console.warn(`Intento ${attempt} fallido para crear comm, reintentando...`);
+              setTimeout(() => createComm(attempt + 1), 100 * attempt);
+              return null;
+            }
+            throw e;
+          }
+        }
+        
+        return null;
+        
+      } catch (e) {
+        console.error('Error al crear comm (intento ' + attempt + '):', e);
+        if (attempt < maxRetries) {
+          setTimeout(() => createComm(attempt + 1), 100 * attempt);
+          return null;
+        }
+        // Mostrar mensaje visual en el contenedor si existe
+        const container = document.getElementById(divId);
+        if (container) {
+          const errorDiv = document.createElement('div');
+          errorDiv.style.cssText = 'color: red; padding: 10px; border: 1px solid red; background: #ffeeee;';
+          errorDiv.textContent = 'No se pudo establecer comunicación con Python después de ' + maxRetries + ' intentos.';
+          container.appendChild(errorDiv);
+        }
+        return null;
       }
-      
-      // Último intento: buscar kernel en window
-      if (global.IPython && global.IPython.notebook && global.IPython.notebook.kernel) {
-        const comm = global.IPython.notebook.kernel.comm_manager.new_comm("bestlib_matrix", { div_id: divId });
-        global._bestlibComms[divId] = comm;
-        return comm;
-      }
-      
-      return null;
-      
-    } catch (e) {
-      console.error('Error al crear comm:', e);
-      return null;
     }
+    
+    return createComm();
   }
   
   /**
@@ -64,36 +124,84 @@
    * @param {string} divId - ID del contenedor matrix
    * @param {string} type - Tipo de evento (ej: 'select', 'click', 'brush')
    * @param {object} payload - Datos del evento
+   * @param {number} maxRetries - Número máximo de intentos (por defecto 3)
    */
-  async function sendEvent(divId, type, payload) {
-    try {
-      const commOrPromise = getComm(divId);
-      
-      if (!commOrPromise) {
-        return;
+  async function sendEvent(divId, type, payload, maxRetries = 3) {
+    let attempts = 0;
+    
+    while (attempts < maxRetries) {
+      try {
+        attempts++;
+        const commOrPromise = getComm(divId, maxRetries);
+        
+        if (!commOrPromise) {
+          if (attempts >= maxRetries) {
+            console.warn('No se pudo obtener comm después de ' + maxRetries + ' intentos. Evento no enviado:', type);
+          }
+          return;
+        }
+        
+        // Si es una promesa (Colab), esperar a que se resuelva con timeout
+        let comm;
+        if (commOrPromise instanceof Promise) {
+          try {
+            comm = await Promise.race([
+              commOrPromise,
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+            ]);
+          } catch (e) {
+            if (e.message === 'Timeout') {
+              console.warn('Timeout esperando comm (intento ' + attempts + ')');
+              if (attempts < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 100 * attempts));
+                continue;
+              }
+              return;
+            }
+            throw e;
+          }
+        } else {
+          comm = commOrPromise;
+        }
+        
+        if (!comm) {
+          if (attempts < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 100 * attempts));
+            continue;
+          }
+          return;
+        }
+        
+        const message = { 
+          type: type, 
+          div_id: divId, 
+          payload: payload 
+        };
+        
+        // Enviar datos
+        if (typeof comm.send === 'function') {
+          comm.send(message);
+          return; // Éxito, salir
+        } else {
+          console.warn('Comm no tiene método send (intento ' + attempts + ')');
+          if (attempts < maxRetries) {
+            // Limpiar comm inválido y reintentar
+            if (global._bestlibComms && global._bestlibComms[divId]) {
+              delete global._bestlibComms[divId];
+            }
+            await new Promise(resolve => setTimeout(resolve, 100 * attempts));
+            continue;
+          }
+        }
+      } catch (e) {
+        console.error('Error al enviar datos (intento ' + attempts + '):', e);
+        if (attempts < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 100 * attempts));
+          continue;
+        }
+        // Si falla después de todos los intentos, mostrar error pero no lanzar excepción
+        console.error('No se pudo enviar evento después de ' + maxRetries + ' intentos:', type, e);
       }
-      
-      // Si es una promesa (Colab), esperar a que se resuelva
-      const comm = (commOrPromise instanceof Promise) 
-        ? await commOrPromise 
-        : commOrPromise;
-      
-      if (!comm) {
-        return;
-      }
-      
-      const message = { 
-        type: type, 
-        div_id: divId, 
-        payload: payload 
-      };
-      
-      // Enviar datos
-      if (typeof comm.send === 'function') {
-        comm.send(message);
-      }
-    } catch (e) {
-      console.error('Error al enviar datos:', e);
     }
   }
   
@@ -110,11 +218,47 @@
     const C = rows[0].length;
     
     container.style.display = "grid";
-    container.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
-    // Aumentar altura de filas para evitar recorte - altura mínima para gráficos completos
-    // Considerando: padding (30px) + gráfico (320px) + espacio para ejes (20px extra)
-    container.style.gridTemplateRows = `repeat(${R}, minmax(350px, auto))`;
-    container.style.gap = "12px";  // Aumentar gap para mejor separación
+    
+    // Configuración dinámica de columnas
+    if (mapping.__col_widths__ && Array.isArray(mapping.__col_widths__) && mapping.__col_widths__.length === C) {
+      // Convertir ratios a fr si es necesario
+      const colWidths = mapping.__col_widths__.map(w => {
+        if (typeof w === 'number') {
+          return `${w}fr`;
+        }
+        return String(w);
+      });
+      container.style.gridTemplateColumns = colWidths.join(' ');
+    } else {
+      container.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
+    }
+    
+    // Configuración dinámica de filas
+    if (mapping.__row_heights__ && Array.isArray(mapping.__row_heights__) && mapping.__row_heights__.length === R) {
+      const rowHeights = mapping.__row_heights__.map(h => {
+        if (typeof h === 'number') {
+          return `minmax(${h}px, auto)`;
+        }
+        return String(h);
+      });
+      container.style.gridTemplateRows = rowHeights.join(' ');
+    } else {
+      // Aumentar altura de filas para evitar recorte - altura mínima para gráficos completos
+      // Considerando: padding (30px) + gráfico (320px) + espacio para ejes (20px extra)
+      container.style.gridTemplateRows = `repeat(${R}, minmax(350px, auto))`;
+    }
+    
+    // Configuración dinámica de gap
+    const gap = mapping.__gap__ !== undefined ? mapping.__gap__ : 12;
+    container.style.gap = `${gap}px`;
+    
+    // Configuración dinámica de max-width
+    if (mapping.__max_width__ !== undefined) {
+      container.style.maxWidth = `${mapping.__max_width__}px`;
+    }
+    
+    // Configuración dinámica de cell padding (aplicar a cada celda después)
+    const cellPadding = mapping.__cell_padding__ !== undefined ? mapping.__cell_padding__ : 15;
 
     const safeHtml = mapping.__safe_html__ !== false;
     const divIdFromMapping = mapping.__div_id__ || divId;
@@ -210,12 +354,47 @@
         // Usar grid-row y grid-column con span para fusionar celdas
         cell.style.gridRow = `${r + 1} / span ${height}`;
         cell.style.gridColumn = `${c + 1} / span ${width}`;
+        
+        // Aplicar padding personalizado si existe
+        if (mapping.__cell_padding__ !== undefined) {
+          cell.style.padding = `${mapping.__cell_padding__}px`;
+        }
 
         if (isD3Spec(spec) || isSimpleViz(spec)) {
+          // Guardar referencia al mapping en el contenedor para acceso desde funciones de renderizado
+          if (!container.__mapping__) {
+            container.__mapping__ = mapping;
+          }
           // Cargar D3 y renderizar (para gráficos Y formas simples)
           ensureD3().then(d3 => {
             if (isD3Spec(spec)) {
+              // Guardar spec y divId en el elemento para uso en ResizeObserver
+              cell._chartSpec = spec;
+              cell._chartDivId = divIdFromMapping;
+              
+              // Renderizar inicialmente
               renderChartD3(cell, spec, d3, divIdFromMapping);
+              
+              // Agregar ResizeObserver para re-renderizar cuando cambie el tamaño
+              // Usar debounce para evitar re-renderizados excesivos
+              setupResizeObserver(cell, () => {
+                // Debounce: esperar 150ms antes de re-renderizar
+                if (cell._resizeTimeout) {
+                  clearTimeout(cell._resizeTimeout);
+                }
+                cell._resizeTimeout = setTimeout(() => {
+                  // Verificar que D3 todavía esté disponible
+                  if (global.d3 && cell._chartSpec) {
+                    // Limpiar SVG anterior
+                    const existingSvg = cell.querySelector('svg');
+                    if (existingSvg) {
+                      existingSvg.remove();
+                    }
+                    // Re-renderizar el gráfico
+                    renderChartD3(cell, cell._chartSpec, global.d3, cell._chartDivId);
+                  }
+                }, 150);
+              });
             } else if (isSimpleViz(spec)) {
               renderSimpleVizD3(cell, spec, d3);
             }
@@ -234,6 +413,66 @@
         container.appendChild(cell);
       }
     }
+  }
+  
+  /**
+   * Configura un ResizeObserver para un elemento y ejecuta un callback cuando cambia de tamaño
+   * @param {HTMLElement} element - Elemento a observar
+   * @param {Function} callback - Función a ejecutar cuando cambia el tamaño
+   */
+  function setupResizeObserver(element, callback) {
+    // Evitar múltiples observadores en el mismo elemento
+    if (element._resizeObserver) {
+      return;
+    }
+    
+    // Verificar si ResizeObserver está disponible
+    if (typeof ResizeObserver === 'undefined') {
+      // Fallback: usar window resize si ResizeObserver no está disponible
+      const resizeHandler = () => {
+        if (element && element.parentElement && element.offsetWidth > 0 && element.offsetHeight > 0) {
+          callback();
+        }
+      };
+      window.addEventListener('resize', resizeHandler);
+      // Guardar referencia al handler para poder limpiarlo más tarde si es necesario
+      element._resizeHandler = resizeHandler;
+      return;
+    }
+    
+    // Usar ResizeObserver si está disponible
+    const resizeObserver = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        // Solo re-renderizar si el tamaño cambió significativamente (más de 10px)
+        // y el elemento tiene dimensiones válidas
+        const width = entry.contentRect.width;
+        const height = entry.contentRect.height;
+        
+        if (width <= 0 || height <= 0) {
+          // Ignorar si el elemento no tiene dimensiones válidas
+          continue;
+        }
+        
+        if (element._lastWidth && element._lastHeight) {
+          const widthDiff = Math.abs(width - element._lastWidth);
+          const heightDiff = Math.abs(height - element._lastHeight);
+          // Solo re-renderizar si el cambio es significativo (más de 10px)
+          if (widthDiff > 10 || heightDiff > 10) {
+            callback();
+          }
+        } else {
+          // Primera vez, guardar dimensiones pero no ejecutar callback
+          // (el callback ya se ejecutó en el render inicial)
+        }
+        element._lastWidth = width;
+        element._lastHeight = height;
+      }
+    });
+    
+    resizeObserver.observe(element);
+    
+    // Guardar referencia al observer para poder desconectarlo más tarde si es necesario
+    element._resizeObserver = resizeObserver;
   }
 
   // ==========================================
@@ -312,6 +551,133 @@
   // ==========================================
   
   /**
+   * Renderiza etiquetas de ejes con soporte para personalización
+   */
+  function renderAxisLabels(g, spec, chartWidth, chartHeight, margin) {
+    // Etiqueta del eje X
+    if (spec.xLabel) {
+      const xLabelFontSize = spec.xLabelFontSize || 13;
+      const xLabelRotation = spec.xLabelRotation || 0;
+      const xLabelY = chartHeight + margin.bottom - 10;
+      const xLabelText = g.append('text')
+        .attr('x', chartWidth / 2)
+        .attr('y', xLabelY)
+        .attr('text-anchor', 'middle')
+        .style('font-size', `${xLabelFontSize}px`)
+        .style('font-weight', '700')
+        .style('fill', '#000000')
+        .style('font-family', 'Arial, sans-serif')
+        .text(spec.xLabel);
+      
+      if (xLabelRotation !== 0) {
+        xLabelText.attr('transform', `rotate(${xLabelRotation} ${chartWidth / 2} ${xLabelY})`)
+          .attr('text-anchor', xLabelRotation > 0 ? 'start' : 'end')
+          .attr('dx', xLabelRotation > 0 ? '0.5em' : '-0.5em')
+          .attr('dy', '0.5em');
+      }
+    }
+    
+    // Etiqueta del eje Y
+    if (spec.yLabel) {
+      const yLabelFontSize = spec.yLabelFontSize || 13;
+      const yLabelRotation = spec.yLabelRotation !== undefined ? spec.yLabelRotation : -90;
+      const yLabelX = -chartHeight / 2;
+      const yLabelY = -margin.left + 10;
+      const yLabelText = g.append('text')
+        .attr('x', yLabelY)
+        .attr('y', yLabelX)
+        .attr('text-anchor', 'middle')
+        .style('font-size', `${yLabelFontSize}px`)
+        .style('font-weight', '700')
+        .style('fill', '#000000')
+        .style('font-family', 'Arial, sans-serif')
+        .text(spec.yLabel);
+      
+      if (yLabelRotation !== 0) {
+        yLabelText.attr('transform', `rotate(${yLabelRotation} ${yLabelY} ${yLabelX})`);
+      }
+    }
+  }
+  
+  /**
+   * Calcula márgenes dinámicamente según tamaño de etiquetas de ejes
+   */
+  function calculateAxisMargins(spec, defaultMargin) {
+    const margin = { ...defaultMargin };
+    
+    // Calcular espacio necesario para etiqueta X
+    if (spec.xLabel) {
+      const xLabelFontSize = spec.xLabelFontSize || 13;
+      const xLabelRotation = spec.xLabelRotation || 0;
+      // Si está rotada, necesita más espacio
+      if (xLabelRotation !== 0) {
+        const rotationRad = Math.abs(xLabelRotation) * Math.PI / 180;
+        const labelHeight = xLabelFontSize * 1.2; // Aproximación de altura de texto
+        const rotatedHeight = Math.abs(Math.sin(rotationRad) * (spec.xLabel.length * xLabelFontSize * 0.6)) + labelHeight;
+        margin.bottom = Math.max(margin.bottom, rotatedHeight + 20);
+      } else {
+        margin.bottom = Math.max(margin.bottom, xLabelFontSize + 25);
+      }
+    }
+    
+    // Calcular espacio necesario para etiqueta Y
+    if (spec.yLabel) {
+      const yLabelFontSize = spec.yLabelFontSize || 13;
+      const yLabelRotation = spec.yLabelRotation || -90;
+      // Si está rotada, necesita más espacio
+      if (Math.abs(yLabelRotation) !== 90) {
+        const rotationRad = Math.abs(yLabelRotation) * Math.PI / 180;
+        const labelWidth = spec.yLabel.length * yLabelFontSize * 0.6;
+        const rotatedWidth = Math.abs(Math.cos(rotationRad) * labelWidth) + yLabelFontSize;
+        margin.left = Math.max(margin.left, rotatedWidth + 20);
+      } else {
+        margin.left = Math.max(margin.left, yLabelFontSize + 35);
+      }
+    }
+    
+    return margin;
+  }
+  
+  /**
+   * Calcula dimensiones del gráfico basándose en figsize o valores por defecto
+   */
+  function getChartDimensions(container, spec, defaultWidth, defaultHeight) {
+    // Si hay figsize en el spec, usarlo
+    if (spec.figsize && Array.isArray(spec.figsize) && spec.figsize.length === 2) {
+      return {
+        width: spec.figsize[0],
+        height: spec.figsize[1]
+      };
+    }
+    
+    // Buscar el contenedor padre matrix-layout para acceder al mapping
+    let parentContainer = container;
+    let mapping = null;
+    for (let i = 0; i < 5 && parentContainer; i++) {
+      if (parentContainer.classList && parentContainer.classList.contains('matrix-layout')) {
+        mapping = parentContainer.__mapping__;
+        break;
+      }
+      parentContainer = parentContainer.parentElement;
+    }
+    
+    // Si hay figsize global en el mapping, usarlo
+    if (mapping && mapping.__figsize__ && Array.isArray(mapping.__figsize__) && mapping.__figsize__.length === 2) {
+      return {
+        width: mapping.__figsize__[0],
+        height: mapping.__figsize__[1]
+      };
+    }
+    
+    // Usar valores por defecto basados en el contenedor
+    const width = container.clientWidth || defaultWidth;
+    const availableHeight = Math.max(container.clientHeight - 30, defaultHeight - 30);
+    const height = Math.min(availableHeight, defaultHeight);
+    
+    return { width, height };
+  }
+  
+  /**
    * Renderiza gráficos con D3.js
    */
   function renderChartD3(container, spec, d3, divId) {
@@ -346,10 +712,11 @@
    */
   function renderHeatmapD3(container, spec, d3, divId) {
     const data = spec.data || [];
-    const width = container.clientWidth || 500;
-    const availableHeight = Math.max(container.clientHeight - 30, 320);
-    const height = Math.min(availableHeight, 400);
-    const margin = { top: 30, right: 20, bottom: 60, left: 70 };
+    const dims = getChartDimensions(container, spec, 500, 400);
+    const width = dims.width;
+    const height = dims.height;
+    const defaultMargin = { top: 30, right: 20, bottom: 60, left: 70 };
+    const margin = calculateAxisMargins(spec, defaultMargin);
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
 
@@ -385,40 +752,17 @@
       .attr('opacity', 1);
 
     if (spec.axes !== false) {
+      const tickFontSize = spec.tickFontSize || 12;
       const xAxis = g.append('g')
         .attr('transform', `translate(0,${chartHeight})`)
         .call(d3.axisBottom(x));
-      xAxis.selectAll('text').style('font-size', '10px').style('fill', '#000');
-      
-      // Agregar etiqueta del eje X
-      if (spec.xLabel) {
-        g.append('text')
-          .attr('x', chartWidth / 2)
-          .attr('y', chartHeight + 50)
-          .attr('text-anchor', 'middle')
-          .style('font-size', '13px')
-          .style('font-weight', '700')
-          .style('fill', '#000000')
-          .style('font-family', 'Arial, sans-serif')
-          .text(spec.xLabel);
-      }
+      xAxis.selectAll('text').style('font-size', `${tickFontSize}px`).style('fill', '#000');
       
       const yAxis = g.append('g').call(d3.axisLeft(y));
-      yAxis.selectAll('text').style('font-size', '10px').style('fill', '#000');
+      yAxis.selectAll('text').style('font-size', `${tickFontSize}px`).style('fill', '#000');
       
-      // Agregar etiqueta del eje Y
-      if (spec.yLabel) {
-        g.append('text')
-          .attr('transform', 'rotate(-90)')
-          .attr('x', -chartHeight / 2)
-          .attr('y', -55)
-          .attr('text-anchor', 'middle')
-          .style('font-size', '13px')
-          .style('font-weight', '700')
-          .style('fill', '#000000')
-          .style('font-family', 'Arial, sans-serif')
-          .text(spec.yLabel);
-      }
+      // Renderizar etiquetas de ejes usando función helper
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin);
     }
   }
 
@@ -427,10 +771,11 @@
    */
   function renderLineD3(container, spec, d3, divId) {
     const seriesMap = spec.series || {};
-    const width = container.clientWidth || 520;
-    const availableHeight = Math.max(container.clientHeight - 30, 320);
-    const height = Math.min(availableHeight, 380);
-    const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+    const dims = getChartDimensions(container, spec, 520, 380);
+    const width = dims.width;
+    const height = dims.height;
+    const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
+    const margin = calculateAxisMargins(spec, defaultMargin);
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
 
@@ -494,19 +839,6 @@
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
       
-      // Agregar etiqueta del eje X
-      if (spec.xLabel) {
-        g.append('text')
-          .attr('x', chartWidth / 2)
-          .attr('y', chartHeight + 35)
-          .attr('text-anchor', 'middle')
-          .style('font-size', '13px')
-          .style('font-weight', '700')
-          .style('fill', '#000000')
-          .style('font-family', 'Arial, sans-serif')
-          .text(spec.xLabel);
-      }
-      
       const yAxis = g.append('g').call(d3.axisLeft(y));
       
       yAxis.selectAll('text')
@@ -519,19 +851,8 @@
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
       
-      // Agregar etiqueta del eje Y
-      if (spec.yLabel) {
-        g.append('text')
-          .attr('transform', 'rotate(-90)')
-          .attr('x', -chartHeight / 2)
-          .attr('y', -40)
-          .attr('text-anchor', 'middle')
-          .style('font-size', '13px')
-          .style('font-weight', '700')
-          .style('fill', '#000000')
-          .style('font-family', 'Arial, sans-serif')
-          .text(spec.yLabel);
-      }
+      // Renderizar etiquetas de ejes usando función helper
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin);
     }
   }
 
@@ -540,8 +861,9 @@
    */
   function renderPieD3(container, spec, d3, divId) {
     const data = spec.data || [];
-    const width = container.clientWidth || 320;
-    const height = Math.max(container.clientHeight || 240, 240);
+    const dims = getChartDimensions(container, spec, 320, 240);
+    const width = dims.width;
+    const height = dims.height;
     const radius = Math.min(width, height) / 2 - 10;
     const innerR = spec.innerRadius != null ? spec.innerRadius : (spec.donut ? radius * 0.5 : 0);
     const color = d3.scaleOrdinal(d3.schemeCategory10).domain(data.map(d => d.category));
@@ -580,9 +902,9 @@
    */
   function renderViolinD3(container, spec, d3, divId) {
     const violins = spec.data || [];
-    const width = container.clientWidth || 520;
-    const availableHeight = Math.max(container.clientHeight - 30, 320);
-    const height = Math.min(availableHeight, 380);
+    const dims = getChartDimensions(container, spec, 520, 380);
+    const width = dims.width;
+    const height = dims.height;
     const margin = { top: 20, right: 20, bottom: 60, left: 60 };
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
@@ -671,10 +993,11 @@
    */
   function renderBoxplotD3(container, spec, d3, divId) {
     const data = spec.data || [];
-    const width = container.clientWidth || 400;
-    const availableHeight = Math.max(container.clientHeight - 30, 320);
-    const height = Math.min(availableHeight, 350);
-    const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+    const dims = getChartDimensions(container, spec, 400, 350);
+    const width = dims.width;
+    const height = dims.height;
+    const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
+    const margin = calculateAxisMargins(spec, defaultMargin);
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
     
@@ -804,11 +1127,11 @@
    */
   function renderHistogramD3(container, spec, d3, divId) {
     const data = spec.data || [];
-    const width = container.clientWidth || 400;
-    // Calcular altura disponible: considerar padding del contenedor (30px total) y espacio para ejes
-    const availableHeight = Math.max(container.clientHeight - 30, 320);  // Altura mínima de 320px
-    const height = Math.min(availableHeight, 350);  // Altura máxima de 350px para mantener proporción
-    const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+    const dims = getChartDimensions(container, spec, 400, 350);
+    const width = dims.width;
+    const height = dims.height;
+    const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
+    const margin = calculateAxisMargins(spec, defaultMargin);
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
     
@@ -864,19 +1187,6 @@
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
       
-      // Agregar etiqueta del eje X
-      if (spec.xLabel) {
-        g.append('text')
-          .attr('x', chartWidth / 2)
-          .attr('y', chartHeight + 35)
-          .attr('text-anchor', 'middle')
-          .style('font-size', '13px')
-          .style('font-weight', '700')
-          .style('fill', '#000000')
-          .style('font-family', 'Arial, sans-serif')
-          .text(spec.xLabel);
-      }
-      
       const yAxis = g.append('g')
         .call(d3.axisLeft(y).ticks(5));
       
@@ -890,19 +1200,8 @@
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
       
-      // Agregar etiqueta del eje Y
-      if (spec.yLabel) {
-        g.append('text')
-          .attr('transform', 'rotate(-90)')
-          .attr('x', -chartHeight / 2)
-          .attr('y', -40)
-          .attr('text-anchor', 'middle')
-          .style('font-size', '13px')
-          .style('font-weight', '700')
-          .style('fill', '#000000')
-          .style('font-family', 'Arial, sans-serif')
-          .text(spec.yLabel);
-      }
+      // Renderizar etiquetas de ejes usando función helper
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin);
     }
   }
   
@@ -911,10 +1210,9 @@
    */
   function renderBarChartD3(container, spec, d3, divId) {
     const data = spec.data || [];
-    const width = container.clientWidth || 400;
-    // Calcular altura disponible: considerar padding del contenedor (30px total) y espacio para ejes
-    const availableHeight = Math.max(container.clientHeight - 30, 320);  // Altura mínima de 320px
-    const height = Math.min(availableHeight, 350);  // Altura máxima de 350px para mantener proporción
+    const dims = getChartDimensions(container, spec, 400, 350);
+    const width = dims.width;
+    const height = dims.height;
     const margin = { top: 20, right: 20, bottom: 40, left: 50 };
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
@@ -1088,11 +1386,11 @@
    */
   function renderScatterPlotD3(container, spec, d3, divId) {
     const data = spec.data || [];
-    const width = container.clientWidth || 400;
-    // Calcular altura disponible: considerar padding del contenedor (30px total) y espacio para ejes
-    const availableHeight = Math.max(container.clientHeight - 30, 320);  // Altura mínima de 320px
-    const height = Math.min(availableHeight, 350);  // Altura máxima de 350px para mantener proporción
-    const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+    const dims = getChartDimensions(container, spec, 400, 350);
+    const width = dims.width;
+    const height = dims.height;
+    const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
+    const margin = calculateAxisMargins(spec, defaultMargin);
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
     
@@ -1107,12 +1405,12 @@
     
     // Escalas D3
     const x = d3.scaleLinear()
-      .domain([0, d3.max(data, d => d.x) || 100])
+      .domain(d3.extent(data, d => d.x) || [0, 100])
       .nice()
       .range([0, chartWidth]);
     
     const y = d3.scaleLinear()
-      .domain([0, d3.max(data, d => d.y) || 100])
+      .domain(d3.extent(data, d => d.y) || [0, 100])
       .nice()
       .range([chartHeight, 0]);
     
@@ -1196,19 +1494,6 @@
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
       
-      // Agregar etiqueta del eje X
-      if (spec.xLabel) {
-        g.append('text')
-          .attr('x', chartWidth / 2)
-          .attr('y', chartHeight + 35)
-          .attr('text-anchor', 'middle')
-          .style('font-size', '13px')
-          .style('font-weight', '700')
-          .style('fill', '#000000')
-          .style('font-family', 'Arial, sans-serif')
-          .text(spec.xLabel);
-      }
-      
       const yAxis = g.append('g')
         .call(d3.axisLeft(y).ticks(6));
       
@@ -1222,19 +1507,8 @@
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
       
-      // Agregar etiqueta del eje Y
-      if (spec.yLabel) {
-        g.append('text')
-          .attr('transform', 'rotate(-90)')
-          .attr('x', -chartHeight / 2)
-          .attr('y', -40)
-          .attr('text-anchor', 'middle')
-          .style('font-size', '13px')
-          .style('font-weight', '700')
-          .style('fill', '#000000')
-          .style('font-family', 'Arial, sans-serif')
-          .text(spec.yLabel);
-      }
+      // Renderizar etiquetas de ejes usando función helper
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin);
     }
     
     // BRUSH para selección de área (MEJORADO)
@@ -1323,374 +1597,122 @@
   // Carga de D3.js (Optimizado para Colab)
   // ==========================================
   
-  function ensureD3() {
-    if (global.d3) return Promise.resolve(global.d3);
+  // Cache global para la promesa de D3
+  let _d3Promise = null;
+  
+  /**
+   * Asegura que D3.js esté cargado y listo para usar
+   * @param {number} timeout - Timeout en milisegundos (por defecto 10000)
+   * @returns {Promise} Promise que se resuelve con d3 cuando está listo
+   */
+  function ensureD3(timeout = 10000) {
+    // Si D3 ya está disponible, retornar inmediatamente
+    if (global.d3) {
+      return Promise.resolve(global.d3);
+    }
     
-    return new Promise((resolve, reject) => {
-      const existing = document.querySelector('script[src*="d3"]');
-      if (existing) {
+    // Si ya hay una promesa en curso, retornarla para evitar múltiples cargas
+    if (_d3Promise) {
+      return _d3Promise;
+    }
+    
+    // Crear nueva promesa para cargar D3
+    _d3Promise = new Promise((resolve, reject) => {
+      // Buscar script existente por ID único o por src
+      const scriptId = 'bestlib-d3-script';
+      let existingScript = document.getElementById(scriptId);
+      
+      // Si no existe por ID, buscar por src
+      if (!existingScript) {
+        existingScript = document.querySelector('script[src*="d3"][src*="d3.min.js"], script[src*="d3"][src*="d3.js"]');
+      }
+      
+      if (existingScript) {
+        // Script ya existe, esperar a que se cargue
         const checkD3 = setInterval(() => {
           if (global.d3) {
             clearInterval(checkD3);
+            _d3Promise = null; // Reset cache para permitir re-chequeo si falla
             resolve(global.d3);
           }
         }, 100);
+        
+        // Timeout para evitar esperar indefinidamente
         setTimeout(() => {
           clearInterval(checkD3);
-          if (global.d3) resolve(global.d3);
-          else reject(new Error('Timeout D3'));
-        }, 5000);
+          if (global.d3) {
+            _d3Promise = null;
+            resolve(global.d3);
+          } else {
+            _d3Promise = null;
+            reject(new Error('Timeout esperando D3.js (script existente pero no se inicializó)'));
+          }
+        }, timeout);
         return;
       }
       
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js';
-      script.onload = () => {
-        setTimeout(() => {
-          if (global.d3) resolve(global.d3);
-          else reject(new Error('D3 no se inicializó'));
-        }, 50);
-      };
-      script.onerror = () => reject(new Error('Error cargar D3'));
-      document.head.appendChild(script);
-    });
-  }
-
-  // ==========================================
-  // Renderizado D3.js con Interactividad
-  // ==========================================
-  
-  function renderD3(container, spec, d3, divId) {
-    if (spec.type === 'bar') {
-      renderBarChart(container, spec, d3, divId);
-    } else if (spec.type === 'scatter') {
-      renderScatterPlot(container, spec, d3, divId);
-    }
-  }
-  
-  /**
-   * Renderiza un gráfico de barras interactivo con brush
-   */
-  function renderBarChart(container, spec, d3, divId) {
-    const data = Array.isArray(spec.data) ? spec.data : [];
-    const width = container.clientWidth || 260;
-    const height = container.clientHeight || 160;
-    const margin = { top: 10, right: 10, bottom: 30, left: 35 };
-    const innerW = Math.max(10, width - margin.left - margin.right);
-    const innerH = Math.max(10, height - margin.top - margin.bottom);
-
-    const svg = d3.select(container)
-      .append('svg')
-      .attr('width', width)
-      .attr('height', height);
-
-    const g = svg.append('g')
-      .attr('transform', `translate(${margin.left},${margin.top})`);
-
-    // Escalas
-    const x = d3.scaleBand()
-      .domain(data.map((d, i) => d.category ?? i))
-      .range([0, innerW])
-      .padding(0.2);
-
-    const y = d3.scaleLinear()
-      .domain([0, d3.max(data, d => d.value ?? 0) || 0])
-      .range([innerH, 0]);
-
-    // Barras con transiciones
-    const bars = g.selectAll('rect')
-      .data(data)
-      .enter()
-      .append('rect')
-      .attr('x', (d, i) => x(d.category ?? i))
-      .attr('y', innerH)
-      .attr('width', x.bandwidth())
-      .attr('height', 0)
-      .attr('fill', spec.color || '#4a90e2')
-      .attr('class', 'bar');
-
-    // Animación de entrada
-    bars.transition()
-      .duration(800)
-      .attr('y', d => y(d.value ?? 0))
-      .attr('height', d => innerH - y(d.value ?? 0));
-
-    // Tooltips
-    const tooltip = d3.select(container)
-      .append('div')
-      .style('position', 'absolute')
-      .style('background', 'rgba(0,0,0,0.8)')
-      .style('color', 'white')
-      .style('padding', '5px 10px')
-      .style('border-radius', '4px')
-      .style('font-size', '12px')
-      .style('pointer-events', 'none')
-      .style('opacity', 0)
-      .style('z-index', '1000');
-
-    bars.on('mouseover', function(event, d) {
-      d3.select(this).attr('fill', spec.hoverColor || '#357abd');
-      tooltip.style('opacity', 1)
-        .html(`<strong>${d.category ?? ''}</strong><br/>Valor: ${d.value ?? 0}`);
-    })
-    .on('mousemove', function(event) {
-      tooltip.style('left', (event.offsetX + 10) + 'px')
-        .style('top', (event.offsetY - 25) + 'px');
-    })
-    .on('mouseout', function() {
-      d3.select(this).attr('fill', spec.color || '#4a90e2');
-      tooltip.style('opacity', 0);
-    });
-
-    // Ejes
-    if (spec.axes !== false) {
-      g.append('g')
-        .attr('transform', `translate(0,${innerH})`)
-        .call(d3.axisBottom(x).tickSizeOuter(0))
-        .selectAll('text')
-        .style('font-size', '10px');
+      // CDNs disponibles (intentar en orden)
+      const cdns = [
+        'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js',
+        'https://d3js.org/d3.v7.min.js',
+        'https://unpkg.com/d3@7/dist/d3.min.js'
+      ];
       
-      g.append('g')
-        .call(d3.axisLeft(y).ticks(4).tickSizeOuter(0))
-        .selectAll('text')
-        .style('font-size', '10px');
-    }
-
-    // Brush para selección
-    if (spec.interactive !== false) {
-      const brush = d3.brushX()
-        .extent([[0, 0], [innerW, innerH]])
-        .on('end', brushed);
-
-      g.append('g')
-        .attr('class', 'brush')
-        .call(brush);
-
-      function brushed({ selection }) {
-        if (!selection) {
-          sendEvent(divId, 'select', { 
-            type: 'bar',
-            indices: [], 
-            items: [] 
-          });
+      let cdnIndex = 0;
+      
+      function tryLoadCDN(index) {
+        if (index >= cdns.length) {
+          _d3Promise = null;
+          reject(new Error('No se pudo cargar D3.js desde ningún CDN disponible'));
           return;
         }
         
-        const [x0, x1] = selection;
-        const selectedIdx = [];
-        const selectedItems = [];
-        const originalRows = [];
-
-        data.forEach((d, i) => {
-          const cx = (x(d.category ?? i) ?? 0) + x.bandwidth() / 2;
-          if (cx >= x0 && cx <= x1) {
-            selectedIdx.push(i);
-            selectedItems.push(d);
-            // Extraer todas las filas originales de esta categoría
-            if (d._original_rows && Array.isArray(d._original_rows)) {
-              originalRows.push(...d._original_rows);
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = cdns[index];
+        script.async = true;
+        
+        script.onload = () => {
+          // Esperar un momento para que D3 se inicialice
+          setTimeout(() => {
+            if (global.d3) {
+              _d3Promise = null; // Reset cache
+              resolve(global.d3);
             } else {
-              originalRows.push(d);
+              // Si no se inicializó, intentar siguiente CDN
+              script.remove();
+              tryLoadCDN(index + 1);
             }
-          }
-        });
-
-        sendEvent(divId, 'select', { 
-          type: 'bar',
-          indices: selectedIdx, 
-          items: originalRows,  // Filas originales completas
-          original_items: selectedItems  // Mantener compatibilidad
-        });
+          }, 50);
+        };
+        
+        script.onerror = () => {
+          // Si falla, intentar siguiente CDN
+          script.remove();
+          console.warn('Falló carga de D3 desde ' + cdns[index] + ', intentando siguiente CDN...');
+          tryLoadCDN(index + 1);
+        };
+        
+        document.head.appendChild(script);
       }
-    }
-  }
-  
-  /**
-   * Renderiza un scatter plot interactivo con zoom y selección
-   */
-  function renderScatterPlot(container, spec, d3, divId) {
-    const data = Array.isArray(spec.data) ? spec.data : [];
-    const width = container.clientWidth || 260;
-    const height = container.clientHeight || 160;
-    const margin = { top: 10, right: 10, bottom: 30, left: 35 };
-    const innerW = Math.max(10, width - margin.left - margin.right);
-    const innerH = Math.max(10, height - margin.top - margin.bottom);
-
-    const svg = d3.select(container)
-      .append('svg')
-      .attr('width', width)
-      .attr('height', height);
-
-    const g = svg.append('g')
-      .attr('transform', `translate(${margin.left},${margin.top})`);
-
-    // Escalas
-    const xExtent = d3.extent(data, d => d.x ?? 0);
-    const yExtent = d3.extent(data, d => d.y ?? 0);
-    
-    const x = d3.scaleLinear()
-      .domain([xExtent[0] * 0.9, xExtent[1] * 1.1])
-      .range([0, innerW]);
-
-    const y = d3.scaleLinear()
-      .domain([yExtent[0] * 0.9, yExtent[1] * 1.1])
-      .range([innerH, 0]);
-
-    // Clip path para zoom
-    g.append('defs').append('clipPath')
-      .attr('id', `clip-${divId}`)
-      .append('rect')
-      .attr('width', innerW)
-      .attr('height', innerH);
-
-    const pointsGroup = g.append('g')
-      .attr('clip-path', `url(#clip-${divId})`);
-
-    // Puntos
-    const points = pointsGroup.selectAll('circle')
-      .data(data)
-      .enter()
-      .append('circle')
-      .attr('cx', d => x(d.x ?? 0))
-      .attr('cy', d => y(d.y ?? 0))
-      .attr('r', 0)
-      .attr('fill', d => d.color || spec.color || '#e24a4a')
-      .attr('opacity', 0.7)
-      .attr('class', 'scatter-point');
-
-    // Animación de entrada
-    points.transition()
-      .duration(600)
-      .attr('r', spec.pointRadius || 4);
-
-    // Tooltips
-    const tooltip = d3.select(container)
-      .append('div')
-      .style('position', 'absolute')
-      .style('background', 'rgba(0,0,0,0.8)')
-      .style('color', 'white')
-      .style('padding', '5px 10px')
-      .style('border-radius', '4px')
-      .style('font-size', '12px')
-      .style('pointer-events', 'none')
-      .style('opacity', 0)
-      .style('z-index', '1000');
-
-    points.on('mouseover', function(event, d) {
-      d3.select(this)
-        .attr('r', (spec.pointRadius || 4) * 1.5)
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 2);
       
-      tooltip.style('opacity', 1)
-        .html(`${d.label || ''}<br/>X: ${(d.x ?? 0).toFixed(2)}<br/>Y: ${(d.y ?? 0).toFixed(2)}`);
-    })
-    .on('mousemove', function(event) {
-      tooltip.style('left', (event.offsetX + 10) + 'px')
-        .style('top', (event.offsetY - 25) + 'px');
-    })
-    .on('mouseout', function() {
-      d3.select(this)
-        .attr('r', spec.pointRadius || 4)
-        .attr('stroke', 'none');
-      tooltip.style('opacity', 0);
-    })
-    .on('click', function(event, d) {
-      const idx = data.indexOf(d);
-      sendEvent(divId, 'point_click', {
-        type: 'scatter',
-        index: idx,
-        point: d
-      });
+      tryLoadCDN(0);
     });
-
-    // Ejes
-    if (spec.axes !== false) {
-      const xAxis = g.append('g')
-        .attr('transform', `translate(0,${innerH})`)
-        .call(d3.axisBottom(x).ticks(5).tickSizeOuter(0));
-      
-      const yAxis = g.append('g')
-        .call(d3.axisLeft(y).ticks(5).tickSizeOuter(0));
-      
-      xAxis.selectAll('text').style('font-size', '10px');
-      yAxis.selectAll('text').style('font-size', '10px');
-    }
-
-    // Zoom
-    if (spec.zoom !== false) {
-      const zoom = d3.zoom()
-        .scaleExtent([0.5, 10])
-        .on('zoom', zoomed);
-
-      svg.call(zoom);
-
-      function zoomed({ transform }) {
-        const newX = transform.rescaleX(x);
-        const newY = transform.rescaleY(y);
-        
-        points.attr('cx', d => newX(d.x ?? 0))
-          .attr('cy', d => newY(d.y ?? 0));
-        
-        g.select('.x-axis').call(d3.axisBottom(newX));
-        g.select('.y-axis').call(d3.axisLeft(newY));
-      }
-    }
-
-    // Brush para selección múltiple
-    if (spec.interactive !== false) {
-      const brush = d3.brush()
-        .extent([[0, 0], [innerW, innerH]])
-        .on('end', brushed);
-
-      g.append('g')
-        .attr('class', 'brush')
-        .call(brush);
-
-        function brushed({ selection }) {
-        if (!selection) {
-          points.attr('opacity', 0.7);
-          sendEvent(divId, 'select', {
-            type: 'scatter',
-            indices: [],
-            items: []
-          });
-          return;
-        }
-
-        const [[x0, y0], [x1, y1]] = selection;
-        const selectedIdx = [];
-        const selectedItems = [];
-        const originalRows = [];
-
-        points.each(function(d, i) {
-          const cx = x(d.x ?? 0);
-          const cy = y(d.y ?? 0);
-          const isSelected = cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
-          
-          d3.select(this).attr('opacity', isSelected ? 1 : 0.2);
-          
-          if (isSelected) {
-            selectedIdx.push(i);
-            selectedItems.push(d);
-            // Extraer fila original completa si existe
-            originalRows.push(d._original_row || d);
-          }
-        });
-
-        // Obtener letra del scatter plot desde el spec
-        const scatterLetter = spec.__scatter_letter__ || null;
-        
-        sendEvent(divId, 'select', {
-          type: 'scatter',
-          indices: selectedIdx,
-          items: originalRows,  // Filas originales completas
-          original_items: selectedItems,  // Mantener compatibilidad
-          __scatter_letter__: scatterLetter  // Identificador del scatter plot
-        });
-      }
-    }
+    
+    // Limpiar cache después de resolver o rechazar (con un pequeño delay)
+    _d3Promise.then(
+      () => setTimeout(() => { _d3Promise = null; }, 1000),
+      () => setTimeout(() => { _d3Promise = null; }, 1000)
+    );
+    
+    return _d3Promise;
   }
+
+  // ==========================================
+  // Código muerto eliminado (líneas 1443-1761)
+  // Las funciones renderD3, renderBarChart, renderScatterPlot fueron reemplazadas
+  // por renderChartD3, renderBarChartD3, renderScatterPlotD3 que son las versiones activas
+  // ==========================================
 
   // Exponer funciones globalmente
   global.render = render;

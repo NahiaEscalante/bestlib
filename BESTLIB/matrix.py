@@ -16,6 +16,10 @@ except ImportError:
     HAS_PANDAS = False
     pd = None
 
+# Cache para archivos JS y CSS (cargados una sola vez)
+_cached_js = None
+_cached_css = None
+
 class MatrixLayout:
     _map = {}
     _safe_html = True
@@ -25,6 +29,45 @@ class MatrixLayout:
     _global_handlers = {}  # dict[str, callable]
     _comm_registered = False
     _debug = False  # Modo debug para ver mensajes detallados
+    
+    @staticmethod
+    def _figsize_to_pixels(figsize):
+        """
+        Convierte figsize de pulgadas a píxeles (asumiendo 96 DPI).
+        
+        Args:
+            figsize: Tupla (width, height) en pulgadas o píxeles, o None
+            
+        Returns:
+            Tupla (width, height) en píxeles, o None
+        """
+        if figsize is None:
+            return None
+        if isinstance(figsize, (tuple, list)) and len(figsize) == 2:
+            # Si los valores son > 50, asumimos que ya están en píxeles
+            # Si son <= 50, asumimos que están en pulgadas
+            width, height = figsize
+            if width > 50 and height > 50:
+                return (int(width), int(height))
+            else:
+                # Convertir de pulgadas a píxeles (96 DPI)
+                return (int(width * 96), int(height * 96))
+        return None
+    
+    @classmethod
+    def _process_figsize_in_kwargs(cls, kwargs):
+        """
+        Procesa figsize en kwargs, convirtiéndolo a píxeles si existe.
+        
+        Args:
+            kwargs: Diccionario de argumentos que puede contener 'figsize'
+        """
+        if 'figsize' in kwargs:
+            figsize_px = cls._figsize_to_pixels(kwargs['figsize'])
+            if figsize_px:
+                kwargs['figsize'] = figsize_px
+            else:
+                del kwargs['figsize']
     
     @staticmethod
     def _prepare_data(data, x_col=None, y_col=None, category_col=None, value_col=None):
@@ -94,6 +137,46 @@ class MatrixLayout:
                 return processed_data, data
             else:
                 raise ValueError("Los datos deben ser un DataFrame de pandas o una lista de diccionarios")
+    
+    @classmethod
+    def _validate_data(cls, data, required_cols=None, required_type=None):
+        """
+        Valida que los datos tengan el formato correcto y las columnas/keys requeridas.
+        
+        Args:
+            data: DataFrame de pandas o lista de diccionarios
+            required_cols: Lista de columnas/keys requeridas (opcional)
+            required_type: Tipo esperado ('DataFrame' o 'list')
+        
+        Raises:
+            ValueError: Si los datos no tienen el formato correcto o faltan columnas/keys
+        """
+        if required_type == 'DataFrame':
+            if not HAS_PANDAS:
+                raise ValueError("pandas no está instalado. Instala con: pip install pandas")
+            if not isinstance(data, pd.DataFrame):
+                raise ValueError(f"Se esperaba un DataFrame de pandas, pero se recibió: {type(data).__name__}")
+            if data.empty:
+                raise ValueError("El DataFrame está vacío")
+            if required_cols:
+                missing_cols = [col for col in required_cols if col not in data.columns]
+                if missing_cols:
+                    raise ValueError(f"Faltan las siguientes columnas en el DataFrame: {missing_cols}")
+        elif required_type == 'list':
+            if not isinstance(data, list):
+                raise ValueError(f"Se esperaba una lista de diccionarios, pero se recibió: {type(data).__name__}")
+            if len(data) == 0:
+                raise ValueError("La lista de datos está vacía")
+            if required_cols:
+                # Verificar que todos los elementos tengan las keys requeridas
+                first_item = data[0]
+                if not isinstance(first_item, dict):
+                    raise ValueError("Los elementos de la lista deben ser diccionarios")
+                missing_keys = [key for key in required_cols if key not in first_item]
+                if missing_keys:
+                    raise ValueError(f"Faltan las siguientes keys en los diccionarios: {missing_keys}")
+        elif required_type is not None:
+            raise ValueError(f"Tipo de validación no reconocido: {required_type}")
     
     @classmethod
     def set_debug(cls, enabled: bool):
@@ -278,6 +361,28 @@ class MatrixLayout:
             MatrixLayout.map_scatter('S', df, x_col='edad', y_col='salario', category_col='dept', interactive=True)
             layout = MatrixLayout("S")
         """
+        # Validar datos
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            required_cols = []
+            if x_col:
+                required_cols.append(x_col)
+            if y_col:
+                required_cols.append(y_col)
+            if required_cols:
+                cls._validate_data(data, required_cols=required_cols, required_type='DataFrame')
+        else:
+            cls._validate_data(data, required_type='list')
+            if x_col or y_col:
+                # Verificar que los diccionarios tengan las keys necesarias
+                if isinstance(data, list) and len(data) > 0:
+                    required_keys = []
+                    if x_col:
+                        required_keys.append(x_col)
+                    if y_col:
+                        required_keys.append(y_col)
+                    if required_keys:
+                        cls._validate_data(data, required_cols=required_keys, required_type='list')
+        
         processed_data, original_data = cls._prepare_data(data, x_col=x_col, y_col=y_col, category_col=category_col, value_col=size_col)
 
         # Enriquecer con tamaño y color por punto si se especifican columnas
@@ -311,6 +416,9 @@ class MatrixLayout:
             kwargs['xLabel'] = x_col
         if 'yLabel' not in kwargs and y_col:
             kwargs['yLabel'] = y_col
+        
+        # Procesar figsize si está en kwargs
+        cls._process_figsize_in_kwargs(kwargs)
         
         spec = {
             'type': 'scatter',
@@ -389,6 +497,9 @@ class MatrixLayout:
         if 'yLabel' not in kwargs:
             kwargs['yLabel'] = value_col if value_col else 'Count'
         
+        # Procesar figsize si está en kwargs
+        cls._process_figsize_in_kwargs(kwargs)
+        
         spec = {
             'type': 'bar',
             'data': bar_data,
@@ -453,6 +564,10 @@ class MatrixLayout:
                         rows.append({'group': g, 'series': s, 'value': int(v)})
             groups = sorted(list({r['group'] for r in rows}))
             series = sorted(list({r['series'] for r in rows}))
+        
+        # Procesar figsize si está en kwargs
+        cls._process_figsize_in_kwargs(kwargs)
+        
         spec = {
             'type': 'bar',
             'grouped': True,
@@ -540,6 +655,9 @@ class MatrixLayout:
             kwargs['xLabel'] = value_col
         if 'yLabel' not in kwargs:
             kwargs['yLabel'] = 'Frequency'
+        
+        # Procesar figsize si está en kwargs
+        cls._process_figsize_in_kwargs(kwargs)
         
         spec = {
             'type': 'histogram',
@@ -629,6 +747,9 @@ class MatrixLayout:
         if 'yLabel' not in kwargs and value_col:
             kwargs['yLabel'] = value_col
         
+        # Procesar figsize si está en kwargs
+        cls._process_figsize_in_kwargs(kwargs)
+        
         spec = {
             'type': 'boxplot',
             'data': box_data,
@@ -676,6 +797,9 @@ class MatrixLayout:
         if 'yLabel' not in kwargs and y_col:
             kwargs['yLabel'] = y_col
         
+        # Procesar figsize si está en kwargs
+        cls._process_figsize_in_kwargs(kwargs)
+        
         spec = {
             'type': 'heatmap',
             'data': cells,
@@ -704,6 +828,10 @@ class MatrixLayout:
         for i, xi in enumerate(cols):
             for j, yj in enumerate(cols):
                 cells.append({'x': xi, 'y': yj, 'value': float(corr.iloc[j, i])})
+        
+        # Procesar figsize si está en kwargs
+        cls._process_figsize_in_kwargs(kwargs)
+        
         spec = {
             'type': 'heatmap',
             'data': cells,
@@ -758,6 +886,9 @@ class MatrixLayout:
         if 'yLabel' not in kwargs and y_col:
             kwargs['yLabel'] = y_col
         
+        # Procesar figsize si está en kwargs
+        cls._process_figsize_in_kwargs(kwargs)
+        
         spec = { 'type': 'line', **payload, **kwargs }
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -790,6 +921,10 @@ class MatrixLayout:
             else:
                 counts = Counter([str(it.get(category_col, 'unknown')) for it in items])
                 slices = [{'category': k, 'value': int(v)} for k, v in counts.items()]
+        
+        # Procesar figsize si está en kwargs
+        cls._process_figsize_in_kwargs(kwargs)
+        
         spec = { 'type': 'pie', 'data': slices, **kwargs }
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -846,6 +981,10 @@ class MatrixLayout:
                     violins.append({'category': cat, 'profile': build_profile(vals)})
             else:
                 violins.append({'category': 'All', 'profile': build_profile([it.get(value_col) for it in items])})
+        
+        # Procesar figsize si está en kwargs
+        cls._process_figsize_in_kwargs(kwargs)
+        
         spec = { 'type': 'violin', 'data': violins, **kwargs }
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -885,6 +1024,10 @@ class MatrixLayout:
             x = sum(w * anchors[i][0] for i, w in enumerate(weights)) / s
             y = sum(w * anchors[i][1] for i, w in enumerate(weights)) / s
             points.append({'x': float(x), 'y': float(y), 'category': str(row[class_col]) if class_col and class_col in df.columns else None})
+        
+        # Procesar figsize si está en kwargs
+        cls._process_figsize_in_kwargs(kwargs)
+        
         spec = { 'type': 'radviz', 'data': points, 'features': feats, **kwargs }
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -911,12 +1054,18 @@ class MatrixLayout:
             "global_handlers": list(cls._global_handlers.keys()),
         }
 
-    def __init__(self, ascii_layout=None):
+    def __init__(self, ascii_layout=None, figsize=None, row_heights=None, col_widths=None, gap=None, cell_padding=None, max_width=None):
         """
         Crea una nueva instancia de MatrixLayout.
         
         Args:
             ascii_layout (str, optional): Layout ASCII. Si no se proporciona, se genera uno simple.
+            figsize (tuple, optional): Tamaño global de gráficos (width, height) en pulgadas. Por defecto None.
+            row_heights (list, optional): Lista de alturas por fila (px o fr). Por defecto None.
+            col_widths (list, optional): Lista de anchos por columna (px, fr, o ratios). Por defecto None.
+            gap (int, optional): Espaciado entre celdas en píxeles. Por defecto None (usa 12px).
+            cell_padding (int, optional): Padding de celdas en píxeles. Por defecto None (usa 15px).
+            max_width (int, optional): Ancho máximo del layout en píxeles. Por defecto None (usa 1200px).
         """
         # Si no se proporciona layout, crear uno simple
         if ascii_layout is None:
@@ -928,6 +1077,12 @@ class MatrixLayout:
         self._handlers = {}
         self._reactive_model = None  # Para modelo reactivo
         self._merge_opt = None  # Merge explícito por instancia (True | False | [letras])
+        self._figsize = figsize  # Tamaño global de gráficos
+        self._row_heights = row_heights
+        self._col_widths = col_widths
+        self._gap = gap
+        self._cell_padding = cell_padding
+        self._max_width = max_width
         
         # Asegurar que el comm esté registrado
         MatrixLayout._ensure_comm_target()
@@ -985,48 +1140,112 @@ class MatrixLayout:
         """Limpia la referencia cuando se destruye la instancia"""
         if hasattr(self, 'div_id') and self.div_id in MatrixLayout._instances:
             del MatrixLayout._instances[self.div_id]
-
-    def _repr_html_(self):
-        # Cargar JS y CSS desde el mismo paquete
-        js_path = os.path.join(os.path.dirname(__file__), "matrix.js")
-        css_path = os.path.join(os.path.dirname(__file__), "style.css")
-
-        with open(js_path, "r", encoding="utf-8") as f:
-            js_code = f.read()
-
-        with open(css_path, "r", encoding="utf-8") as f:
-            css_code = f.read()
-
-        # Validar layout ASCII: mismas columnas por fila
-        rows = [r for r in self.ascii_layout.strip().split("\n") if r]
+    
+    @staticmethod
+    def _load_js_css():
+        """
+        Carga y cachea los archivos JS y CSS.
+        Solo los carga una vez, luego usa el cache.
+        
+        Returns:
+            tuple: (js_code, css_code)
+        """
+        global _cached_js, _cached_css
+        
+        if _cached_js is None:
+            js_path = os.path.join(os.path.dirname(__file__), "matrix.js")
+            with open(js_path, "r", encoding="utf-8") as f:
+                _cached_js = f.read()
+        
+        if _cached_css is None:
+            css_path = os.path.join(os.path.dirname(__file__), "style.css")
+            with open(css_path, "r", encoding="utf-8") as f:
+                _cached_css = f.read()
+        
+        return _cached_js, _cached_css
+    
+    def _prepare_repr_data(self, layout_to_use=None):
+        """
+        Prepara datos comunes para _repr_html_ y _repr_mimebundle_.
+        
+        Args:
+            layout_to_use: Layout ASCII a usar. Si es None, usa self.ascii_layout.
+        
+        Returns:
+            dict: Diccionario con 'js_code', 'css_code', 'escaped_layout', 'meta', 'mapping_js'
+        """
+        # Cargar JS y CSS (cacheado)
+        js_code, css_code = self._load_js_css()
+        
+        # Usar el layout proporcionado o el de la instancia
+        layout = layout_to_use if layout_to_use is not None else self.ascii_layout
+        
+        # Validar layout ASCII
+        rows = [r for r in layout.strip().split("\n") if r]
         if not rows:
             raise ValueError("ascii_layout no puede estar vacío")
         col_len = len(rows[0])
         if any(len(r) != col_len for r in rows):
             raise ValueError("Todas las filas del ascii_layout deben tener igual longitud")
-
+        
         # Escapar backticks para no romper el template literal JS
-        escaped_layout = self.ascii_layout.replace("`", "\\`")
-
-        # Pasar metadata al JS
+        escaped_layout = layout.replace("`", "\\`")
+        
+        # Preparar metadata
         meta = {
             "__safe_html__": bool(self._safe_html),
             "__div_id__": self.div_id
         }
-        # Si hay merge explícito por instancia, sobreescribir en el mapping
+        
+        # Agregar configuración de matriz si existe
+        if self._row_heights is not None:
+            meta["__row_heights__"] = self._row_heights
+        if self._col_widths is not None:
+            meta["__col_widths__"] = self._col_widths
+        if self._gap is not None:
+            meta["__gap__"] = self._gap
+        if self._cell_padding is not None:
+            meta["__cell_padding__"] = self._cell_padding
+        if self._max_width is not None:
+            meta["__max_width__"] = self._max_width
+        if self._figsize is not None:
+            figsize_px = self._figsize_to_pixels(self._figsize)
+            if figsize_px:
+                meta["__figsize__"] = figsize_px
+        
+        # Combinar mapping con metadata
         mapping_merged = {**self._map, **meta}
         if self._merge_opt is not None:
             mapping_merged["__merge__"] = self._merge_opt
-
+        
         mapping_js = json.dumps(_sanitize_for_json(mapping_merged))
+        
+        return {
+            'js_code': js_code,
+            'css_code': css_code,
+            'escaped_layout': escaped_layout,
+            'meta': meta,
+            'mapping_js': mapping_js
+        }
+
+    def _repr_html_(self):
+        # Preparar datos comunes
+        data = self._prepare_repr_data()
 
         # Render HTML con contenedor + CSS + JS inline (compatible con Notebook clásico)
         html = f"""
-        <style>{css_code}</style>
+        <style>{data['css_code']}</style>
         <div id="{self.div_id}" class="matrix-layout"></div>
         <script>
-        {js_code}
-        render("{self.div_id}", `{escaped_layout}`, {mapping_js});
+        (function() {{
+          {data['js_code']}
+          const mapping = {data['mapping_js']};
+          const container = document.getElementById("{self.div_id}");
+          if (container) {{
+            container.__mapping__ = mapping;
+          }}
+          render("{self.div_id}", `{data['escaped_layout']}`, mapping);
+        }})();
         </script>
         """
         return html
@@ -1035,44 +1254,18 @@ class MatrixLayout:
         # Asegurar que el comm target está registrado
         MatrixLayout._ensure_comm_target()
         
-        # Cargar JS y CSS desde el mismo paquete
-        js_path = os.path.join(os.path.dirname(__file__), "matrix.js")
-        css_path = os.path.join(os.path.dirname(__file__), "style.css")
-
-        with open(js_path, "r", encoding="utf-8") as f:
-            js_code = f.read()
-
-        with open(css_path, "r", encoding="utf-8") as f:
-            css_code = f.read()
-
-        rows = [r for r in self.ascii_layout.strip().split("\n") if r]
-        if not rows:
-            raise ValueError("ascii_layout no puede estar vacío")
-        col_len = len(rows[0])
-        if any(len(r) != col_len for r in rows):
-            raise ValueError("Todas las filas del ascii_layout deben tener igual longitud")
-
-        escaped_layout = self.ascii_layout.replace("`", "\\`")
-
+        # Preparar datos comunes
+        data = self._prepare_repr_data()
+        
         html = f"""
-        <style>{css_code}</style>
+        <style>{data['css_code']}</style>
         <div id="{self.div_id}" class="matrix-layout"></div>
         """
         
-        # Pasar div_id y safe_html al JS
-        meta = {
-            "__safe_html__": bool(self._safe_html),
-            "__div_id__": self.div_id
-        }
-        mapping_merged = {**self._map, **meta}
-        if self._merge_opt is not None:
-            mapping_merged["__merge__"] = self._merge_opt
-        mapping_js = json.dumps(_sanitize_for_json(mapping_merged))
-
         js = (
-            js_code
+            data['js_code']
             + "\n"
-            + f'render("{self.div_id}", `{escaped_layout}`, {mapping_js});'
+            + f'(function() {{ const mapping = {data['mapping_js']}; const container = document.getElementById("{self.div_id}"); if (container) {{ container.__mapping__ = mapping; }} render("{self.div_id}", `{data['escaped_layout']}`, mapping); }})();'
         )
 
         return {
@@ -1092,35 +1285,11 @@ class MatrixLayout:
             
             MatrixLayout._ensure_comm_target()
             
-            # Usar el layout proporcionado o el de la instancia
-            layout_to_use = ascii_layout if ascii_layout is not None else self.ascii_layout
-            
-            js_path = os.path.join(os.path.dirname(__file__), "matrix.js")
-            css_path = os.path.join(os.path.dirname(__file__), "style.css")
-            
-            with open(js_path, "r", encoding="utf-8") as f:
-                js_code = f.read()
-            
-            with open(css_path, "r", encoding="utf-8") as f:
-                css_code = f.read()
-            
-            rows = [r for r in layout_to_use.strip().split("\n") if r]
-            if not rows:
-                raise ValueError("ascii_layout no puede estar vacío")
-            
-            escaped_layout = layout_to_use.replace("`", "\\`")
-            
-            meta = {
-                "__safe_html__": bool(self._safe_html),
-                "__div_id__": self.div_id
-            }
-            mapping_merged = {**self._map, **meta}
-            if self._merge_opt is not None:
-                mapping_merged["__merge__"] = self._merge_opt
-            mapping_js = json.dumps(_sanitize_for_json(mapping_merged))
+            # Preparar datos comunes (usa cache)
+            data = self._prepare_repr_data(ascii_layout)
             
             html_content = f"""
-            <style>{css_code}</style>
+            <style>{data['css_code']}</style>
             <div id="{self.div_id}" class="matrix-layout"></div>
             """
             
@@ -1142,8 +1311,13 @@ class MatrixLayout:
                 }}
                 
                 ensureD3().then(d3 => {{
-                    {js_code}
-                    render("{self.div_id}", `{escaped_layout}`, {mapping_js});
+                    {data['js_code']}
+                    const mapping = {data['mapping_js']};
+                    const container = document.getElementById("{self.div_id}");
+                    if (container) {{
+                        container.__mapping__ = mapping;
+                    }}
+                    render("{self.div_id}", `{data['escaped_layout']}`, mapping);
                 }}).catch(e => {{
                     const errorDiv = document.getElementById("{self.div_id}");
                     if (errorDiv) {{

@@ -390,6 +390,7 @@ class ReactiveMatrixLayout:
             try:
                 import json
                 from IPython.display import Javascript
+                import time
                 
                 # Usar datos seleccionados o todos los datos
                 data_to_use = self._data
@@ -400,6 +401,8 @@ class ReactiveMatrixLayout:
                         data_to_use = pd.DataFrame(items)
                     else:
                         data_to_use = items
+                else:
+                    data_to_use = self._data
                 
                 # Preparar datos del bar chart
                 bar_data = self._prepare_barchart_data(
@@ -432,15 +435,40 @@ class ReactiveMatrixLayout:
                 
                 js_update = f"""
                 (function() {{
-                    // Esperar a que D3 esté disponible
+                    // Flag para evitar actualizaciones múltiples simultáneas
+                    if (window._bestlib_updating_{letter}) {{
+                        return;
+                    }}
+                    window._bestlib_updating_{letter} = true;
+                    
+                    // Esperar a que D3 esté disponible con timeout
+                    let attempts = 0;
+                    const maxAttempts = 50; // 5 segundos máximo
+                    
                     function updateBarchart() {{
+                        attempts++;
                         if (!window.d3) {{
-                            setTimeout(updateBarchart, 100);
-                            return;
+                            if (attempts < maxAttempts) {{
+                                setTimeout(updateBarchart, 100);
+                                return;
+                            }} else {{
+                                console.error('Timeout esperando D3.js');
+                                window._bestlib_updating_{letter} = false;
+                                return;
+                            }}
                         }}
                         
                         const container = document.getElementById('{div_id}');
-                        if (!container) return;
+                        if (!container) {{
+                            if (attempts < maxAttempts) {{
+                                setTimeout(updateBarchart, 100);
+                                return;
+                            }} else {{
+                                console.warn('No se encontró contenedor {div_id}');
+                                window._bestlib_updating_{letter} = false;
+                                return;
+                            }}
+                        }}
                         
                         // Buscar celda por data-letter attribute (más robusto)
                         const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
@@ -461,8 +489,14 @@ class ReactiveMatrixLayout:
                         }}
                         
                         if (!targetCell) {{
-                            console.warn('No se encontró celda para bar chart {letter}');
-                            return;
+                            if (attempts < maxAttempts) {{
+                                setTimeout(updateBarchart, 100);
+                                return;
+                            }} else {{
+                                console.warn('No se encontró celda para bar chart {letter} después de {maxAttempts} intentos');
+                                window._bestlib_updating_{letter} = false;
+                                return;
+                            }}
                         }}
                         
                         // Limpiar celda completamente
@@ -549,6 +583,9 @@ class ReactiveMatrixLayout:
                                 .style('stroke', '#000000')
                                 .style('stroke-width', '1.5px');
                         }}
+                        
+                        // Reset flag al finalizar
+                        window._bestlib_updating_{letter} = false;
                     }}
                     
                     updateBarchart();
@@ -569,6 +606,19 @@ class ReactiveMatrixLayout:
                     print(f"⚠️ Error actualizando bar chart: {e}")
                     import traceback
                     traceback.print_exc()
+                # Asegurar que el flag se resetee incluso si hay error
+                js_reset_flag = f"""
+                <script>
+                if (window._bestlib_updating_{letter}) {{
+                    window._bestlib_updating_{letter} = false;
+                }}
+                </script>
+                """
+                try:
+                    from IPython.display import HTML
+                    display(HTML(js_reset_flag))
+                except:
+                    pass
         
         # Guardar callback para referencia
         self._barchart_callbacks[letter] = update_barchart
