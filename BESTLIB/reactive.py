@@ -562,6 +562,12 @@ class ReactiveMatrixLayout:
         
         # Si es vista enlazada, determinar a qué vista principal enlazar
         if not is_primary:
+            # CRÍTICO: Si linked_to es None, NO enlazar automáticamente (gráfico estático)
+            if linked_to is None:
+                # Crear bar chart estático sin enlazar
+                MatrixLayout.map_barchart(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
+                return self
+            
             # Buscar en scatter plots primero (compatibilidad hacia atrás)
             if linked_to in self._scatter_selection_models:
                 primary_letter = linked_to
@@ -570,14 +576,8 @@ class ReactiveMatrixLayout:
                 primary_letter = linked_to
                 primary_selection = self._primary_view_models[primary_letter]
             else:
-                # Si no se especifica, usar la última vista principal disponible
-                all_primary = {**self._scatter_selection_models, **self._primary_view_models}
-                if not all_primary:
-                    raise ValueError("No hay vistas principales disponibles. Agrega una vista principal primero (scatter, bar chart, etc.)")
-                primary_letter = list(all_primary.keys())[-1]
-                primary_selection = all_primary[primary_letter]
-                if MatrixLayout._debug:
-                    print(f"💡 Bar chart '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
+                # Si linked_to está especificado pero no existe, lanzar error
+                raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
             
             # Guardar el enlace
             self._barchart_to_scatter[letter] = primary_letter
@@ -1255,6 +1255,12 @@ class ReactiveMatrixLayout:
         
         # Si es vista enlazada, determinar a qué vista principal enlazar
         if not is_primary:
+            # CRÍTICO: Si linked_to es None, NO enlazar automáticamente (gráfico estático)
+            if linked_to is None:
+                # Crear histograma estático sin enlazar
+                MatrixLayout.map_histogram(letter, self._data, value_col=column, bins=bins, **kwargs)
+                return self
+            
             # Buscar en scatter plots primero (compatibilidad hacia atrás)
             if linked_to in self._scatter_selection_models:
                 primary_letter = linked_to
@@ -1263,13 +1269,8 @@ class ReactiveMatrixLayout:
                 primary_letter = linked_to
                 primary_selection = self._primary_view_models[primary_letter]
             else:
-                all_primary = {**self._scatter_selection_models, **self._primary_view_models}
-                if not all_primary:
-                    raise ValueError("No hay vistas principales disponibles. Agrega una vista principal primero.")
-                primary_letter = list(all_primary.keys())[-1]
-                primary_selection = all_primary[primary_letter]
-                if MatrixLayout._debug:
-                    print(f"💡 Histogram '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
+                # Si linked_to está especificado pero no existe, lanzar error
+                raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
             
             # Guardar parámetros
             hist_params = {
@@ -2297,6 +2298,11 @@ class ReactiveMatrixLayout:
         
         # Si es vista enlazada, configurar callback
         if not is_primary:
+            # CRÍTICO: Si linked_to es None, NO enlazar automáticamente (gráfico estático)
+            if linked_to is None:
+                # Pie chart estático sin enlazar (ya se creó arriba)
+                return self
+            
             # Buscar en scatter plots primero (compatibilidad hacia atrás)
             if linked_to in self._scatter_selection_models:
                 primary_letter = linked_to
@@ -2305,13 +2311,8 @@ class ReactiveMatrixLayout:
                 primary_letter = linked_to
                 primary_selection = self._primary_view_models[primary_letter]
             else:
-                all_primary = {**self._scatter_selection_models, **self._primary_view_models}
-                if not all_primary:
-                    return self
-                primary_letter = list(all_primary.keys())[-1]
-                primary_selection = all_primary[primary_letter]
-                if MatrixLayout._debug:
-                    print(f"💡 Pie chart '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
+                # Si linked_to está especificado pero no existe, lanzar error
+                raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
             
             # Flag para evitar actualizaciones recursivas del pie chart
             pie_update_flag = f'_pie_updating_{letter}'
