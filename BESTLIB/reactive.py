@@ -1666,22 +1666,117 @@ class ReactiveMatrixLayout:
         sel.on_change(update)
         return self
 
-    def add_pie(self, letter, category_col=None, value_col=None, linked_to=None, **kwargs):
+    def add_pie(self, letter, category_col=None, value_col=None, linked_to=None, interactive=None, selection_var=None, **kwargs):
+        """
+        Agrega un pie chart que puede ser vista principal o enlazada.
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el pie chart
+            category_col: Nombre de columna para categorías
+            value_col: Nombre de columna para valores (opcional, si no se especifica cuenta)
+            linked_to: Letra de la vista principal que debe actualizar este pie chart (opcional)
+                      Si no se especifica y interactive=True, este pie chart será vista principal
+            interactive: Si True, permite seleccionar segmentos. Si es None, se infiere de linked_to
+            selection_var: Nombre de variable Python donde guardar selecciones (ej: 'selected_category')
+            **kwargs: Argumentos adicionales (colorMap, axes, etc.)
+        
+        Returns:
+            self para encadenamiento
+        
+        Ejemplos:
+            # Pie chart como vista principal
+            layout.add_pie('P1', category_col='dept', interactive=True, selection_var='selected_dept')
+            
+            # Pie chart enlazado a bar chart
+            layout.add_barchart('B', category_col='dept', interactive=True)
+            layout.add_pie('P2', category_col='dept', linked_to='B')
+        """
         from .matrix import MatrixLayout
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
+        
+        # Determinar si será vista principal o enlazada
+        if linked_to is None:
+            if interactive is None:
+                interactive = True  # Por defecto, hacerlo interactivo si no está enlazado
+            is_primary = interactive
+        else:
+            is_primary = False
+            if interactive is None:
+                interactive = False
+        
+        # Si es vista principal, crear su propio SelectionModel
+        if is_primary:
+            pie_selection = SelectionModel()
+            self._primary_view_models[letter] = pie_selection
+            self._primary_view_types[letter] = 'pie'
+            
+            # Guardar variable de selección si se especifica
+            if selection_var:
+                self._selection_variables[letter] = selection_var
+                import __main__
+                setattr(__main__, selection_var, [])
+                if MatrixLayout._debug:
+                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de pie chart '{letter}'")
+            
+            # Crear handler para eventos de selección del pie chart
+            def pie_handler(payload):
+                """Handler que actualiza el SelectionModel de este pie chart"""
+                event_letter = payload.get('__view_letter__')
+                if event_letter != letter:
+                    return
+                
+                items = payload.get('items', [])
+                
+                if MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Evento recibido para pie chart '{letter}': {len(items)} items")
+                
+                pie_selection.update(items)
+                self.selection_model.update(items)
+                self._selected_data = items
+                
+                # Guardar en variable Python si se especificó
+                if selection_var:
+                    import __main__
+                    setattr(__main__, selection_var, items)
+                    if MatrixLayout._debug:
+                        print(f"💾 Selección guardada en variable '{selection_var}': {len(items)} items")
+            
+            self._layout.on('select', pie_handler)
+            
+            kwargs['__view_letter__'] = letter
+            kwargs['__is_primary_view__'] = True
+            kwargs['interactive'] = True
+        
+        # Crear pie chart inicial con todos los datos
         MatrixLayout.map_pie(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
-        if not self._scatter_selection_models:
-            return self
-        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
-        sel = self._scatter_selection_models[scatter_letter]
-        def update(items, count):
-            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
-            try:
-                MatrixLayout.map_pie(letter, data_to_use, category_col=category_col, value_col=value_col, **kwargs)
-            except Exception:
-                pass
-        sel.on_change(update)
+        
+        # Si es vista enlazada, configurar callback
+        if not is_primary:
+            # Buscar en scatter plots primero (compatibilidad hacia atrás)
+            if linked_to in self._scatter_selection_models:
+                primary_letter = linked_to
+                primary_selection = self._scatter_selection_models[primary_letter]
+            elif linked_to in self._primary_view_models:
+                primary_letter = linked_to
+                primary_selection = self._primary_view_models[primary_letter]
+            else:
+                all_primary = {**self._scatter_selection_models, **self._primary_view_models}
+                if not all_primary:
+                    return self
+                primary_letter = list(all_primary.keys())[-1]
+                primary_selection = all_primary[primary_letter]
+                if MatrixLayout._debug:
+                    print(f"💡 Pie chart '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
+            
+            def update(items, count):
+                data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+                try:
+                    MatrixLayout.map_pie(letter, data_to_use, category_col=category_col, value_col=value_col, **kwargs)
+                except Exception:
+                    pass
+            primary_selection.on_change(update)
+        
         return self
 
     def add_violin(self, letter, value_col=None, category_col=None, bins=20, linked_to=None, **kwargs):
@@ -1718,6 +1813,74 @@ class ReactiveMatrixLayout:
                 return
             try:
                 MatrixLayout.map_radviz(letter, df, features=features, class_col=class_col, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+    
+    def add_star_coordinates(self, letter, features=None, class_col=None, linked_to=None, **kwargs):
+        """
+        Agrega Star Coordinates: similar a RadViz pero los nodos pueden moverse libremente por toda el área.
+        
+        Args:
+            letter: Letra del layout ASCII
+            features: Lista de columnas numéricas a usar (opcional, usa todas las numéricas por defecto)
+            class_col: Columna para categorías (colorear puntos)
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
+            raise ValueError("add_star_coordinates requiere DataFrame")
+        MatrixLayout.map_star_coordinates(letter, self._data, features=features, class_col=class_col, **kwargs)
+        # Star Coordinates como dependiente: redibujar con selección
+        if not self._scatter_selection_models:
+            return self
+        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
+        sel = self._scatter_selection_models[scatter_letter]
+        def update(items, count):
+            df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+            if df is None:
+                return
+            try:
+                MatrixLayout.map_star_coordinates(letter, df, features=features, class_col=class_col, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+    
+    def add_parallel_coordinates(self, letter, dimensions=None, category_col=None, linked_to=None, **kwargs):
+        """
+        Agrega Parallel Coordinates Plot con ejes arrastrables y reordenables.
+        
+        Args:
+            letter: Letra del layout ASCII
+            dimensions: Lista de columnas numéricas a usar como ejes (opcional, usa todas las numéricas por defecto)
+            category_col: Columna para categorías (colorear líneas)
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
+            raise ValueError("add_parallel_coordinates requiere DataFrame")
+        MatrixLayout.map_parallel_coordinates(letter, self._data, dimensions=dimensions, category_col=category_col, **kwargs)
+        # Parallel Coordinates como dependiente: redibujar con selección
+        if not self._scatter_selection_models:
+            return self
+        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
+        sel = self._scatter_selection_models[scatter_letter]
+        def update(items, count):
+            df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+            if df is None:
+                return
+            try:
+                MatrixLayout.map_parallel_coordinates(letter, df, dimensions=dimensions, category_col=category_col, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)

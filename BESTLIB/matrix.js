@@ -291,7 +291,9 @@
         value.type === 'heatmap' ||
         value.type === 'line' ||
         value.type === 'violin' ||
-        value.type === 'radviz'
+        value.type === 'radviz' ||
+        value.type === 'star_coordinates' ||
+        value.type === 'parallel_coordinates'
       );
     }
     
@@ -788,11 +790,15 @@
       renderViolinD3(container, spec, d3, divId);
     } else if (chartType === 'radviz') {
       renderRadVizD3(container, spec, d3, divId);
+    } else if (chartType === 'star_coordinates') {
+      renderStarCoordinatesD3(container, spec, d3, divId);
+    } else if (chartType === 'parallel_coordinates') {
+      renderParallelCoordinatesD3(container, spec, d3, divId);
     } else {
       // Tipo de gráfico no soportado aún, mostrar mensaje visible
       const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
         '<strong>Error: Gráfico tipo "' + chartType + '" no implementado aún</strong><br/>' +
-        '<small>Tipos soportados: bar, scatter, histogram, boxplot, heatmap, line, pie, violin, radviz</small>' +
+        '<small>Tipos soportados: bar, scatter, histogram, boxplot, heatmap, line, pie, violin, radviz, star_coordinates, parallel_coordinates</small>' +
         '</div>';
       container.innerHTML = errorMsg;
       console.error('renderChartD3: Tipo de gráfico no soportado', { chartType, spec });
@@ -1548,11 +1554,23 @@
       .on('click', function(event, d) {
         if (!spec.interactive) return;
         const category = d.data.category;
+        
+        // Obtener letra de la vista (para vistas principales)
+        let viewLetter = spec.__view_letter__ || null;
+        if (!viewLetter && container) {
+          const letterAttr = container.getAttribute('data-letter');
+          if (letterAttr) {
+            viewLetter = letterAttr;
+          }
+        }
+        
         sendEvent(divId, 'select', {
           type: 'pie',
           items: [{ category }],
           indices: [],
-          selected_category: category
+          selected_category: category,
+          __view_letter__: viewLetter,
+          __is_primary_view__: spec.__is_primary_view__ || false
         });
       })
       .on('mouseenter', function(event, d) {
@@ -2229,6 +2247,479 @@
           .attr('r', 3)
           .attr('opacity', 0.6);
       });
+  }
+  
+  /**
+   * Star Coordinates con D3.js
+   * Similar a RadViz pero los nodos pueden moverse libremente por toda el área
+   */
+  function renderStarCoordinatesD3(container, spec, d3, divId) {
+    const points = spec.data || [];
+    const features = spec.features || [];
+    
+    // Validar datos
+    if (!points || points.length === 0) {
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error: No hay datos para Star Coordinates</strong><br/>' +
+        '<small>El spec debe contener data con puntos y features</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('Star Coordinates: No hay datos', { spec });
+      return;
+    }
+    
+    if (!features || features.length < 2) {
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error: Se requieren al menos 2 features para Star Coordinates</strong><br/>' +
+        '<small>Features disponibles: ' + (features ? features.length : 0) + '</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('Star Coordinates: Features insuficientes', { features });
+      return;
+    }
+    
+    // Filtrar puntos válidos
+    const validPoints = points.filter(p => 
+      p != null && 
+      typeof p.x === 'number' && !isNaN(p.x) && 
+      typeof p.y === 'number' && !isNaN(p.y)
+    );
+    
+    if (validPoints.length === 0) {
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error: No hay puntos válidos para Star Coordinates</strong><br/>' +
+        '<small>Los puntos deben tener coordenadas x e y válidas</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('Star Coordinates: No hay puntos válidos', { points: points.slice(0, 3), spec });
+      return;
+    }
+    
+    const dims = getChartDimensions(container, spec, 520, 380);
+    let width = dims.width;
+    let height = dims.height;
+    const defaultMargin = { top: 60, right: 60, bottom: 60, left: 60 };
+    const margin = calculateAxisMargins(spec, defaultMargin);
+    
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    const minChartWidth = 300;
+    const minWidth = margin.left + margin.right + minChartWidth;
+    if (width < minWidth) {
+      width = minWidth;
+      chartWidth = width - margin.left - margin.right;
+    }
+    
+    const minChartHeight = 300;
+    const minHeight = margin.top + margin.bottom + minChartHeight;
+    if (height < minHeight) {
+      height = minHeight;
+      chartHeight = height - margin.top - margin.bottom;
+    }
+    
+    const svg = d3.select(container).append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .style('overflow', 'visible');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    // Inicializar posiciones de nodos (features) distribuidas uniformemente en el área
+    // Por defecto, los colocamos en un círculo, pero pueden moverse libremente
+    const initialRadius = Math.min(chartWidth, chartHeight) / 2 - 20;
+    const anchorPos = features.map((f, i) => {
+      const ang = 2 * Math.PI * i / features.length - Math.PI / 2;
+      return {
+        x: chartWidth / 2 + initialRadius * Math.cos(ang),
+        y: chartHeight / 2 + initialRadius * Math.sin(ang),
+        name: String(f),
+        index: i
+      };
+    });
+    
+    // Escalas para proyectar puntos (normalizados)
+    const xExtent = d3.extent(validPoints, d => d.x);
+    const yExtent = d3.extent(validPoints, d => d.y);
+    const maxExtent = Math.max(
+      Math.abs(xExtent[0] || 0),
+      Math.abs(xExtent[1] || 0),
+      Math.abs(yExtent[0] || 0),
+      Math.abs(yExtent[1] || 0)
+    ) || 1;
+    
+    const toX = d3.scaleLinear()
+      .domain([-maxExtent, maxExtent])
+      .range([0, chartWidth]);
+    
+    const toY = d3.scaleLinear()
+      .domain([-maxExtent, maxExtent])
+      .range([chartHeight, 0]);
+    
+    // Función para recalcular posiciones de puntos cuando se mueven los nodos
+    function recalculateStarPoints() {
+      g.selectAll('.scpt').each(function(d) {
+        if (d._weights && Array.isArray(d._weights) && d._weights.length === anchorPos.length) {
+          const weights = d._weights;
+          const s = d3.sum(weights) || 1.0;
+          
+          // Proyección: suma ponderada de posiciones de nodos
+          const newX = d3.sum(weights.map((w, i) => w * anchorPos[i].x)) / s;
+          const newY = d3.sum(weights.map((w, i) => w * anchorPos[i].y)) / s;
+          
+          d.x = newX;
+          d.y = newY;
+          
+          // Actualizar visualmente
+          d3.select(this)
+            .transition()
+            .duration(200)
+            .attr('cx', toX(newX))
+            .attr('cy', toY(newY));
+        }
+      });
+    }
+    
+    // Dibujar líneas desde el origen (centro) hasta los nodos
+    const anchorLines = g.selectAll('.anchor-line')
+      .data(anchorPos)
+      .enter()
+      .append('line')
+      .attr('class', (d, i) => `anchor-line anchor-line-${i}`)
+      .attr('x1', chartWidth / 2)
+      .attr('y1', chartHeight / 2)
+      .attr('x2', d => d.x)
+      .attr('y2', d => d.y)
+      .attr('stroke', '#ddd')
+      .attr('stroke-width', 1)
+      .attr('stroke-dasharray', '2,2')
+      .lower();
+    
+    // Dibujar nodos (arrastrables libremente por toda el área)
+    const anchorCircles = g.selectAll('.anchor')
+      .data(anchorPos)
+      .enter()
+      .append('circle')
+      .attr('class', 'anchor')
+      .attr('r', 8)
+      .attr('cx', d => d.x)
+      .attr('cy', d => d.y)
+      .attr('fill', '#555')
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 2)
+      .style('cursor', 'move')
+      .call(d3.drag()
+        .on('start', function(event, d) {
+          d3.select(this).attr('fill', '#ff6b35').attr('r', 10);
+        })
+        .on('drag', function(event, d) {
+          // Obtener posición del mouse relativa al grupo g
+          const [mx, my] = d3.pointer(event, g.node());
+          
+          // Limitar movimiento dentro del área del gráfico (con margen)
+          const padding = 10;
+          d.x = Math.max(padding, Math.min(chartWidth - padding, mx));
+          d.y = Math.max(padding, Math.min(chartHeight - padding, my));
+          
+          // Actualizar círculo
+          d3.select(this)
+            .attr('cx', d.x)
+            .attr('cy', d.y);
+          
+          // Actualizar línea
+          const line = g.select(`.anchor-line-${d.index}`);
+          if (!line.empty()) {
+            line
+              .attr('x2', d.x)
+              .attr('y2', d.y);
+          }
+          
+          // Actualizar etiqueta
+          const label = g.select(`.alabel-${d.index}`);
+          if (!label.empty()) {
+            label
+              .attr('x', d.x)
+              .attr('y', d.y - 15);
+          }
+          
+          // Recalcular posiciones de todos los puntos
+          recalculateStarPoints();
+        })
+        .on('end', function(event, d) {
+          d3.select(this).attr('fill', '#555').attr('r', 8);
+        })
+      );
+    
+    // Etiquetas de los nodos
+    const anchorLabels = g.selectAll('.alabel')
+      .data(anchorPos)
+      .enter()
+      .append('text')
+      .attr('class', (d, i) => `alabel alabel-${i}`)
+      .attr('x', d => d.x)
+      .attr('y', d => d.y - 15)
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .style('font-size', '11px')
+      .style('fill', '#333')
+      .style('font-weight', 'bold')
+      .style('pointer-events', 'none')
+      .text(d => d.name);
+    
+    // Obtener categorías únicas
+    const categories = [...new Set(validPoints.map(p => p.category).filter(c => c != null && c !== ''))];
+    const color = d3.scaleOrdinal(d3.schemeCategory10).domain(categories.length > 0 ? categories : ['default']);
+    
+    // Dibujar puntos
+    g.selectAll('.scpt')
+      .data(validPoints)
+      .enter()
+      .append('circle')
+      .attr('class', 'scpt')
+      .attr('cx', d => toX(d.x))
+      .attr('cy', d => toY(d.y))
+      .attr('r', 3)
+      .attr('fill', d => d.category && categories.includes(d.category) ? color(d.category) : '#4a90e2')
+      .attr('opacity', 0.6)
+      .attr('stroke', d => d.category && categories.includes(d.category) ? color(d.category) : '#4a90e2')
+      .attr('stroke-width', 1)
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(event, d) {
+        d3.select(this)
+          .attr('r', 5)
+          .attr('opacity', 1);
+      })
+      .on('mouseleave', function() {
+        d3.select(this)
+          .attr('r', 3)
+          .attr('opacity', 0.6);
+      });
+  }
+  
+  /**
+   * Parallel Coordinates Plot con D3.js
+   * Ejes paralelos que pueden moverse y reordenarse
+   */
+  function renderParallelCoordinatesD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const dimensions = spec.dimensions || [];
+    
+    // Validar datos
+    if (!data || data.length === 0) {
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error: No hay datos para Parallel Coordinates</strong><br/>' +
+        '<small>El spec debe contener data con puntos</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('Parallel Coordinates: No hay datos', { spec });
+      return;
+    }
+    
+    if (!dimensions || dimensions.length < 2) {
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error: Se requieren al menos 2 dimensiones para Parallel Coordinates</strong><br/>' +
+        '<small>Dimensiones disponibles: ' + (dimensions ? dimensions.length : 0) + '</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('Parallel Coordinates: Dimensiones insuficientes', { dimensions });
+      return;
+    }
+    
+    const dims = getChartDimensions(container, spec, 600, 400);
+    let width = dims.width;
+    let height = dims.height;
+    const defaultMargin = { top: 30, right: 20, bottom: 30, left: 20 };
+    const margin = calculateAxisMargins(spec, defaultMargin);
+    
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    const minChartWidth = 400;
+    const minWidth = margin.left + margin.right + minChartWidth;
+    if (width < minWidth) {
+      width = minWidth;
+      chartWidth = width - margin.left - margin.right;
+    }
+    
+    const minChartHeight = 300;
+    const minHeight = margin.top + margin.bottom + minChartHeight;
+    if (height < minHeight) {
+      height = minHeight;
+      chartHeight = height - margin.top - margin.bottom;
+    }
+    
+    const svg = d3.select(container).append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .style('overflow', 'visible');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    // Calcular escalas para cada dimensión
+    const scales = {};
+    const axisPositions = [];
+    
+    dimensions.forEach((dim, i) => {
+      // Calcular dominio de valores para esta dimensión
+      const values = data.map(d => {
+        const val = d[dim];
+        return (val != null && !isNaN(val)) ? parseFloat(val) : null;
+      }).filter(v => v != null);
+      
+      if (values.length === 0) {
+        scales[dim] = d3.scaleLinear().domain([0, 1]).range([chartHeight, 0]);
+      } else {
+        const minVal = d3.min(values);
+        const maxVal = d3.max(values);
+        scales[dim] = d3.scaleLinear()
+          .domain([minVal, maxVal])
+          .range([chartHeight, 0])
+          .nice();
+      }
+      
+      // Posición inicial del eje (distribuidos uniformemente)
+      axisPositions.push({
+        name: dim,
+        x: (chartWidth / (dimensions.length - 1)) * i,
+        index: i
+      });
+    });
+    
+    // Función para dibujar líneas de datos
+    function drawDataLines() {
+      // Limpiar líneas anteriores
+      g.selectAll('.pcline').remove();
+      
+      // Obtener categorías para colorear
+      const categoryCol = spec.category_col || null;
+      const categories = categoryCol ? [...new Set(data.map(d => d[categoryCol]).filter(c => c != null))] : [];
+      const color = categories.length > 0 
+        ? d3.scaleOrdinal(d3.schemeCategory10).domain(categories)
+        : () => '#4a90e2';
+      
+      // Función para generar puntos de la línea para un dato
+      function generateLinePoints(d) {
+        return dimensions.map((dim, i) => {
+          const axis = axisPositions[i];
+          const scale = scales[dim];
+          const val = d[dim];
+          const y = (val != null && !isNaN(val)) ? scale(parseFloat(val)) : chartHeight / 2;
+          return [axis ? axis.x : 0, y];
+        });
+      }
+      
+      // Dibujar líneas
+      g.selectAll('.pcline')
+        .data(data)
+        .enter()
+        .append('path')
+        .attr('class', 'pcline')
+        .attr('d', d => {
+          const points = generateLinePoints(d);
+          return d3.line()
+            .x(d => d[0])
+            .y(d => d[1])
+            .curve(d3.curveMonotoneX)(points);
+        })
+        .attr('fill', 'none')
+        .attr('stroke', d => categoryCol && d[categoryCol] && categories.includes(d[categoryCol]) 
+          ? color(d[categoryCol]) 
+          : '#4a90e2')
+        .attr('stroke-width', 1.5)
+        .attr('opacity', 0.6)
+        .style('cursor', 'pointer')
+        .on('mouseenter', function() {
+          d3.select(this)
+            .attr('stroke-width', 3)
+            .attr('opacity', 1);
+        })
+        .on('mouseleave', function() {
+          d3.select(this)
+            .attr('stroke-width', 1.5)
+            .attr('opacity', 0.6);
+        });
+    }
+    
+    // Dibujar ejes (arrastrables y reordenables)
+    const axisGroups = g.selectAll('.axis-group')
+      .data(axisPositions)
+      .enter()
+      .append('g')
+      .attr('class', 'axis-group')
+      .attr('transform', d => `translate(${d.x}, 0)`)
+      .call(d3.drag()
+        .on('start', function(event, d) {
+          d3.select(this).select('.axis-line').attr('stroke', '#ff6b35').attr('stroke-width', 3);
+        })
+        .on('drag', function(event, d) {
+          const [mx] = d3.pointer(event, g.node());
+          // Limitar movimiento horizontal dentro del área
+          const padding = 20;
+          d.x = Math.max(padding, Math.min(chartWidth - padding, mx));
+          
+          // Actualizar posición del grupo
+          d3.select(this).attr('transform', `translate(${d.x}, 0)`);
+          
+          // Reordenar ejes si se cruzan (opcional: mantener orden)
+          axisPositions.sort((a, b) => a.x - b.x);
+          axisPositions.forEach((ax, idx) => {
+            ax.index = idx;
+          });
+          
+          // Redibujar líneas
+          drawDataLines();
+        })
+        .on('end', function(event, d) {
+          d3.select(this).select('.axis-line').attr('stroke', '#333').attr('stroke-width', 2);
+        })
+      );
+    
+    // Línea del eje
+    axisGroups.append('line')
+      .attr('class', 'axis-line')
+      .attr('x1', 0)
+      .attr('x2', 0)
+      .attr('y1', 0)
+      .attr('y2', chartHeight)
+      .attr('stroke', '#333')
+      .attr('stroke-width', 2)
+      .style('cursor', 'move');
+    
+    // Etiquetas y ticks del eje
+    axisGroups.each(function(d) {
+      const axisG = d3.select(this);
+      const dim = d.name;
+      const scale = scales[dim];
+      
+      // Ticks del eje
+      const axis = d3.axisLeft(scale).ticks(5);
+      axisG.append('g')
+        .attr('class', 'axis-ticks')
+        .call(axis);
+      
+      // Etiqueta del eje
+      axisG.append('text')
+        .attr('class', 'axis-label')
+        .attr('x', 0)
+        .attr('y', -10)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .style('font-size', '12px')
+        .style('font-weight', 'bold')
+        .style('fill', '#333')
+        .style('pointer-events', 'none')
+        .text(dim);
+    });
+    
+    // Dibujar líneas de datos iniciales
+    drawDataLines();
+    
+    // Renderizar etiquetas de ejes si están especificadas
+    if (spec.xLabel || spec.yLabel) {
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+    }
   }
   
   /**

@@ -1115,6 +1115,117 @@ class MatrixLayout:
             cls._map = {}
         cls._map[letter] = spec
         return spec
+    
+    @classmethod
+    def map_star_coordinates(cls, letter, data, features=None, class_col=None, **kwargs):
+        """
+        Crea datos para Star Coordinates: similar a RadViz pero los nodos pueden moverse libremente.
+        Retorna puntos {x,y,category} con valores normalizados de features guardados.
+        """
+        if not (HAS_PANDAS and isinstance(data, pd.DataFrame)):
+            raise ValueError("map_star_coordinates requiere DataFrame")
+        import math
+        df = data.copy()
+        feats = features or df.select_dtypes(include=['number']).columns.tolist()
+        if len(feats) < 2:
+            raise ValueError("Se requieren al menos 2 features para Star Coordinates")
+        
+        # Normalizar features a 0-1
+        for c in feats:
+            col = df[c].astype(float)
+            mn, mx = col.min(), col.max()
+            if mx > mn:
+                df[c] = (col - mn) / (mx - mn)
+            else:
+                df[c] = 0.5
+        
+        k = len(feats)
+        # Inicializar posiciones de nodos en círculo (se moverán libremente en JS)
+        anchors = []
+        for i in range(k):
+            ang = 2*math.pi * i / k
+            anchors.append((math.cos(ang), math.sin(ang)))
+        
+        points = []
+        for _, row in df.iterrows():
+            weights = [row[c] for c in feats]
+            s = sum(weights) or 1.0
+            x = sum(w * anchors[i][0] for i, w in enumerate(weights)) / s
+            y = sum(w * anchors[i][1] for i, w in enumerate(weights)) / s
+            point_data = {
+                'x': float(x),
+                'y': float(y),
+                'category': str(row[class_col]) if class_col and class_col in df.columns else None,
+                '_weights': [float(w) for w in weights]  # Valores normalizados para recalcular
+            }
+            points.append(point_data)
+        
+        # Procesar figsize si está en kwargs
+        cls._process_figsize_in_kwargs(kwargs)
+        
+        spec = { 'type': 'star_coordinates', 'data': points, 'features': feats, **kwargs }
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_parallel_coordinates(cls, letter, data, dimensions=None, category_col=None, **kwargs):
+        """
+        Crea datos para Parallel Coordinates Plot.
+        
+        Args:
+            letter: Letra del layout ASCII
+            data: DataFrame de pandas
+            dimensions: Lista de columnas a usar como ejes (opcional, usa todas las numéricas por defecto)
+            category_col: Columna para categorías (colorear líneas)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            spec con type='parallel_coordinates' y datos preparados
+        """
+        if not (HAS_PANDAS and isinstance(data, pd.DataFrame)):
+            raise ValueError("map_parallel_coordinates requiere DataFrame")
+        
+        # Determinar dimensiones
+        if dimensions is None:
+            dims = data.select_dtypes(include=['number']).columns.tolist()
+        else:
+            dims = [d for d in dimensions if d in data.columns]
+        
+        if len(dims) < 2:
+            raise ValueError("Se requieren al menos 2 dimensiones numéricas para Parallel Coordinates")
+        
+        # Preparar datos: cada fila es un punto con valores para cada dimensión
+        import math
+        points = []
+        for _, row in data.iterrows():
+            point = {}
+            for dim in dims:
+                val = row[dim]
+                if val is not None and not (isinstance(val, float) and math.isnan(val)):
+                    point[dim] = float(val)
+                else:
+                    point[dim] = None
+            if category_col and category_col in data.columns:
+                point['category'] = str(row[category_col])
+            points.append(point)
+        
+        # Procesar figsize si está en kwargs
+        cls._process_figsize_in_kwargs(kwargs)
+        
+        spec = {
+            'type': 'parallel_coordinates',
+            'data': points,
+            'dimensions': dims,
+            'category_col': category_col,
+            **kwargs
+        }
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
     @classmethod
     def set_safe_html(cls, safe: bool):
         cls._safe_html = bool(safe)
