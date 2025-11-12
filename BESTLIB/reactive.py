@@ -1696,14 +1696,11 @@ class ReactiveMatrixLayout:
                 if not box_data:
                     return
                 
-                # Actualizar mapping
-                MatrixLayout._map[letter] = {
-                    'type': 'boxplot',
-                    'data': box_data,
-                    'column': column,
-                    'category_col': category_col,
-                    **kwargs
-                }
+                # IMPORTANTE: NO actualizar el mapping aquí para evitar bucles infinitos y re-renderización del layout completo
+                # Solo actualizar visualmente el gráfico con JavaScript
+                # El mapping se actualiza cuando se crea inicialmente el boxplot
+                # Actualizar el mapping global causa que el sistema detecte cambios y re-renderice todo el layout,
+                # lo que resulta en duplicación de gráficos, especialmente en layouts grandes (3x3, etc.)
                 
                 # JavaScript para actualizar el gráfico
                 div_id = boxplot_params['layout_div_id']
@@ -1713,6 +1710,12 @@ class ReactiveMatrixLayout:
                 
                 js_update = f"""
                 (function() {{
+                    // Flag para evitar actualizaciones múltiples simultáneas
+                    if (window._bestlib_updating_boxplot_{letter}) {{
+                        return;
+                    }}
+                    window._bestlib_updating_boxplot_{letter} = true;
+                    
                     function updateBoxplot() {{
                         if (!window.d3) {{
                             setTimeout(updateBoxplot, 100);
@@ -1720,11 +1723,15 @@ class ReactiveMatrixLayout:
                         }}
                         
                         const container = document.getElementById('{div_id}');
-                        if (!container) return;
+                        if (!container) {{
+                            window._bestlib_updating_boxplot_{letter} = false;
+                            return;
+                        }}
                         
                         const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
                         let targetCell = null;
                         
+                        // Buscar celda con SVG existente (más robusto)
                         for (let cell of cells) {{
                             const svg = cell.querySelector('svg');
                             if (svg) {{
@@ -1733,13 +1740,26 @@ class ReactiveMatrixLayout:
                             }}
                         }}
                         
+                        // Si no encontramos, usar la primera celda
                         if (!targetCell && cells.length > 0) {{
                             targetCell = cells[0];
                         }}
                         
-                        if (!targetCell) return;
+                        if (!targetCell) {{
+                            window._bestlib_updating_boxplot_{letter} = false;
+                            return;
+                        }}
                         
-                        targetCell.innerHTML = '';
+                        // CRÍTICO: Solo limpiar el contenido de la celda, NO tocar el contenedor principal
+                        // Esto evita que se dispare un re-render del layout completo
+                        // En lugar de usar innerHTML = '', removemos solo el SVG existente
+                        const existingSvg = targetCell.querySelector('svg');
+                        if (existingSvg) {{
+                            existingSvg.remove();
+                        }}
+                        // Limpiar cualquier otro contenido visual (divs, etc.) pero mantener la estructura de la celda
+                        const otherContent = targetCell.querySelectorAll('div:not(.matrix-cell)');
+                        otherContent.forEach(el => el.remove());
                         
                         const width = Math.max(targetCell.clientWidth || 400, 200);
                         const availableHeight = Math.max(targetCell.clientHeight - 30, 320);
@@ -1752,6 +1772,7 @@ class ReactiveMatrixLayout:
                         
                         if (data.length === 0) {{
                             targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
+                            window._bestlib_updating_boxplot_{letter} = false;
                             return;
                         }}
                         
@@ -1824,6 +1845,9 @@ class ReactiveMatrixLayout:
                             const yAxis = g.append('g')
                                 .call(window.d3.axisLeft(y));
                         }}
+                        
+                        // Resetear flag después de completar la actualización
+                        window._bestlib_updating_boxplot_{letter} = false;
                     }}
                     
                     updateBoxplot();
