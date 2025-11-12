@@ -816,6 +816,7 @@ class MatrixLayout:
     def map_correlation_heatmap(cls, letter, data, **kwargs):
         """
         Calcula matriz de correlación (pearson) para columnas numéricas del DataFrame.
+        Las etiquetas X e Y están ordenadas de la misma manera para mantener consistencia.
         """
         if not (HAS_PANDAS and isinstance(data, pd.DataFrame)):
             raise ValueError("map_correlation_heatmap requiere DataFrame de pandas")
@@ -823,21 +824,30 @@ class MatrixLayout:
         if num_df.shape[1] == 0:
             raise ValueError("No hay columnas numéricas para correlación")
         corr = num_df.corr().fillna(0.0)
-        cols = corr.columns.tolist()
+        # Ordenar columnas alfabéticamente para consistencia
+        cols = sorted(corr.columns.tolist())
+        corr = corr.loc[cols, cols]  # Reordenar matriz de correlación
         cells = []
+        # Crear celdas asegurando que x e y estén en el mismo orden
         for i, xi in enumerate(cols):
             for j, yj in enumerate(cols):
-                cells.append({'x': xi, 'y': yj, 'value': float(corr.iloc[j, i])})
+                # Usar iloc correctamente: fila j, columna i (o usar loc con nombres)
+                cells.append({'x': str(xi), 'y': str(yj), 'value': float(corr.loc[yj, xi])})
         
         # Procesar figsize si está en kwargs
         cls._process_figsize_in_kwargs(kwargs)
         
+        # Opción para mostrar valores numéricos (por defecto False)
+        showValues = kwargs.get('showValues', False)
+        
         spec = {
             'type': 'heatmap',
             'data': cells,
-            'xLabels': cols,
-            'yLabels': cols,
+            'xLabels': cols,  # Mismo orden que yLabels
+            'yLabels': cols,  # Mismo orden que xLabels
             'isCorrelation': True,
+            'showValues': showValues,  # Opción para mostrar valores
+            'colorScale': 'diverging',  # Usar escala divergente para correlación
             **kwargs
         }
         if not hasattr(cls, '_map') or cls._map is None:
@@ -946,9 +956,15 @@ class MatrixLayout:
             try:
                 import numpy as np
                 hist, edges = np.histogram(values, bins=bins)
+                if len(hist) == 0 or np.max(hist) == 0:
+                    # Si no hay datos válidos, retornar perfil vacío
+                    return []
                 dens = hist / (np.max(hist) if np.max(hist) > 0 else 1)
                 centers = [(edges[i] + edges[i+1]) / 2 for i in range(len(edges)-1)]
-                return [{'y': float(c), 'w': float(d)} for c, d in zip(centers, dens)]
+                # Incluir todos los bins, incluso los de densidad 0, para mantener la forma del violín
+                # Pero usar un valor mínimo para w (densidad) para que sea visible
+                profile = [{'y': float(c), 'w': float(max(d, 0.01))} for c, d in zip(centers, dens)]
+                return profile
             except Exception:
                 mn, mx = min(values), max(values)
                 step = (mx - mn) / bins if mx > mn else 1
@@ -958,9 +974,15 @@ class MatrixLayout:
                     idx = min(int((v - mn)/step), bins-1) if step>0 else 0
                     counts[idx] += 1
                 m = max(counts) or 1
+                if m == 0:
+                    # Si no hay datos válidos, retornar perfil vacío
+                    return []
                 dens = [c/m for c in counts]
                 centers = [(edges[i] + edges[i+1]) / 2 for i in range(bins)]
-                return [{'y': float(c), 'w': float(d)} for c, d in zip(centers, dens)]
+                # Incluir todos los bins, incluso los de densidad 0, para mantener la forma del violín
+                # Pero usar un valor mínimo para w (densidad) para que sea visible
+                profile = [{'y': float(c), 'w': float(max(d, 0.01))} for c, d in zip(centers, dens)]
+                return profile
         violins = []
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
             if category_col and category_col in data.columns:
