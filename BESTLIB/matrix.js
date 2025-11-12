@@ -3145,7 +3145,8 @@
         axisPositions.push({
           name: dim,
           x: dimensions.length > 1 ? (chartWidth / (dimensions.length - 1)) * i : chartWidth / 2,
-          index: i
+          index: i,
+          originalIndex: i  // Guardar índice original para referencia
         });
       } catch (err) {
         console.error('Parallel Coordinates: Error calculando escala para dimensión', dim, err);
@@ -3154,7 +3155,8 @@
         axisPositions.push({
           name: dim,
           x: dimensions.length > 1 ? (chartWidth / (dimensions.length - 1)) * i : chartWidth / 2,
-          index: i
+          index: i,
+          originalIndex: i  // Guardar índice original para referencia
         });
       }
     });
@@ -3177,12 +3179,18 @@
     // Flag para evitar redibujados múltiples simultáneos
     let isRedrawing = false;
     
+    // Estado de selección de líneas (compartido entre redibujados)
+    let selectedLineIndices = new Set();
+    
     // Función para dibujar líneas de datos
     function drawDataLines() {
       if (isRedrawing) return; // Evitar redibujados múltiples
       isRedrawing = true;
       
       try {
+        // Guardar selección actual antes de limpiar
+        const savedSelection = new Set(selectedLineIndices);
+        
         // Limpiar líneas anteriores
         g.selectAll('.pcline').remove();
         
@@ -3193,68 +3201,95 @@
           ? d3.scaleOrdinal(d3.schemeCategory10).domain(categories)
           : () => '#4a90e2';
         
-        // Función para generar puntos de la línea para un dato
-        function generateLinePoints(d) {
+        // Ordenar axisPositions por x para asegurar orden correcto al dibujar
+        const sortedAxisPositions = [...axisPositions].sort((a, b) => a.x - b.x);
+        
+        // Función para generar puntos ordenados según posición X de los ejes (líneas rectas)
+        function generateSortedLinePoints(d) {
           const points = [];
-          for (let i = 0; i < dimensions.length; i++) {
+          // Ordenar dimensiones según posición X de sus ejes
+          const sortedDims = sortedAxisPositions.map(axis => {
+            return { dim: axis.name, axis: axis, scale: scales[axis.name] };
+          });
+          
+          for (const { dim, axis, scale } of sortedDims) {
+            if (!axis || !scale) continue;
+            
             try {
-              const dim = dimensions[i];
-              const axis = axisPositions[i];
-              const scale = scales[dim];
-              
-              if (!axis || !scale) {
-                // Si no hay eje o escala válida, usar posición por defecto
-                points.push([i * (chartWidth / Math.max(1, dimensions.length - 1)), chartHeight / 2]);
-                continue;
-              }
-              
               const val = d[dim];
               let y;
               
               if (val == null || isNaN(val) || !isFinite(val)) {
-                // Si el valor no es válido, usar posición media
                 y = chartHeight / 2;
               } else {
-                try {
-                  y = scale(parseFloat(val));
-                  // Validar que y sea válido
-                  if (isNaN(y) || !isFinite(y)) {
-                    y = chartHeight / 2;
-                  }
-                } catch (err) {
-                  console.warn('Parallel Coordinates: Error calculando y para', dim, val, err);
+                y = scale(parseFloat(val));
+                if (isNaN(y) || !isFinite(y)) {
                   y = chartHeight / 2;
                 }
               }
               
               points.push([axis.x, y]);
             } catch (err) {
-              console.error('Parallel Coordinates: Error generando punto', err, d, dimensions[i]);
-              // Usar posición por defecto en caso de error
-              points.push([i * (chartWidth / Math.max(1, dimensions.length - 1)), chartHeight / 2]);
+              points.push([axis.x, chartHeight / 2]);
             }
           }
           return points;
         }
         
-        // Ordenar axisPositions por x para asegurar orden correcto
-        const sortedAxisPositions = [...axisPositions].sort((a, b) => a.x - b.x);
-        
-        // Dibujar líneas
+        // Dibujar líneas RECTAS (sin curvas)
         const lineGenerator = d3.line()
           .x(d => d[0])
           .y(d => d[1])
-          .curve(d3.curveMonotoneX)
+          .curve(d3.curveLinear)  // Líneas rectas, no curvas
           .defined(d => d != null && !isNaN(d[0]) && !isNaN(d[1]) && isFinite(d[0]) && isFinite(d[1]));
+        
+        // Restaurar selección guardada
+        selectedLineIndices = savedSelection;
+        
+        // Función para actualizar visualización de líneas según selección
+        function updateLineVisualization() {
+          g.selectAll('.pcline').each(function(d, i) {
+            const line = d3.select(this);
+            const isSelected = selectedLineIndices.has(i);
+            const baseStrokeWidth = 1.5;
+            const baseOpacity = 0.6;
+            
+            if (isSelected) {
+              // Línea seleccionada: más gruesa, opacidad completa, color destacado
+              line
+                .attr('stroke-width', 4)
+                .attr('opacity', 1)
+                .attr('stroke', '#ff6b35'); // Color naranja para selección
+            } else {
+              // Línea no seleccionada: color normal según categoría
+              const lineColor = (() => {
+                try {
+                  if (categoryCol && d[categoryCol] && categories.includes(d[categoryCol])) {
+                    return color(d[categoryCol]);
+                  }
+                  return '#4a90e2';
+                } catch (err) {
+                  return '#4a90e2';
+                }
+              })();
+              
+              line
+                .attr('stroke-width', baseStrokeWidth)
+                .attr('opacity', baseOpacity)
+                .attr('stroke', lineColor);
+            }
+          });
+        }
         
         g.selectAll('.pcline')
           .data(validData)
           .enter()
           .append('path')
           .attr('class', 'pcline')
+          .attr('data-index', (d, i) => i)  // Guardar índice para selección
           .attr('d', d => {
             try {
-              const points = generateLinePoints(d);
+              const points = generateSortedLinePoints(d);
               if (points.length < 2) {
                 return ''; // No dibujar si no hay suficientes puntos
               }
@@ -3278,12 +3313,18 @@
           .attr('stroke-width', 1.5)
           .attr('opacity', 0.6)
           .style('cursor', 'pointer')
-          .style('pointer-events', 'all')
+          .style('pointer-events', 'stroke')  // Solo detectar eventos en el trazo, no en el área
           .on('mouseenter', function(event, d) {
             event.stopPropagation();
-            d3.select(this)
-              .attr('stroke-width', 3)
-              .attr('opacity', 1);
+            const line = d3.select(this);
+            const index = parseInt(line.attr('data-index'));
+            
+            // Solo resaltar si no está seleccionada
+            if (!selectedLineIndices.has(index)) {
+              line
+                .attr('stroke-width', 3)
+                .attr('opacity', 1);
+            }
             
             // Mostrar tooltip con información de la línea
             const mouseX = event.pageX || event.clientX || 0;
@@ -3323,9 +3364,15 @@
           })
           .on('mouseleave', function(event) {
             event.stopPropagation();
-            d3.select(this)
-              .attr('stroke-width', 1.5)
-              .attr('opacity', 0.6);
+            const line = d3.select(this);
+            const index = parseInt(line.attr('data-index'));
+            
+            // Solo restaurar si no está seleccionada
+            if (!selectedLineIndices.has(index)) {
+              line
+                .attr('stroke-width', 1.5)
+                .attr('opacity', 0.6);
+            }
             
             tooltip
               .transition()
@@ -3334,7 +3381,49 @@
               .on('end', function() {
                 tooltip.style('display', 'none');
               });
+          })
+          .on('click', function(event, d) {
+            event.stopPropagation();
+            const line = d3.select(this);
+            const index = parseInt(line.attr('data-index'));
+            
+            // Toggle selección: si está seleccionada, deseleccionar; si no, seleccionar
+            if (selectedLineIndices.has(index)) {
+              selectedLineIndices.delete(index);
+            } else {
+              // Si se presiona Ctrl/Cmd, agregar a selección; si no, reemplazar
+              const ctrlKey = event.ctrlKey || event.metaKey;
+              if (!ctrlKey) {
+                selectedLineIndices.clear();
+              }
+              selectedLineIndices.add(index);
+            }
+            
+            // Actualizar visualización
+            updateLineVisualization();
+            
+            // Enviar evento de selección
+            const selected = Array.from(selectedLineIndices).map(i => {
+              const item = {
+                ...validData[i],
+                index: i
+              };
+              // Preservar _original_row si existe
+              if (validData[i]._original_row) {
+                item._original_row = validData[i]._original_row;
+              }
+              return item;
+            });
+            
+            sendEvent(divId, 'select', {
+              type: 'select',
+              items: selected,
+              count: selected.length
+            });
           });
+        
+        // Inicializar visualización
+        updateLineVisualization();
       } catch (err) {
         console.error('Parallel Coordinates: Error en drawDataLines', err);
       } finally {
@@ -3343,19 +3432,36 @@
     }
     
     // Dibujar ejes (arrastrables y reordenables)
+    // Usar nombre de dimensión como identificador único (más estable que índice)
     const axisGroups = g.selectAll('.axis-group')
       .data(axisPositions)
       .enter()
       .append('g')
-      .attr('class', (d, i) => `axis-group axis-group-${i}`)
+      .attr('class', d => `axis-group axis-group-${d.name.replace(/[^a-zA-Z0-9]/g, '_')}`)
+      .attr('data-dimension', d => d.name)  // Guardar nombre de dimensión como atributo
       .attr('transform', d => `translate(${d.x}, 0)`)
       .style('cursor', 'move')
-      .style('pointer-events', 'all')
-      .call(d3.drag()
+      .style('pointer-events', 'all');
+    
+    // Agregar área invisible más grande para facilitar el drag (antes de la línea del eje)
+    axisGroups.append('rect')
+      .attr('class', 'axis-drag-area')
+      .attr('x', -30)  // Área de arrastre más ancha (60px total)
+      .attr('y', -10)
+      .attr('width', 60)
+      .attr('height', chartHeight + 20)
+      .attr('fill', 'transparent')
+      .style('cursor', 'move')
+      .style('pointer-events', 'all');
+    
+    // Aplicar drag a los grupos de ejes
+    axisGroups.call(d3.drag()
         .on('start', function(event, d) {
           event.sourceEvent.stopPropagation();
           try {
             d3.select(this).select('.axis-line').attr('stroke', '#ff6b35').attr('stroke-width', 3);
+            // Elevar el eje que se está arrastrando
+            d3.select(this).raise();
           } catch (err) {
             console.error('Parallel Coordinates: Error en start drag', err);
           }
@@ -3380,49 +3486,26 @@
               return;
             }
             
-            // Snap a posiciones de otros ejes o posiciones uniformes (opcional)
-            const snapThreshold = 15; // Distancia para hacer snap
-            const uniformSpacing = chartWidth / Math.max(1, dimensions.length - 1);
-            
-            // Buscar si hay otro eje cerca para hacer snap
-            let snapped = false;
-            for (let otherAxis of axisPositions) {
-              if (otherAxis !== d && Math.abs(newX - otherAxis.x) < snapThreshold) {
-                newX = otherAxis.x;
-                snapped = true;
-                break;
-              }
-            }
-            
-            // Si no hay snap a otro eje, intentar snap a posición uniforme (opcional)
-            if (!snapped && snapThreshold > 0) {
-              for (let i = 0; i < dimensions.length; i++) {
-                const uniformX = (chartWidth / Math.max(1, dimensions.length - 1)) * i;
-                if (Math.abs(newX - uniformX) < snapThreshold) {
-                  newX = uniformX;
-                  break;
-                }
-              }
-            }
-            
-            // Actualizar posición del eje
+            // Actualizar posición del eje que se está arrastrando
             d.x = newX;
             
-            // Validar nueva posición antes de actualizar
-            if (isNaN(d.x) || !isFinite(d.x)) {
-              return;
-            }
-            
-            // Actualizar posición del grupo
+            // Actualizar posición visual del eje que se está arrastrando
             d3.select(this).attr('transform', `translate(${d.x}, 0)`);
             
-            // Reordenar ejes si se cruzan (opcional - puede desactivarse para movimiento libre)
+            // Reordenar ejes automáticamente según posición X (sin snap, movimiento libre)
             axisPositions.sort((a, b) => a.x - b.x);
+            
+            // Actualizar índices y posiciones de todos los grupos de ejes
             axisPositions.forEach((ax, idx) => {
               ax.index = idx;
+              // Actualizar posición visual de todos los ejes usando el nombre como identificador
+              const axisGroup = g.select(`[data-dimension="${ax.name}"]`);
+              if (!axisGroup.empty()) {
+                axisGroup.attr('transform', `translate(${ax.x}, 0)`);
+              }
             });
             
-            // Redibujar líneas (solo si no está redibujando ya)
+            // Redibujar líneas inmediatamente para feedback visual fluido
             if (!isRedrawing) {
               drawDataLines();
             }
