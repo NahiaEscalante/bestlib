@@ -724,29 +724,45 @@
    * Renderiza gráficos con D3.js
    */
   function renderChartD3(container, spec, d3, divId) {
-    if (spec.type === 'bar') {
+    // Validar que spec tenga type
+    if (!spec || !spec.type) {
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error: Spec no tiene tipo definido</strong><br/>' +
+        '<small>Keys en spec: ' + (spec ? Object.keys(spec).join(', ') : 'spec es null/undefined') + '</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('renderChartD3: Spec inválido', { spec, divId });
+      return;
+    }
+    
+    const chartType = spec.type;
+    
+    if (chartType === 'bar') {
       renderBarChartD3(container, spec, d3, divId);
-    } else if (spec.type === 'scatter') {
+    } else if (chartType === 'scatter') {
       renderScatterPlotD3(container, spec, d3, divId);
-    } else if (spec.type === 'histogram') {
+    } else if (chartType === 'histogram') {
       renderHistogramD3(container, spec, d3, divId);
-    } else if (spec.type === 'boxplot') {
+    } else if (chartType === 'boxplot') {
       renderBoxplotD3(container, spec, d3, divId);
-    } else if (spec.type === 'heatmap') {
+    } else if (chartType === 'heatmap') {
       renderHeatmapD3(container, spec, d3, divId);
-    } else if (spec.type === 'line') {
+    } else if (chartType === 'line') {
       renderLineD3(container, spec, d3, divId);
-    } else if (spec.type === 'pie') {
+    } else if (chartType === 'pie') {
       renderPieD3(container, spec, d3, divId);
-    } else if (spec.type === 'violin') {
+    } else if (chartType === 'violin') {
       renderViolinD3(container, spec, d3, divId);
-    } else if (spec.type === 'radviz') {
+    } else if (chartType === 'radviz') {
       renderRadVizD3(container, spec, d3, divId);
     } else {
-      // Tipo de gráfico no soportado aún, mostrar mensaje
-      container.innerHTML = `<div style="padding: 20px; text-align: center; color: #999;">
-        Gráfico tipo '${spec.type}' no implementado aún
-      </div>`;
+      // Tipo de gráfico no soportado aún, mostrar mensaje visible
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error: Gráfico tipo "' + chartType + '" no implementado aún</strong><br/>' +
+        '<small>Tipos soportados: bar, scatter, histogram, boxplot, heatmap, line, pie, violin, radviz</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('renderChartD3: Tipo de gráfico no soportado', { chartType, spec });
     }
   }
 
@@ -1030,6 +1046,8 @@
     container.innerHTML = '';
     
     const seriesMap = spec.series || {};
+    const specKeys = Object.keys(spec);
+    
     const dims = getChartDimensions(container, spec, 520, 380);
     let width = dims.width;
     let height = dims.height;
@@ -1063,7 +1081,14 @@
     
     // Validar que haya series
     if (seriesNames.length === 0) {
-      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay series para mostrar</div>';
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error: No hay series para mostrar</strong><br/>' +
+        '<small>Keys en spec: ' + specKeys.join(', ') + '</small><br/>' +
+        '<small>seriesMap está vacío o no existe</small><br/>' +
+        '<small>Verifica que los datos contengan la columna de series especificada (series_col)</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('Line Chart: No hay series en seriesMap', { seriesMap, spec, specKeys });
       return;
     }
     
@@ -1080,7 +1105,22 @@
     });
 
     if (allPoints.length === 0) {
-      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos válidos para mostrar</div>';
+      // Información detallada sobre cada serie
+      const seriesInfo = seriesNames.map(name => {
+        const pts = seriesMap[name];
+        const count = pts && Array.isArray(pts) ? pts.length : 0;
+        const validCount = pts && Array.isArray(pts) ? pts.filter(p => p != null && p.x != null && !isNaN(p.x) && p.y != null && !isNaN(p.y)).length : 0;
+        return `${name}: ${count} puntos (${validCount} válidos)`;
+      }).join('<br/>');
+      
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error: No hay datos válidos para mostrar</strong><br/>' +
+        '<small>Series encontradas: ' + seriesNames.join(', ') + '</small><br/>' +
+        '<small>Información de series:<br/>' + seriesInfo + '</small><br/>' +
+        '<small>Verifica que los datos tengan valores válidos para x e y</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('Line Chart: No hay puntos válidos', { seriesNames, seriesMap, spec });
       return;
     }
 
@@ -1114,18 +1154,22 @@
       .curve(d3.curveMonotoneX)  // Curva suave
       .defined(d => d != null && d.x != null && !isNaN(d.x) && d.y != null && !isNaN(d.y));
 
+    // Contador de series renderizadas
+    let renderedSeries = 0;
+    const errors = [];
+    
     // Renderizar líneas (ordenar puntos por x antes de dibujar)
     seriesNames.forEach(name => {
       const pts = seriesMap[name];
       if (!pts || !Array.isArray(pts) || pts.length === 0) {
-        console.warn(`Line chart: Serie "${name}" no tiene datos válidos`);
+        errors.push(`Serie "${name}": No tiene datos válidos`);
         return;
       }
       
       // Filtrar puntos válidos y ordenar por x
       const validPts = pts.filter(p => p != null && p.x != null && !isNaN(p.x) && p.y != null && !isNaN(p.y));
       if (validPts.length === 0) {
-        console.warn(`Line chart: Serie "${name}" no tiene puntos válidos después del filtrado`);
+        errors.push(`Serie "${name}": No tiene puntos válidos después del filtrado`);
         return;
       }
       
@@ -1133,8 +1177,8 @@
       
       // Crear path para esta serie
       const pathData = line(sortedPts);
-      if (!pathData || pathData === 'M0,0') {
-        console.warn(`Line chart: No se pudo generar path para serie "${name}"`);
+      if (!pathData || pathData === 'M0,0' || pathData.length < 10) {
+        errors.push(`Serie "${name}": No se pudo generar path (pathData: ${pathData ? pathData.substring(0, 20) : 'null'})`);
         return;
       }
       
@@ -1145,12 +1189,44 @@
         .attr('stroke', color(name))
         .attr('stroke-width', spec.strokeWidth || 2)
         .attr('d', pathData)
-        .attr('opacity', 0)
-        .transition()
-        .duration(500)
-        .attr('opacity', 1)
-        .attr('class', `line-series-${name.replace(/\s+/g, '-')}`);
+        .attr('opacity', 1)  // Mostrar inmediatamente
+        .attr('class', `line-series-${name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '')}`);
+      
+      renderedSeries++;
     });
+    
+    // Si no se renderizó ninguna serie, mostrar error visible
+    if (renderedSeries === 0) {
+      // Información detallada del spec recibido
+      const specInfo = Object.keys(spec).map(key => {
+        const value = spec[key];
+        if (key === 'series') {
+          const seriesKeys = Object.keys(value || {});
+          return `series: ${seriesKeys.length} series (${seriesKeys.join(', ')})`;
+        }
+        if (typeof value === 'object' && value !== null) {
+          return `${key}: ${Array.isArray(value) ? 'array[' + value.length + ']' : 'object'}`;
+        }
+        return `${key}: ${String(value)}`;
+      }).join('<br/>');
+      
+      const errorMsg = '<div style="padding: 20px; text-align: left; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px; font-family: monospace; font-size: 12px;">' +
+        '<strong style="font-size: 14px;">❌ Error: No se pudo renderizar ninguna serie en Line Chart</strong><br/><br/>' +
+        '<strong>Errores encontrados:</strong><br/>' +
+        '<small style="color: #c62828;">' + (errors.length > 0 ? errors.join('<br/>') : 'No se encontraron errores específicos') + '</small><br/><br/>' +
+        '<strong>Información del spec recibido:</strong><br/>' +
+        '<small style="color: #555;">' + specInfo + '</small><br/><br/>' +
+        '<strong>Series en seriesMap:</strong><br/>' +
+        '<small style="color: #555;">' + seriesNames.join(', ') + ' (total: ' + seriesNames.length + ')</small><br/><br/>' +
+        '<strong>Sugerencias:</strong><br/>' +
+        '<small style="color: #555;">1. Verifica que los datos tengan la columna de series especificada (series_col)<br/>' +
+        '2. Verifica que los datos tengan valores válidos para x e y<br/>' +
+        '3. Verifica que los valores numéricos no sean NaN o null</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('Line Chart: Errores al renderizar', { errors, seriesMap, spec, seriesNames });
+      return;
+    }
 
     // Crear tooltip (usar ID único para evitar conflictos)
     const tooltipId = `line-tooltip-${divId}`;
@@ -1297,6 +1373,58 @@
   }
 
   /**
+   * Función auxiliar para mostrar tooltip del Pie Chart (compatible con Colab)
+   */
+  function showPieTooltip(event, tooltip, category, value, percentage, container, width, height) {
+    // Obtener coordenadas del mouse de manera robusta (compatible con Colab)
+    let mouseX = 0;
+    let mouseY = 0;
+    
+    try {
+      // Método 1: Usar getBoundingClientRect para obtener posición del contenedor
+      const rect = container.getBoundingClientRect();
+      
+      // Obtener coordenadas del mouse relativo a la ventana
+      if (event.clientX !== undefined && event.clientX !== null) {
+        // clientX/Y son relativos a la ventana del navegador (funciona en Colab)
+        mouseX = event.clientX;
+        mouseY = event.clientY;
+      } else if (event.pageX !== undefined && event.pageX !== null) {
+        // pageX/Y son relativos al documento (puede no estar disponible en Colab)
+        mouseX = event.pageX;
+        mouseY = event.pageY;
+      } else if (event.offsetX !== undefined) {
+        // offsetX/Y son relativos al elemento (fallback)
+        mouseX = rect.left + event.offsetX;
+        mouseY = rect.top + event.offsetY;
+      } else {
+        // Último recurso: usar coordenadas del centro del gráfico
+        mouseX = rect.left + width / 2;
+        mouseY = rect.top + height / 2;
+      }
+    } catch (e) {
+      // Si falla todo, usar coordenadas del centro
+      try {
+        const rect = container.getBoundingClientRect();
+        mouseX = rect.left + width / 2;
+        mouseY = rect.top + height / 2;
+      } catch (e2) {
+        mouseX = width / 2;
+        mouseY = height / 2;
+      }
+    }
+    
+    // Mostrar tooltip con la información
+    tooltip
+      .style('left', (mouseX + 15) + 'px')
+      .style('top', (mouseY - 50) + 'px')
+      .style('display', 'block')
+      .style('pointer-events', 'none')
+      .style('opacity', 1)
+      .html(`<strong>${category}</strong><br/>Cantidad: ${value.toFixed(2)}<br/>Porcentaje: ${percentage.toFixed(2)}%`);
+  }
+  
+  /**
    * Pie / Donut con leyenda y tooltips interactivos
    */
   function renderPieD3(container, spec, d3, divId) {
@@ -1347,24 +1475,27 @@
     const total = d3.sum(data, d => d.value);
     
     // Crear tooltip (usar ID único para evitar conflictos)
+    // Limpiar tooltip existente si existe
     const tooltipId = `pie-tooltip-${divId}`;
-    let tooltip = d3.select(`#${tooltipId}`);
-    if (tooltip.empty()) {
-      tooltip = d3.select('body').append('div')
-        .attr('id', tooltipId)
-        .attr('class', 'pie-chart-tooltip')
-        .style('position', 'absolute')
-        .style('background', 'rgba(0, 0, 0, 0.85)')
-        .style('color', '#fff')
-        .style('padding', '10px')
-        .style('border-radius', '4px')
-        .style('pointer-events', 'none')
-        .style('opacity', 0)
-        .style('font-size', '12px')
-        .style('z-index', 10000)
-        .style('display', 'none')
-        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)');
-    }
+    d3.select(`#${tooltipId}`).remove();
+    
+    const tooltip = d3.select('body').append('div')
+      .attr('id', tooltipId)
+      .attr('class', 'pie-chart-tooltip')
+      .style('position', 'fixed')  // Usar 'fixed' en lugar de 'absolute' para mejor compatibilidad con Colab
+      .style('background', 'rgba(0, 0, 0, 0.9)')
+      .style('color', '#fff')
+      .style('padding', '10px 12px')
+      .style('border-radius', '6px')
+      .style('pointer-events', 'none')
+      .style('opacity', 0)
+      .style('font-size', '13px')
+      .style('font-family', 'Arial, sans-serif')
+      .style('z-index', 99999)
+      .style('display', 'none')
+      .style('box-shadow', '0 4px 12px rgba(0,0,0,0.4)')
+      .style('white-space', 'nowrap')
+      .style('border', '1px solid rgba(255,255,255,0.2)');
     
     // Renderizar los paths (segmentos del pie)
     const paths = g.selectAll('path')
@@ -1394,19 +1525,14 @@
           .attr('stroke-width', 3)
           .attr('transform', 'scale(1.05)'); // Efecto de zoom
         
-        // Mostrar tooltip con información detallada
+        // Mostrar tooltip inmediatamente
         const percentage = (d.value / total) * 100;
-        const mouseX = event.pageX || event.clientX || 0;
-        const mouseY = event.pageY || event.clientY || 0;
-        
-        tooltip
-          .style('left', (mouseX + 10) + 'px')
-          .style('top', (mouseY - 10) + 'px')
-          .style('display', 'block')
-          .html(`<strong>${d.data.category}</strong><br/>Cantidad: ${d.data.value.toFixed(2)}<br/>Porcentaje: ${percentage.toFixed(2)}%`)
-          .transition()
-          .duration(200)
-          .style('opacity', 1);
+        showPieTooltip(event, tooltip, d.data.category, d.data.value, percentage, container, width, height);
+      })
+      .on('mousemove', function(event, d) {
+        // Actualizar posición del tooltip mientras el mouse se mueve
+        const percentage = (d.value / total) * 100;
+        showPieTooltip(event, tooltip, d.data.category, d.data.value, percentage, container, width, height);
       })
       .on('mouseleave', function(event, d) {
         // Restaurar opacidad y stroke
@@ -1416,7 +1542,9 @@
           .attr('transform', 'scale(1)'); // Restaurar escala
         
         // Ocultar tooltip
-        tooltip.transition().duration(200).style('opacity', 0).style('display', 'none');
+        tooltip
+          .style('opacity', 0)
+          .style('display', 'none');
       });
     
     // Crear leyenda a la derecha del pie chart
@@ -1467,7 +1595,7 @@
         .attr('stroke', '#fff')
         .attr('stroke-width', 2);
       
-      // Texto de la categoría
+      // Texto de la categoría (sin porcentaje en la leyenda)
       legendRow.append('text')
         .attr('x', 22)
         .attr('y', 0)
@@ -1476,16 +1604,6 @@
         .style('fill', '#000')
         .style('font-family', 'Arial, sans-serif')
         .text(d.category);
-      
-      // Texto del porcentaje (debajo del nombre)
-      legendRow.append('text')
-        .attr('x', 22)
-        .attr('y', 0)
-        .attr('dy', '1.2em')
-        .style('font-size', '10px')
-        .style('fill', '#666')
-        .style('font-family', 'Arial, sans-serif')
-        .text(`${percentage.toFixed(1)}%`);
     });
   }
 
@@ -1515,12 +1633,17 @@
     });
     
     if (validViolins.length === 0) {
-      // Mensaje más informativo
+      // Mensaje más informativo visible en el DOM
       const debugInfo = violins.length > 0 
         ? `Se encontraron ${violins.length} violines pero ninguno tiene datos válidos`
         : 'No se encontraron violines en los datos';
-      container.innerHTML = `<div style="padding: 20px; text-align: center; color: #999;">${debugInfo}</div>`;
-      console.warn('Violin plot: No hay datos válidos', { violins, spec });
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error en Violin Plot:</strong><br/>' +
+        '<small>' + debugInfo + '</small><br/>' +
+        '<small>Verifica que los datos tengan la estructura correcta: {category: string, profile: [{y: number, w: number}]}</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('Violin plot: No hay datos válidos', { violins, spec });
       return;
     }
     
@@ -1592,12 +1715,16 @@
     
     const color = d3.scaleOrdinal(d3.schemeSet2).domain(categories);
 
+    // Contador de violines renderizados
+    let renderedViolins = 0;
+    const violinErrors = [];
+    
     // Renderizar violines
     validViolins.forEach((v, idx) => {
       const category = String(v.category || 'Unknown');
       const cx = x(category);
       if (cx == null || isNaN(cx)) {
-        console.warn(`Violin plot: No se pudo obtener posición X para categoría "${category}"`);
+        violinErrors.push(`Categoría "${category}": No se pudo obtener posición X`);
         return;
       }
       const centerX = cx + x.bandwidth() / 2;
@@ -1613,7 +1740,7 @@
       });
       
       if (profile.length === 0) {
-        console.warn(`Violin plot: Perfil vacío para categoría "${category}"`);
+        violinErrors.push(`Categoría "${category}": Perfil vacío después del filtrado`);
         return;
       }
       
@@ -1692,8 +1819,10 @@
           .attr('stroke-width', 1)
           .attr('stroke-linejoin', 'round')
           .attr('stroke-linecap', 'round');
+        
+        renderedViolins++;
       } catch (e) {
-        console.error('Violin plot: Error al generar path para categoría', category, e);
+        violinErrors.push(`Categoría "${category}": Error al generar path (${e.message})`);
         // Fallback: dibujar una línea vertical simple
         const yMin = d3.min(safeProfile.map(p => p.y));
         const yMax = d3.max(safeProfile.map(p => p.y));
@@ -1705,6 +1834,7 @@
           .attr('stroke', color(category))
           .attr('stroke-width', 3)
           .attr('opacity', 0.7);
+        renderedViolins++; // Contar como renderizado (aunque sea solo una línea)
         return;
       }
       
@@ -1724,6 +1854,18 @@
         }
       }
     });
+    
+    // Si no se renderizó ningún violín, mostrar error detallado
+    if (renderedViolins === 0 && validViolins.length > 0) {
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error en Violin Plot: No se pudo renderizar ningún violín</strong><br/>' +
+        '<small>Categorías encontradas: ' + categories.join(', ') + '</small><br/>' +
+        (violinErrors.length > 0 ? '<small>Errores: ' + violinErrors.join('; ') + '</small>' : '') +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('Violin plot: No se renderizó ningún violín', { validViolins, violinErrors });
+      return;
+    }
 
     // Renderizar ejes
     if (spec.axes !== false) {
@@ -1800,8 +1942,14 @@
       const debugInfo = points.length > 0 
         ? `Se encontraron ${points.length} puntos pero ninguno tiene coordenadas válidas`
         : 'No se encontraron puntos en los datos';
-      container.innerHTML = `<div style="padding: 20px; text-align: center; color: #999;">${debugInfo}</div>`;
-      console.warn('RadViz: No hay puntos válidos', { points: points.slice(0, 3), spec });
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error en RadViz:</strong><br/>' +
+        '<small>' + debugInfo + '</small><br/>' +
+        '<small>Features: ' + (features.length > 0 ? features.join(', ') : 'ninguna') + '</small><br/>' +
+        '<small>Verifica que los datos tengan la estructura correcta: {x: number, y: number, category: string}</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('RadViz: No hay puntos válidos', { points: points.slice(0, 3), spec });
       return;
     }
     
