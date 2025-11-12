@@ -2587,10 +2587,9 @@
     // Calcular centro del área del gráfico
     const centerX = chartWidth / 2;
     const centerY = chartHeight / 2;
-    // IMPORTANTE: Usar un radio más pequeño para el círculo inicial
-    // Esto asegura que haya espacio para que los nodos se muevan dentro del área visible
+    // IMPORTANTE: Usar un radio inicial para posicionar los nodos en un círculo al inicio
+    // Pero los nodos pueden moverse libremente por toda el área del gráfico
     const initialRadius = Math.min(chartWidth, chartHeight) / 2 - 60;
-    const maxRadius = Math.min(chartWidth, chartHeight) / 2 - 40; // Radio máximo para nodos
     
     // IMPORTANTE: Los features ya vienen ordenados alfabéticamente desde Python
     // No es necesario ordenarlos de nuevo, solo usarlos directamente
@@ -2620,35 +2619,69 @@
       .range([centerY + scaleFactor, centerY - scaleFactor]); // Invertir Y para que -1 esté abajo
     
     // Función para actualizar escalas basadas en posiciones de nodos
-    // IMPORTANTE: Usar escalas fijas basadas en dominio [-1, 1] para mantener puntos visibles
+    // IMPORTANTE: Usar escalas dinámicas que se ajustan a las posiciones de los nodos
+    // Esto permite que los puntos estén visibles sin importar dónde estén los nodos
     function updateScales() {
-      // Calcular el radio máximo de los nodos desde el centro
+      // Calcular el bounding box de los nodos
+      const nodeX = anchorPos.map(n => n.x);
+      const nodeY = anchorPos.map(n => n.y);
+      
+      if (nodeX.length === 0) {
+        // Si no hay nodos, usar escalas por defecto centradas en el gráfico
+        const defaultRadius = Math.min(chartWidth, chartHeight) / 2 - 50;
+        toX = d3.scaleLinear()
+          .domain([-1, 1])
+          .range([centerX - defaultRadius, centerX + defaultRadius]);
+        toY = d3.scaleLinear()
+          .domain([-1, 1])
+          .range([centerY + defaultRadius, centerY - defaultRadius]);
+        return;
+      }
+      
+      // Calcular el centro de los nodos (no necesariamente el centro del gráfico)
+      const minX = Math.min(...nodeX);
+      const maxX = Math.max(...nodeX);
+      const minY = Math.min(...nodeY);
+      const maxY = Math.max(...nodeY);
+      
+      const nodeCenterX = (minX + maxX) / 2;
+      const nodeCenterY = (minY + maxY) / 2;
+      
+      // Calcular el radio máximo desde el centro de los nodos
       const nodeRadius = Math.max(
         ...anchorPos.map(n => {
-          const dx = n.x - centerX;
-          const dy = n.y - centerY;
+          const dx = n.x - nodeCenterX;
+          const dy = n.y - nodeCenterY;
           return Math.sqrt(dx * dx + dy * dy);
         })
       ) || initialRadius;
       
-      // Asegurar que el radio no sea demasiado grande
-      const maxAllowedRadius = Math.min(chartWidth, chartHeight) / 2 - 50;
-      // IMPORTANTE: Usar un radio estable basado en el radio máximo permitido
-      // Esto mantiene los puntos visibles incluso cuando los nodos están cerca del centro
-      // Usar el máximo entre el radio de los nodos (con margen) y el radio inicial (con margen)
+      // IMPORTANTE: Calcular el radio disponible para los puntos
+      // Los puntos están normalizados a [-1, 1] en coordenadas relativas al centro de los nodos
+      // Necesitamos un radio suficiente para que estén visibles
+      const margin = 30; // Margen desde los bordes
+      const availableWidth = chartWidth - margin * 2;
+      const availableHeight = chartHeight - margin * 2;
+      const maxAvailableRadius = Math.min(availableWidth, availableHeight) / 2;
+      
+      // Usar el máximo entre el radio de los nodos (con margen) y un radio mínimo
+      // Esto asegura que los puntos siempre estén visibles
       const actualRadius = Math.max(
-        Math.min(nodeRadius * 1.2, maxAllowedRadius), // Permitir un 20% más de espacio basado en nodos
-        Math.min(initialRadius * 1.1, maxAllowedRadius) // O usar el radio inicial con margen
+        nodeRadius * 1.3, // Permitir un 30% más de espacio basado en nodos
+        Math.min(availableWidth, availableHeight) / 3 // O usar al menos 1/3 del área disponible
       );
       
-      // Actualizar escalas para que los puntos estén dentro del área visible
-      // Los puntos están normalizados a [-1, 1], así que mapeamos a un círculo alrededor del centro
+      // Limitar el radio al máximo disponible para mantener los puntos visibles
+      const finalRadius = Math.min(actualRadius, maxAvailableRadius);
+      
+      // IMPORTANTE: Actualizar escalas para que los puntos estén centrados en el centro de los nodos
+      // Esto permite que los puntos sigan las posiciones de los nodos
       toX = d3.scaleLinear()
         .domain([-1, 1])
-        .range([centerX - actualRadius, centerX + actualRadius]);
+        .range([nodeCenterX - finalRadius, nodeCenterX + finalRadius]);
       toY = d3.scaleLinear()
         .domain([-1, 1])
-        .range([centerY + actualRadius, centerY - actualRadius]); // Invertir Y para que -1 esté abajo
+        .range([nodeCenterY + finalRadius, nodeCenterY - finalRadius]); // Invertir Y para que -1 esté abajo
     }
     
     // Flag para evitar actualizaciones múltiples simultáneas
@@ -2663,41 +2696,53 @@
         // Primero, actualizar escalas basadas en posiciones de nodos
         updateScales();
         
-        // IMPORTANTE: Normalizar posiciones de nodos a coordenadas relativas al centro del gráfico
-        // Convertir coordenadas de pantalla a coordenadas normalizadas [-1, 1]
-        // Usar el radio máximo permitido como scale fijo para mantener consistencia
-        // Esto asegura que los puntos siempre estén dentro del área visible
-        const maxAllowedRadius = Math.min(chartWidth, chartHeight) / 2 - 50;
+        // IMPORTANTE: Normalizar posiciones de nodos a coordenadas relativas al centro de los nodos
+        // Convertir coordenadas de pantalla a coordenadas normalizadas
+        // Esto permite que los nodos se muevan libremente mientras los puntos siguen siendo visibles
         
-        // Calcular distancias de los nodos desde el centro
+        // Calcular el bounding box de los nodos
+        const nodeX = anchorPos.map(n => n.x);
+        const nodeY = anchorPos.map(n => n.y);
+        
+        if (nodeX.length === 0) {
+          // Si no hay nodos, no hacer nada
+          return;
+        }
+        
+        // Calcular el centro de los nodos (no necesariamente el centro del gráfico)
+        const minX = Math.min(...nodeX);
+        const maxX = Math.max(...nodeX);
+        const minY = Math.min(...nodeY);
+        const maxY = Math.max(...nodeY);
+        
+        const nodeCenterX = (minX + maxX) / 2;
+        const nodeCenterY = (minY + maxY) / 2;
+        
+        // Calcular el radio máximo desde el centro de los nodos
         const nodeDistances = anchorPos.map(n => {
-          const dx = n.x - centerX;
-          const dy = n.y - centerY;
+          const dx = n.x - nodeCenterX;
+          const dy = n.y - nodeCenterY;
           return Math.sqrt(dx * dx + dy * dy);
         });
         const maxNodeDistance = Math.max(...nodeDistances, 1) || initialRadius;
         
-        // IMPORTANTE: Usar el radio máximo permitido como scale fijo para normalizar nodos
+        // IMPORTANTE: Usar el radio máximo de los nodos como scale para normalizar
         // Esto asegura que las coordenadas normalizadas de los nodos estén dentro de [-1, 1]
-        // incluso cuando los nodos están en el borde del círculo máximo
-        // Usar el máximo entre la distancia máxima de los nodos y el radio máximo permitido
-        // para mantener consistencia y evitar que los nodos se salgan del área visible
-        const nodeScale = Math.max(maxNodeDistance, maxAllowedRadius * 0.9);
-        // IMPORTANTE: Limitar nodeScale al máximo permitido para mantener consistencia
-        // Esto asegura que los nodos siempre estén dentro del área visible
-        const finalNodeScale = Math.min(nodeScale, maxAllowedRadius);
+        // cuando los nodos están alrededor del centro de los nodos
+        // Usar un mínimo para evitar divisiones por cero o escalas muy pequeñas
+        const nodeScale = Math.max(maxNodeDistance, initialRadius * 0.5);
         
-        // Normalizar posiciones de nodos a coordenadas [-1, 1] relativas al centro del gráfico
+        // Normalizar posiciones de nodos a coordenadas relativas al centro de los nodos
         // IMPORTANTE: Los weights están en el mismo orden que los features (orden alfabético)
         const normalizedNodes = anchorPos.map(n => {
-          const nx = (n.x - centerX) / finalNodeScale;
-          const ny = (n.y - centerY) / finalNodeScale;
-          // IMPORTANTE: Limitar las coordenadas normalizadas a [-1, 1]
-          // Esto asegura que los puntos calculados estén dentro del área visible
-          // y mantiene la consistencia visual
+          const nx = (n.x - nodeCenterX) / nodeScale;
+          const ny = (n.y - nodeCenterY) / nodeScale;
+          // IMPORTANTE: No limitar las coordenadas normalizadas aquí
+          // Permitir que estén fuera de [-1, 1] para reflejar las posiciones reales de los nodos
+          // La normalización de los puntos se hará después para mantenerlos visibles
           return {
-            x: Math.max(-1.0, Math.min(1.0, nx)),
-            y: Math.max(-1.0, Math.min(1.0, ny))
+            x: nx,
+            y: ny
           };
         });
         
@@ -2776,32 +2821,10 @@
     // Inicializar escalas
     updateScales();
     
-    // Dibujar círculo de referencia (opcional, para visualizar el área máxima)
-    const referenceCircle = g.append('circle')
-      .attr('cx', centerX)
-      .attr('cy', centerY)
-      .attr('r', maxRadius)
-      .attr('fill', 'none')
-      .attr('stroke', '#e0e0e0')
-      .attr('stroke-width', 1)
-      .attr('stroke-dasharray', '3,3')
-      .style('pointer-events', 'none')
-      .lower();
-    
-    // Dibujar líneas desde el origen (centro) hasta los nodos
-    const anchorLines = g.selectAll('.anchor-line')
-      .data(anchorPos)
-      .enter()
-      .append('line')
-      .attr('class', (d, i) => `anchor-line anchor-line-${i}`)
-      .attr('x1', centerX)
-      .attr('y1', centerY)
-      .attr('x2', d => d.x)
-      .attr('y2', d => d.y)
-      .attr('stroke', '#ddd')
-      .attr('stroke-width', 1)
-      .attr('stroke-dasharray', '2,2')
-      .lower();
+    // IMPORTANTE: No dibujar círculo de referencia ni líneas desde el centro
+    // porque los nodos pueden moverse libremente por toda el área del gráfico
+    // Esta es la ventaja principal de Star Coordinates sobre RadViz
+    // Los nodos no están anclados a ningún punto fijo
     
     // Dibujar nodos (arrastrables libremente por toda el área)
     const anchorCircles = g.selectAll('.anchor')
@@ -2834,32 +2857,14 @@
               return;
             }
             
-            // IMPORTANTE: Limitar movimiento dentro de un círculo alrededor del centro
-            // Esto mantiene los nodos dentro del área visible y ayuda a mantener los puntos visibles
-            const dx = mx - centerX;
-            const dy = my - centerY;
-            const distance = Math.sqrt(dx * dx + dy * dy);
+            // IMPORTANTE: Permitir movimiento libre de los nodos por toda el área del gráfico
+            // Esta es la ventaja principal de Star Coordinates sobre RadViz
+            // Los nodos pueden moverse libremente, solo limitados por el área del gráfico
+            const padding = 10; // Margen mínimo desde los bordes
             
-            // Si el nodo está fuera del círculo máximo, limitarlo al borde del círculo
-            if (distance > maxRadius) {
-              const angle = Math.atan2(dy, dx);
-              d.x = centerX + maxRadius * Math.cos(angle);
-              d.y = centerY + maxRadius * Math.sin(angle);
-            } else if (distance < 10) {
-              // Si está demasiado cerca del centro, mantenerlo a una distancia mínima
-              const angle = Math.atan2(dy, dx);
-              d.x = centerX + 10 * Math.cos(angle);
-              d.y = centerY + 10 * Math.sin(angle);
-            } else {
-              // Permitir movimiento libre dentro del círculo máximo
-              d.x = mx;
-              d.y = my;
-            }
-            
-            // Asegurar que las coordenadas estén dentro del área del gráfico (como respaldo)
-            const padding = 10;
-            d.x = Math.max(padding, Math.min(chartWidth - padding, d.x));
-            d.y = Math.max(padding, Math.min(chartHeight - padding, d.y));
+            // Permitir movimiento libre dentro del área del gráfico
+            d.x = Math.max(padding, Math.min(chartWidth - padding, mx));
+            d.y = Math.max(padding, Math.min(chartHeight - padding, my));
             
             // Validar nuevas coordenadas
             if (isNaN(d.x) || isNaN(d.y) || !isFinite(d.x) || !isFinite(d.y)) {
@@ -2871,13 +2876,8 @@
               .attr('cx', d.x)
               .attr('cy', d.y);
             
-            // Actualizar línea desde el centro hasta el nodo
-            const line = g.select(`.anchor-line-${d.index}`);
-            if (!line.empty()) {
-              line
-                .attr('x2', d.x)
-                .attr('y2', d.y);
-            }
+            // IMPORTANTE: No actualizar líneas porque no las dibujamos
+            // Los nodos pueden moverse libremente sin restricciones
             
             // Actualizar etiqueta
             const label = g.select(`.alabel-${d.index}`);
