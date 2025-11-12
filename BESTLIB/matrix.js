@@ -947,10 +947,27 @@
   function renderPieD3(container, spec, d3, divId) {
     const data = spec.data || [];
     const dims = getChartDimensions(container, spec, 320, 240);
-    const width = dims.width;
-    const height = dims.height;
-    const radius = Math.min(width, height) / 2 - 10;
+    let width = dims.width;
+    let height = dims.height;
+    
+    // Calcular radio del pie chart
+    // Dejar espacio para etiquetas externas (aproximadamente 50-60px de padding)
+    const paddingForLabels = 80; // Espacio adicional para etiquetas externas y líneas de conexión
+    const baseRadius = Math.min(width, height) / 2;
+    const radius = Math.max(baseRadius - paddingForLabels, 50); // Radio mínimo de 50px
     const innerR = spec.innerRadius != null ? spec.innerRadius : (spec.donut ? radius * 0.5 : 0);
+    
+    // Asegurar que el SVG tenga suficiente espacio para las etiquetas externas
+    // Expandir el SVG si es necesario para acomodar las etiquetas
+    const requiredWidth = (radius + paddingForLabels) * 2;
+    const requiredHeight = (radius + paddingForLabels) * 2;
+    if (width < requiredWidth) {
+      width = requiredWidth;
+    }
+    if (height < requiredHeight) {
+      height = requiredHeight;
+    }
+    
     const color = d3.scaleOrdinal(d3.schemeCategory10).domain(data.map(d => d.category));
 
     const svg = d3.select(container).append('svg')
@@ -963,13 +980,19 @@
     const pie = d3.pie().value(d => d.value);
     const arcs = pie(data);
 
-    g.selectAll('path')
+    // Calcular el total para porcentajes
+    const total = d3.sum(data, d => d.value);
+    
+    // Renderizar los paths (segmentos del pie)
+    const paths = g.selectAll('path')
       .data(arcs)
       .enter()
       .append('path')
       .attr('d', arc)
       .attr('fill', d => color(d.data.category))
       .attr('opacity', 0.9)
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 2)
       .style('cursor', spec.interactive ? 'pointer' : 'default')
       .on('click', function(event, d) {
         if (!spec.interactive) return;
@@ -982,7 +1005,170 @@
           indices: [],
           selected_category: category
         });
+      })
+      .on('mouseenter', function(event, d) {
+        // Resaltar el segmento al pasar el mouse
+        d3.select(this)
+          .attr('opacity', 1)
+          .attr('stroke-width', 3);
+      })
+      .on('mouseleave', function(event, d) {
+        // Restaurar opacidad y stroke
+        d3.select(this)
+          .attr('opacity', 0.9)
+          .attr('stroke-width', 2);
       });
+    
+    // Agregar etiquetas de texto para cada segmento
+    // Configuración de etiquetas desde el spec
+    const showLabels = spec.showLabels !== false; // Por defecto mostrar etiquetas (siempre mostrar nombre)
+    const showPercentage = spec.showPercentage === true; // Por defecto NO mostrar porcentaje (solo si se especifica)
+    const showValue = spec.showValue === true; // Por defecto NO mostrar valor (solo si se especifica)
+    const labelFontSize = spec.labelFontSize || 12;
+    const labelDistance = spec.labelDistance || (radius * 0.65); // Distancia desde el centro para etiquetas internas
+    
+    if (showLabels) {
+      // Crear un arco para etiquetas internas (más cerca del centro)
+      const labelArc = d3.arc()
+        .innerRadius(labelDistance)
+        .outerRadius(labelDistance);
+      
+      // Crear grupos para cada etiqueta
+      const labelGroups = g.selectAll('.pie-label-group')
+        .data(arcs)
+        .enter()
+        .append('g')
+        .attr('class', 'pie-label-group');
+      
+      // Para cada grupo, agregar etiqueta según el tamaño del segmento
+      labelGroups.each(function(d) {
+        const group = d3.select(this);
+        const percentage = (d.value / total) * 100;
+        const midAngle = d.startAngle + (d.endAngle - d.startAngle) / 2;
+        
+        // Determinar si usar etiqueta interna o externa
+        // Usar etiqueta interna solo si:
+        // 1. No es donut (innerR === 0)
+        // 2. El segmento es suficientemente grande (> 3% del total o > 10 grados)
+        const angleSpan = (d.endAngle - d.startAngle) * 180 / Math.PI;
+        const isLargeEnough = (percentage > 3) && (angleSpan > 10);
+        const useInternalLabel = isLargeEnough && innerR === 0;
+        
+        if (useInternalLabel) {
+          // Etiqueta interna para segmentos grandes (solo si no es donut)
+          const labelCentroid = labelArc.centroid(d);
+          
+          // Etiqueta principal (nombre de la categoría)
+          // Siempre mostrar el nombre de la categoría
+          group.append('text')
+            .attr('transform', `translate(${labelCentroid})`)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
+            .attr('dy', showPercentage || showValue ? '-0.4em' : '0')
+            .style('font-size', `${labelFontSize}px`)
+            .style('font-weight', '600')
+            .style('fill', '#000000')
+            .style('font-family', 'Arial, sans-serif')
+            .style('pointer-events', 'none')
+            .style('text-shadow', '1px 1px 2px rgba(255,255,255,0.8)')  // Sombra para mejor legibilidad
+            .text(d.data.category);
+          
+          // Si también mostrar porcentaje o valor, agregar segunda línea debajo
+          if (showPercentage || showValue) {
+            const secondLineText = showPercentage && showValue 
+              ? `${d.data.value.toFixed(1)} (${percentage.toFixed(1)}%)`
+              : showPercentage 
+                ? `${percentage.toFixed(1)}%`
+                : `${d.data.value.toFixed(1)}`;
+            
+            group.append('text')
+              .attr('transform', `translate(${labelCentroid})`)
+              .attr('text-anchor', 'middle')
+              .attr('dominant-baseline', 'middle')
+              .attr('dy', '1.2em')
+              .style('font-size', `${labelFontSize - 2}px`)
+              .style('font-weight', '400')
+              .style('fill', '#555555')
+              .style('font-family', 'Arial, sans-serif')
+              .style('pointer-events', 'none')
+              .style('text-shadow', '1px 1px 2px rgba(255,255,255,0.8)')  // Sombra para mejor legibilidad
+              .text(secondLineText);
+          }
+        } else {
+          // Etiqueta externa con línea de conexión (líder) para segmentos pequeños o donut
+          // Calcular posición de la etiqueta externa
+          const outerRadius = radius + 35; // Radio exterior para etiquetas (aumentado para más espacio)
+          const labelX = Math.cos(midAngle) * outerRadius;
+          const labelY = Math.sin(midAngle) * outerRadius;
+          
+          // Punto en el borde del arco (donde comienza la línea)
+          const arcEdgeX = Math.cos(midAngle) * radius;
+          const arcEdgeY = Math.sin(midAngle) * radius;
+          
+          // Punto intermedio para una línea más elegante
+          const midRadius = radius + 18;
+          const midX = Math.cos(midAngle) * midRadius;
+          const midY = Math.sin(midAngle) * midRadius;
+          
+          // Línea de conexión desde el borde del arco hasta la etiqueta
+          // Usar path para crear una línea polilínea
+          const linePath = d3.path();
+          linePath.moveTo(arcEdgeX, arcEdgeY);
+          linePath.lineTo(midX, midY);
+          linePath.lineTo(labelX, labelY);
+          
+          group.append('path')
+            .attr('d', linePath.toString())
+            .attr('fill', 'none')
+            .attr('stroke', '#666')
+            .attr('stroke-width', 1.5)
+            .style('pointer-events', 'none');
+          
+          // Etiqueta de texto externa
+          const textAnchor = labelX > 0 ? 'start' : 'end';
+          const dx = labelX > 0 ? 12 : -12;
+          
+          // Etiqueta principal (nombre de la categoría)
+          // Siempre mostrar el nombre de la categoría
+          group.append('text')
+            .attr('x', labelX)
+            .attr('y', labelY)
+            .attr('text-anchor', textAnchor)
+            .attr('dominant-baseline', 'middle')
+            .attr('dx', dx)
+            .attr('dy', showPercentage || showValue ? '-0.4em' : '0')
+            .style('font-size', `${labelFontSize}px`)
+            .style('font-weight', '600')
+            .style('fill', '#000000')
+            .style('font-family', 'Arial, sans-serif')
+            .style('pointer-events', 'none')
+            .text(d.data.category);
+          
+          // Si también mostrar porcentaje o valor, agregar segunda línea debajo
+          if (showPercentage || showValue) {
+            const secondLineText = showPercentage && showValue 
+              ? `${d.data.value.toFixed(1)} (${percentage.toFixed(1)}%)`
+              : showPercentage 
+                ? `${percentage.toFixed(1)}%`
+                : `${d.data.value.toFixed(1)}`;
+            
+            group.append('text')
+              .attr('x', labelX)
+              .attr('y', labelY)
+              .attr('text-anchor', textAnchor)
+              .attr('dominant-baseline', 'middle')
+              .attr('dx', dx)
+              .attr('dy', '1.2em')
+              .style('font-size', `${labelFontSize - 2}px`)
+              .style('font-weight', '400')
+              .style('fill', '#555555')
+              .style('font-family', 'Arial, sans-serif')
+              .style('pointer-events', 'none')
+              .text(secondLineText);
+          }
+        }
+      });
+    }
   }
 
   /**
