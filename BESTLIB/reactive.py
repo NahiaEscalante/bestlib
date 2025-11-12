@@ -1084,8 +1084,8 @@ class ReactiveMatrixLayout:
                     hist_data_json = json.dumps(_sanitize_for_json(hist_data))
                     default_color = kwargs.get('color', '#4a90e2')
                     show_axes = kwargs.get('axes', True)
-                
-                js_update = f"""
+                    
+                    js_update = f"""
                 (function() {{
                     function updateHistogram() {{
                         if (!window.d3) {{
@@ -1175,7 +1175,7 @@ class ReactiveMatrixLayout:
                     updateHistogram();
                 }})();
                 """
-                
+                    
                     try:
                         from IPython.display import Javascript, display
                         display(Javascript(js_update), clear=False)
