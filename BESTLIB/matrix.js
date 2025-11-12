@@ -34,14 +34,14 @@
     
     // Función interna para crear comm con retry
     function createComm(attempt = 1) {
-      try {
-        // Intentar primero con Jupyter clásico
-        const J = global.Jupyter;
-        if (J && J.notebook && J.notebook.kernel) {
+    try {
+      // Intentar primero con Jupyter clásico
+      const J = global.Jupyter;
+      if (J && J.notebook && J.notebook.kernel) {
           try {
-            const comm = J.notebook.kernel.comm_manager.new_comm("bestlib_matrix", { div_id: divId });
-            global._bestlibComms[divId] = comm;
-            return comm;
+        const comm = J.notebook.kernel.comm_manager.new_comm("bestlib_matrix", { div_id: divId });
+        global._bestlibComms[divId] = comm;
+        return comm;
           } catch (e) {
             if (attempt < maxRetries) {
               console.warn(`Intento ${attempt} fallido para crear comm, reintentando...`);
@@ -50,19 +50,19 @@
             }
             throw e;
           }
-        }
+      }
+      
+      // Si no funciona, intentar con Google Colab (retorna Promise)
+      if (global.google && global.google.colab && global.google.colab.kernel) {
+        const commPromise = global.google.colab.kernel.comms.open("bestlib_matrix", { div_id: divId });
         
-        // Si no funciona, intentar con Google Colab (retorna Promise)
-        if (global.google && global.google.colab && global.google.colab.kernel) {
-          const commPromise = global.google.colab.kernel.comms.open("bestlib_matrix", { div_id: divId });
-          
           // Guardar la promesa en cache
           global._bestlibComms[divId] = commPromise;
           
           // Manejar errores de la promesa
-          commPromise.then(comm => {
-            global._bestlibComms[divId] = comm;
-          }).catch(err => {
+        commPromise.then(comm => {
+          global._bestlibComms[divId] = comm;
+        }).catch(err => {
             console.error('Error al crear comm en Colab:', err);
             // Limpiar cache en caso de error
             delete global._bestlibComms[divId];
@@ -74,17 +74,17 @@
               errorDiv.textContent = 'Error al establecer comunicación con Python. Algunas funciones interactivas pueden no funcionar.';
               container.appendChild(errorDiv);
             }
-          });
-          
-          return commPromise;
-        }
+        });
         
-        // Último intento: buscar kernel en window
-        if (global.IPython && global.IPython.notebook && global.IPython.notebook.kernel) {
+        return commPromise;
+      }
+      
+      // Último intento: buscar kernel en window
+      if (global.IPython && global.IPython.notebook && global.IPython.notebook.kernel) {
           try {
-            const comm = global.IPython.notebook.kernel.comm_manager.new_comm("bestlib_matrix", { div_id: divId });
-            global._bestlibComms[divId] = comm;
-            return comm;
+        const comm = global.IPython.notebook.kernel.comm_manager.new_comm("bestlib_matrix", { div_id: divId });
+        global._bestlibComms[divId] = comm;
+        return comm;
           } catch (e) {
             if (attempt < maxRetries) {
               console.warn(`Intento ${attempt} fallido para crear comm, reintentando...`);
@@ -93,16 +93,16 @@
             }
             throw e;
           }
-        }
-        
-        return null;
-        
-      } catch (e) {
+      }
+      
+      return null;
+      
+    } catch (e) {
         console.error('Error al crear comm (intento ' + attempt + '):', e);
         if (attempt < maxRetries) {
           setTimeout(() => createComm(attempt + 1), 100 * attempt);
-          return null;
-        }
+      return null;
+    }
         // Mostrar mensaje visual en el contenedor si existe
         const container = document.getElementById(divId);
         if (container) {
@@ -130,17 +130,17 @@
     let attempts = 0;
     
     while (attempts < maxRetries) {
-      try {
+    try {
         attempts++;
         const commOrPromise = getComm(divId, maxRetries);
-        
-        if (!commOrPromise) {
+      
+      if (!commOrPromise) {
           if (attempts >= maxRetries) {
             console.warn('No se pudo obtener comm después de ' + maxRetries + ' intentos. Evento no enviado:', type);
           }
-          return;
-        }
-        
+        return;
+      }
+      
         // Si es una promesa (Colab), esperar a que se resuelva con timeout
         let comm;
         if (commOrPromise instanceof Promise) {
@@ -163,24 +163,24 @@
         } else {
           comm = commOrPromise;
         }
-        
-        if (!comm) {
+      
+      if (!comm) {
           if (attempts < maxRetries) {
             await new Promise(resolve => setTimeout(resolve, 100 * attempts));
             continue;
           }
-          return;
-        }
-        
-        const message = { 
-          type: type, 
-          div_id: divId, 
-          payload: payload 
-        };
-        
-        // Enviar datos
-        if (typeof comm.send === 'function') {
-          comm.send(message);
+        return;
+      }
+      
+      const message = { 
+        type: type, 
+        div_id: divId, 
+        payload: payload 
+      };
+      
+      // Enviar datos
+      if (typeof comm.send === 'function') {
+        comm.send(message);
           return; // Éxito, salir
         } else {
           console.warn('Comm no tiene método send (intento ' + attempts + ')');
@@ -192,8 +192,8 @@
             await new Promise(resolve => setTimeout(resolve, 100 * attempts));
             continue;
           }
-        }
-      } catch (e) {
+      }
+    } catch (e) {
         console.error('Error al enviar datos (intento ' + attempts + '):', e);
         if (attempts < maxRetries) {
           await new Promise(resolve => setTimeout(resolve, 100 * attempts));
@@ -230,7 +230,7 @@
       });
       container.style.gridTemplateColumns = colWidths.join(' ');
     } else {
-      container.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
+    container.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
     }
     
     // Configuración dinámica de filas
@@ -243,9 +243,9 @@
       });
       container.style.gridTemplateRows = rowHeights.join(' ');
     } else {
-      // Aumentar altura de filas para evitar recorte - altura mínima para gráficos completos
-      // Considerando: padding (30px) + gráfico (320px) + espacio para ejes (20px extra)
-      container.style.gridTemplateRows = `repeat(${R}, minmax(350px, auto))`;
+    // Aumentar altura de filas para evitar recorte - altura mínima para gráficos completos
+    // Considerando: padding (30px) + gráfico (320px) + espacio para ejes (20px extra)
+    container.style.gridTemplateRows = `repeat(${R}, minmax(350px, auto))`;
     }
     
     // Configuración dinámica de gap
@@ -824,12 +824,24 @@
     const vmax = d3.max(data, d => d.value) ?? 1;
     
     // Para correlation heatmap, usar escala divergente centrada en 0
+    // INVERTIDA: Rojo para correlación positiva, Azul para correlación negativa
     let color;
     if (isCorrelation) {
       // Escala divergente para correlación (-1 a 1)
       const absMax = Math.max(Math.abs(vmin), Math.abs(vmax));
-      // Usar scaleDiverging para correlación
-      color = d3.scaleDiverging(d3.interpolateRdBu)
+      // Crear interpolador invertido: azul (negativo) -> blanco (neutral) -> rojo (positivo)
+      // d3.interpolateRdBu va de rojo (t=0) a azul (t=1)
+      // Queremos: azul (t=0) -> blanco (t=0.5) -> rojo (t=1)
+      // Entonces invertimos: usar interpolateRdBu(1 - t) para intercambiar los extremos
+      const invertedInterpolator = t => {
+        // Para t=0 (negativo), queremos azul: interpolateRdBu(1-0) = interpolateRdBu(1) = azul ✓
+        // Para t=0.5 (neutral), queremos blanco: interpolateRdBu(1-0.5) = interpolateRdBu(0.5) = blanco ✓
+        // Para t=1 (positivo), queremos rojo: interpolateRdBu(1-1) = interpolateRdBu(0) = rojo ✓
+        return d3.interpolateRdBu(1 - t);
+      };
+      // Usar scaleDiverging con interpolador invertido
+      // domain: [-absMax, 0, absMax] donde -absMax es negativo, 0 es neutral, absMax es positivo
+      color = d3.scaleDiverging(invertedInterpolator)
         .domain([-absMax, 0, absMax]);
     } else if (spec.colorScale === 'diverging') {
       color = d3.scaleDiverging(d3.interpolateRdBu)
@@ -912,17 +924,20 @@
       const steps = 100; // Más pasos para gradiente más suave
       for (let i = 0; i <= steps; i++) {
         // Calcular valor desde absMax hasta -absMax (de arriba a abajo)
+        // Pero queremos que el colorbar muestre: rojo (positivo) arriba, azul (negativo) abajo
+        // Como usamos un interpolador invertido, el color ya está correcto
         const t = i / steps; // 0 a 1
-        const value = absMax - (2 * absMax * t); // absMax a -absMax
+        const value = absMax - (2 * absMax * t); // absMax a -absMax (de arriba a abajo)
         try {
           const colorValue = color(value);
           gradient.append('stop')
             .attr('offset', `${(i / steps) * 100}%`)
             .attr('stop-color', colorValue);
         } catch (e) {
-          // Si hay error, usar color por defecto
+          // Si hay error, usar color por defecto (rojo para positivo, azul para negativo)
           console.warn('Error al calcular color para colorbar:', e);
-          const defaultColor = i < steps / 2 ? '#2166ac' : '#b2182b'; // Azul a rojo
+          // Rojo para valores positivos (arriba), azul para valores negativos (abajo)
+          const defaultColor = i < steps / 2 ? '#b2182b' : '#2166ac'; // Rojo a azul (invertido)
           gradient.append('stop')
             .attr('offset', `${(i / steps) * 100}%`)
             .attr('stop-color', defaultColor);
@@ -973,6 +988,15 @@
         .attr('font-weight', 'bold')
         .attr('fill', '#000')
         .text('Correlación');
+      
+      // Etiqueta adicional: Rojo = Positivo, Azul = Negativo
+      colorbarGroup.append('text')
+        .attr('x', colorbarX + colorbarWidth / 2)
+        .attr('y', colorbarY + colorbarHeight + 20)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '10px')
+        .attr('fill', '#666')
+        .text('Rojo: Positivo | Azul: Negativo');
     }
 
     if (spec.axes !== false) {
@@ -1087,13 +1111,13 @@
       const sortedPts = [...pts].sort((a, b) => a.x - b.x);
       
       if (sortedPts.length > 0) {
-        g.append('path')
+      g.append('path')
           .datum(sortedPts)
-          .attr('fill', 'none')
-          .attr('stroke', color(name))
+        .attr('fill', 'none')
+        .attr('stroke', color(name))
           .attr('stroke-width', spec.strokeWidth || 2)
-          .attr('d', line)
-          .attr('opacity', 0)
+        .attr('d', line)
+        .attr('opacity', 0)
           .transition()
           .duration(500)
           .attr('opacity', 1);
@@ -1570,11 +1594,11 @@
         }
         
         // Dibujar violín completo (área cerrada simétrica)
-        g.append('path')
+      g.append('path')
           .attr('d', pathData)
           .attr('fill', color(category))
-          .attr('opacity', 0.7)
-          .attr('stroke', '#333')
+        .attr('opacity', 0.7)
+        .attr('stroke', '#333')
           .attr('stroke-width', 1)
           .attr('stroke-linejoin', 'round')
           .attr('stroke-linecap', 'round');
@@ -2087,9 +2111,30 @@
     // Grouped/nested bars
     const groups = spec.groups || [];
     const series = spec.series || [];
+    const groupedData = spec.data || [];
+    
+    // Validar datos
+    if (!groups || groups.length === 0) {
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay grupos para mostrar</div>';
+      return;
+    }
+    
+    if (!series || series.length === 0) {
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay series para mostrar</div>';
+      return;
+    }
+    
+    if (!groupedData || groupedData.length === 0) {
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos para mostrar</div>';
+      return;
+    }
+    
     const x0 = d3.scaleBand().domain(groups).range([0, chartWidth]).padding(0.2);
     const x1 = d3.scaleBand().domain(series).range([0, x0.bandwidth()]).padding(0.1);
-    const y2 = d3.scaleLinear().domain([0, d3.max(spec.data, d => d.value) || 100]).nice().range([chartHeight, 0]);
+    
+    // Calcular el valor máximo de los datos
+    const maxValue = d3.max(groupedData, d => d.value != null && !isNaN(d.value) ? d.value : 0) || 1;
+    const y2 = d3.scaleLinear().domain([0, maxValue]).nice().range([chartHeight, 0]);
     const color = d3.scaleOrdinal(d3.schemeCategory10).domain(series);
 
     const groupG = g.selectAll('.g-group')
@@ -2375,7 +2420,7 @@
         if (!spec.interactive || isBrushing) return;
         
         event.stopPropagation();
-        const index = data.indexOf(d);
+          const index = data.indexOf(d);
         const ctrlKey = event.ctrlKey || event.metaKey; // Cmd en Mac, Ctrl en Windows/Linux
         
         if (ctrlKey) {
@@ -2452,8 +2497,8 @@
           // Identificar puntos dentro del área de brush
           const brushedIndices = new Set();
           data.forEach((d, i) => {
-            const px = x(d.x);
-            const py = y(d.y);
+              const px = x(d.x);
+              const py = y(d.y);
             if (px >= Math.min(x0, x1) && px <= Math.max(x0, x1) && 
                 py >= Math.min(y0, y1) && py <= Math.max(y0, y1)) {
               brushedIndices.add(i);
@@ -2494,13 +2539,13 @@
                 .attr('stroke-width', 0)
                 .attr('opacity', 0.15);
             }
-          });
+            });
         })
         .on('end', function(event) {
           isBrushing = false;
           
           // Restaurar eventos de puntos inmediatamente para permitir nuevos brushes y clicks
-          g.selectAll('.dot')
+            g.selectAll('.dot')
             .style('pointer-events', 'all');
           
           // CRÍTICO: Asegurar que el overlay del brush siga capturando eventos
@@ -2742,7 +2787,7 @@
         .call(d3.axisLeft(y).ticks(6));
       
       yAxis.selectAll('text')
-        .style('font-size', '12px')
+      .style('font-size', '12px')
         .style('font-weight', '600')
         .style('fill', '#000000')
         .style('font-family', 'Arial, sans-serif');
@@ -2829,7 +2874,7 @@
           reject(new Error('No se pudo cargar D3.js desde ningún CDN disponible'));
           return;
         }
-        
+
         const script = document.createElement('script');
         script.id = scriptId;
         script.src = cdns[index];
