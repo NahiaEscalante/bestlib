@@ -288,7 +288,10 @@
         value.type === 'histogram' ||
         value.type === 'pie' ||
         value.type === 'boxplot' ||
-        value.type === 'heatmap'
+        value.type === 'heatmap' ||
+        value.type === 'line' ||
+        value.type === 'violin' ||
+        value.type === 'radviz'
       );
     }
     
