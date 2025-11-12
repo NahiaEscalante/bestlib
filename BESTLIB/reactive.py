@@ -1266,6 +1266,9 @@ class ReactiveMatrixLayout:
             # Función de actualización del histograma
             def update_histogram(items, count):
                 """Actualiza el histograma cuando cambia la selección"""
+                # CRÍTICO: Importar MatrixLayout al principio para evitar UnboundLocalError
+                from .matrix import MatrixLayout
+                
                 # CRÍTICO: Flag para evitar ejecuciones múltiples simultáneas
                 if hasattr(update_histogram, '_executing') and update_histogram._executing:
                     if MatrixLayout._debug:
@@ -1552,7 +1555,7 @@ class ReactiveMatrixLayout:
                         pass
                     
                 except Exception as e:
-                    from .matrix import MatrixLayout
+                    # MatrixLayout ya está importado al principio de la función
                     if MatrixLayout._debug:
                         print(f"⚠️ Error actualizando histograma: {e}")
                         import traceback
@@ -1632,16 +1635,17 @@ class ReactiveMatrixLayout:
         # Función de actualización del boxplot
         def update_boxplot(items, count):
             """Actualiza el boxplot cuando cambia la selección"""
+            # CRÍTICO: Importar MatrixLayout al principio para evitar UnboundLocalError
+            from .matrix import MatrixLayout
+            
             # CRÍTICO: Flag para evitar ejecuciones múltiples simultáneas
-            if hasattr(update_boxplot, '_executing'):
+            if hasattr(update_boxplot, '_executing') and update_boxplot._executing:
                 if MatrixLayout._debug:
                     print(f"   ⏭️ Boxplot '{letter}' callback ya está ejecutándose, ignorando llamada duplicada")
                 return
             update_boxplot._executing = True
             
             try:
-                # Importar MatrixLayout dentro de la función para evitar problemas de scope
-                from .matrix import MatrixLayout
                 import json
                 from IPython.display import Javascript
                 
