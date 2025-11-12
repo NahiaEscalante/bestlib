@@ -218,6 +218,11 @@ class ReactiveMatrixLayout:
         self._scatter_selection_models = {}  # {scatter_letter: SelectionModel} - Modelos por scatter
         self._barchart_to_scatter = {}  # {barchart_letter: scatter_letter} - Enlaces scatter->bar
         self._linked_charts = {}  # {chart_letter: {'type': str, 'linked_to': str, 'callback': func}} - Gráficos enlazados genéricos
+        # Sistema genérico de vistas principales (no solo scatter plots)
+        self._primary_view_models = {}  # {view_letter: SelectionModel} - Modelos por vista principal
+        self._primary_view_types = {}  # {view_letter: 'scatter'|'barchart'|'histogram'|'grouped_barchart'} - Tipo de vista
+        # Sistema para guardar selecciones en variables Python accesibles
+        self._selection_variables = {}  # {view_letter: variable_name} - Variables donde guardar selecciones
     
     def set_data(self, data):
         """
@@ -330,26 +335,34 @@ class ReactiveMatrixLayout:
         
         return self
     
-    def add_barchart(self, letter, category_col=None, value_col=None, linked_to=None, **kwargs):
+    def add_barchart(self, letter, category_col=None, value_col=None, linked_to=None, interactive=None, selection_var=None, **kwargs):
         """
-        Agrega un bar chart enlazado que se actualiza automáticamente cuando se selecciona en scatter.
+        Agrega un bar chart que puede ser vista principal o enlazada.
         
         Args:
             letter: Letra del layout ASCII donde irá el bar chart
             category_col: Nombre de columna para categorías
             value_col: Nombre de columna para valores (opcional, si no se especifica cuenta)
-            linked_to: Letra del scatter plot que debe actualizar este bar chart (opcional)
-                      Si no se especifica, se enlaza al último scatter plot agregado
+            linked_to: Letra de la vista principal que debe actualizar este bar chart (opcional)
+                      Si no se especifica y interactive=True, este bar chart será vista principal
+            interactive: Si True, permite seleccionar barras. Si es None, se infiere de linked_to
+            selection_var: Nombre de variable Python donde guardar selecciones (ej: 'selected_data')
             **kwargs: Argumentos adicionales (color, colorMap, axes, etc.)
         
         Returns:
             self para encadenamiento
         
-        Ejemplo:
-            layout.add_scatter('S1', df, ...)  # Scatter plot 1
-            layout.add_scatter('S2', df, ...)  # Scatter plot 2
-            layout.add_barchart('B1', linked_to='S1')  # Bar chart enlazado a S1
-            layout.add_barchart('B2', linked_to='S2')  # Bar chart enlazado a S2
+        Ejemplos:
+            # Bar chart como vista principal (genera selecciones)
+            layout.add_barchart('B1', category_col='dept', interactive=True, selection_var='my_selection')
+            
+            # Bar chart enlazado a scatter plot
+            layout.add_scatter('S', df, ...)
+            layout.add_barchart('B2', category_col='dept', linked_to='S')
+            
+            # Bar chart enlazado a otro bar chart
+            layout.add_barchart('B1', category_col='dept', interactive=True)
+            layout.add_barchart('B2', category_col='subcategory', linked_to='B1')
         """
         # Importar MatrixLayout al inicio para evitar UnboundLocalError
         from .matrix import MatrixLayout
@@ -357,27 +370,94 @@ class ReactiveMatrixLayout:
         if self._data is None:
             raise ValueError("Debe usar set_data() o add_scatter() primero para establecer los datos")
         
-        # Evitar registrar múltiples callbacks para la misma letra
-        if letter in self._barchart_callbacks:
+        # Determinar si será vista principal o enlazada
+        if linked_to is None:
+            # Si no hay linked_to, puede ser vista principal si interactive=True
+            if interactive is None:
+                interactive = True  # Por defecto, hacerlo interactivo si no está enlazado
+            is_primary = interactive
+        else:
+            # Si hay linked_to, es una vista enlazada
+            is_primary = False
+            if interactive is None:
+                interactive = False  # Por defecto, no interactivo si está enlazado
+        
+        # Si es vista principal, crear su propio SelectionModel
+        if is_primary:
+            barchart_selection = SelectionModel()
+            self._primary_view_models[letter] = barchart_selection
+            self._primary_view_types[letter] = 'barchart'
+            
+            # Guardar variable de selección si se especifica
+            if selection_var:
+                self._selection_variables[letter] = selection_var
+                # Crear variable en el namespace del usuario
+                import __main__
+                setattr(__main__, selection_var, [])
+                if MatrixLayout._debug:
+                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de bar chart '{letter}'")
+            
+            # Crear handler para eventos de selección del bar chart
+            def barchart_handler(payload):
+                """Handler que actualiza el SelectionModel de este bar chart"""
+                event_letter = payload.get('__view_letter__')
+                if event_letter != letter:
+                    return
+                
+                items = payload.get('items', [])
+                
+                if MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Evento recibido para bar chart '{letter}': {len(items)} items")
+                
+                # Actualizar el SelectionModel de este bar chart
+                barchart_selection.update(items)
+                
+                # Actualizar también el selection_model principal
+                self.selection_model.update(items)
+                self._selected_data = items
+                
+                # Guardar en variable Python si se especificó
+                if selection_var:
+                    import __main__
+                    setattr(__main__, selection_var, items)
+                    if MatrixLayout._debug:
+                        print(f"💾 Selección guardada en variable '{selection_var}': {len(items)} items")
+            
+            # Registrar handler en el layout principal
+            self._layout.on('select', barchart_handler)
+            
+            # Marcar el spec con identificador para enrutamiento
+            kwargs['__view_letter__'] = letter
+            kwargs['__is_primary_view__'] = True
+            kwargs['interactive'] = True  # Forzar interactive para vista principal
+        
+        # Evitar registrar múltiples callbacks para la misma letra (solo si es enlazada)
+        if not is_primary and letter in self._barchart_callbacks:
             if MatrixLayout._debug:
                 print(f"⚠️ Bar chart para '{letter}' ya está registrado. Ignorando registro duplicado.")
             return self
         
-        # Determinar a qué scatter plot enlazar
-        if linked_to:
-            if linked_to not in self._scatter_selection_models:
-                raise ValueError(f"Scatter plot '{linked_to}' no existe. Agrega el scatter plot primero.")
-            scatter_letter = linked_to
-        else:
-            # Si no se especifica, usar el último scatter plot agregado
-            if not self._scatter_selection_models:
-                raise ValueError("No hay scatter plots disponibles. Agrega un scatter plot primero con add_scatter().")
-            scatter_letter = list(self._scatter_selection_models.keys())[-1]
-            if MatrixLayout._debug:
-                print(f"💡 Bar chart '{letter}' enlazado automáticamente a scatter '{scatter_letter}'")
-        
-        # Guardar el enlace
-        self._barchart_to_scatter[letter] = scatter_letter
+        # Si es vista enlazada, determinar a qué vista principal enlazar
+        if not is_primary:
+            # Buscar en scatter plots primero (compatibilidad hacia atrás)
+            if linked_to in self._scatter_selection_models:
+                primary_letter = linked_to
+                primary_selection = self._scatter_selection_models[primary_letter]
+            elif linked_to in self._primary_view_models:
+                primary_letter = linked_to
+                primary_selection = self._primary_view_models[primary_letter]
+            else:
+                # Si no se especifica, usar la última vista principal disponible
+                all_primary = {**self._scatter_selection_models, **self._primary_view_models}
+                if not all_primary:
+                    raise ValueError("No hay vistas principales disponibles. Agrega una vista principal primero (scatter, bar chart, etc.)")
+                primary_letter = list(all_primary.keys())[-1]
+                primary_selection = all_primary[primary_letter]
+                if MatrixLayout._debug:
+                    print(f"💡 Bar chart '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
+            
+            # Guardar el enlace
+            self._barchart_to_scatter[letter] = primary_letter
         
         # Crear bar chart inicial con todos los datos
         MatrixLayout.map_barchart(
@@ -395,81 +475,81 @@ class ReactiveMatrixLayout:
             'letter': letter,
             'category_col': category_col,
             'value_col': value_col,
-            'kwargs': kwargs
+            'kwargs': kwargs,
+            'is_primary': is_primary
         }
         self._view_letters[view_id] = letter
         
-        # Guardar parámetros para el callback (closure)
-        barchart_params = {
-            'letter': letter,
-            'category_col': category_col,
-            'value_col': value_col,
-            'kwargs': kwargs.copy(),  # Copia para evitar mutaciones
-            'layout_div_id': self._layout.div_id
-        }
-        
-        # Obtener el SelectionModel del scatter plot al que está enlazado
-        scatter_selection = self._scatter_selection_models[scatter_letter]
-        
-        # Debug: verificar que el scatter_selection existe
-        if MatrixLayout._debug:
-            print(f"🔗 [ReactiveMatrixLayout] Registrando callback para bar chart '{letter}' enlazado a scatter '{scatter_letter}'")
-            print(f"   - SelectionModel ID: {id(scatter_selection)}")
-            print(f"   - Callbacks actuales: {len(scatter_selection._callbacks)}")
-        
-        # Configurar callback para actualizar bar chart cuando cambia selección
-        def update_barchart(items, count):
-            """Actualiza el bar chart cuando cambia la selección usando JavaScript"""
-            try:
-                # Debug: verificar que el callback se está ejecutando
-                if MatrixLayout._debug:
-                    print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando bar chart '{letter}' con {count} items seleccionados")
-                import json
-                from IPython.display import Javascript
-                import time
-                
-                # Usar datos seleccionados o todos los datos
-                data_to_use = self._data
-                if items and len(items) > 0:
-                    # Convertir lista de dicts a DataFrame si es necesario
-                    if HAS_PANDAS and isinstance(items[0], dict):
-                        import pandas as pd
-                        data_to_use = pd.DataFrame(items)
-                    else:
-                        data_to_use = items
-                else:
+        # Si es vista enlazada, configurar callback de actualización
+        if not is_primary:
+            # Guardar parámetros para el callback (closure)
+            barchart_params = {
+                'letter': letter,
+                'category_col': category_col,
+                'value_col': value_col,
+                'kwargs': kwargs.copy(),  # Copia para evitar mutaciones
+                'layout_div_id': self._layout.div_id
+            }
+            
+            # Debug: verificar que la vista principal existe
+            if MatrixLayout._debug:
+                print(f"🔗 [ReactiveMatrixLayout] Registrando callback para bar chart '{letter}' enlazado a vista principal '{primary_letter}'")
+                print(f"   - SelectionModel ID: {id(primary_selection)}")
+                print(f"   - Callbacks actuales: {len(primary_selection._callbacks)}")
+            
+            # Configurar callback para actualizar bar chart cuando cambia selección
+            def update_barchart(items, count):
+                """Actualiza el bar chart cuando cambia la selección usando JavaScript"""
+                try:
+                    # Debug: verificar que el callback se está ejecutando
+                    if MatrixLayout._debug:
+                        print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando bar chart '{letter}' con {count} items seleccionados")
+                    import json
+                    from IPython.display import Javascript
+                    import time
+                    
+                    # Usar datos seleccionados o todos los datos
                     data_to_use = self._data
-                
-                # Preparar datos del bar chart
-                bar_data = self._prepare_barchart_data(
-                    data_to_use, 
-                    barchart_params['category_col'], 
-                    barchart_params['value_col'],
-                    barchart_params['kwargs']
-                )
-                
-                if not bar_data:
-                    return
-                
-                # Actualizar también el mapping para consistencia
-                MatrixLayout.map_barchart(
-                    letter,
-                    data_to_use,
-                    category_col=barchart_params['category_col'],
-                    value_col=barchart_params['value_col'],
-                    **barchart_params['kwargs']
-                )
-                
-                # Crear JavaScript para actualizar el gráfico de forma más robusta
-                div_id = barchart_params['layout_div_id']
-                # Sanitizar para evitar numpy.int64 en JSON
-                bar_data_json = json.dumps(_sanitize_for_json(bar_data))
-                color_map = barchart_params['kwargs'].get('colorMap', {})
-                color_map_json = json.dumps(color_map)
-                default_color = barchart_params['kwargs'].get('color', '#4a90e2')
-                show_axes = barchart_params['kwargs'].get('axes', True)
-                
-                js_update = f"""
+                    if items and len(items) > 0:
+                        # Convertir lista de dicts a DataFrame si es necesario
+                        if HAS_PANDAS and isinstance(items[0], dict):
+                            import pandas as pd
+                            data_to_use = pd.DataFrame(items)
+                        else:
+                            data_to_use = items
+                    else:
+                        data_to_use = self._data
+                    
+                    # Preparar datos del bar chart
+                    bar_data = self._prepare_barchart_data(
+                        data_to_use, 
+                        barchart_params['category_col'], 
+                        barchart_params['value_col'],
+                        barchart_params['kwargs']
+                    )
+                    
+                    if not bar_data:
+                        return
+                    
+                    # Actualizar también el mapping para consistencia
+                    MatrixLayout.map_barchart(
+                        letter,
+                        data_to_use,
+                        category_col=barchart_params['category_col'],
+                        value_col=barchart_params['value_col'],
+                        **barchart_params['kwargs']
+                    )
+                    
+                    # Crear JavaScript para actualizar el gráfico de forma más robusta
+                    div_id = barchart_params['layout_div_id']
+                    # Sanitizar para evitar numpy.int64 en JSON
+                    bar_data_json = json.dumps(_sanitize_for_json(bar_data))
+                    color_map = barchart_params['kwargs'].get('colorMap', {})
+                    color_map_json = json.dumps(color_map)
+                    default_color = barchart_params['kwargs'].get('color', '#4a90e2')
+                    show_axes = barchart_params['kwargs'].get('axes', True)
+                    
+                    js_update = f"""
                 (function() {{
                     // Flag para evitar actualizaciones múltiples simultáneas
                     if (window._bestlib_updating_{letter}) {{
@@ -625,70 +705,145 @@ class ReactiveMatrixLayout:
                     }}
                     
                     updateBarchart();
-                }})();
-                """
-                
-                # Ejecutar JavaScript para actualizar solo el bar chart
-                # Usar eval_js en lugar de display para evitar duplicación
-                try:
-                    from IPython.display import Javascript, display
-                    display(Javascript(js_update), clear=False)
-                except:
-                    # Fallback si no está disponible
-                    pass
-                
-            except Exception as e:
-                if MatrixLayout._debug:
-                    print(f"⚠️ Error actualizando bar chart: {e}")
-                    import traceback
-                    traceback.print_exc()
-                # Asegurar que el flag se resetee incluso si hay error
-                js_reset_flag = f"""
-                <script>
-                if (window._bestlib_updating_{letter}) {{
-                    window._bestlib_updating_{letter} = false;
-                }}
-                </script>
-                """
-                try:
-                    from IPython.display import HTML
-                    display(HTML(js_reset_flag))
-                except:
-                    pass
-        
-        # Guardar callback para referencia
-        self._barchart_callbacks[letter] = update_barchart
-        
-        # Registrar callback en el modelo de selección ESPECÍFICO del scatter plot
-        # Esto permite que cada scatter plot actualice solo sus bar charts asociados
-        scatter_selection = self._scatter_selection_models[scatter_letter]
-        scatter_selection.on_change(update_barchart)
+                    }})();
+                    """
+                    
+                    # Ejecutar JavaScript para actualizar solo el bar chart
+                    # Usar eval_js en lugar de display para evitar duplicación
+                    try:
+                        from IPython.display import Javascript, display
+                        display(Javascript(js_update), clear=False)
+                    except:
+                        # Fallback si no está disponible
+                        pass
+                    
+                except Exception as e:
+                    if MatrixLayout._debug:
+                        print(f"⚠️ Error actualizando bar chart: {e}")
+                        import traceback
+                        traceback.print_exc()
+                    # Asegurar que el flag se resetee incluso si hay error
+                    js_reset_flag = f"""
+                    <script>
+                    if (window._bestlib_updating_{letter}) {{
+                        window._bestlib_updating_{letter} = false;
+                    }}
+                    </script>
+                    """
+                    try:
+                        from IPython.display import HTML
+                        display(HTML(js_reset_flag))
+                    except:
+                        pass
+            
+            # Registrar callback en el modelo de selección de la vista principal
+            primary_selection.on_change(update_barchart)
+            
+            # Marcar como callback registrado
+            self._barchart_callbacks[letter] = update_barchart
         
         return self
 
-    def add_grouped_barchart(self, letter, main_col=None, sub_col=None, value_col=None, linked_to=None, **kwargs):
+    def add_grouped_barchart(self, letter, main_col=None, sub_col=None, value_col=None, linked_to=None, interactive=None, selection_var=None, **kwargs):
         """
-        Barplot anidado enlazado a selección.
+        Agrega un grouped bar chart que puede ser vista principal o enlazada.
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el gráfico
+            main_col: Nombre de columna para grupos principales
+            sub_col: Nombre de columna para sub-grupos (series)
+            value_col: Nombre de columna para valores (opcional, si no se especifica cuenta)
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            interactive: Si True, permite seleccionar barras. Si es None, se infiere de linked_to
+            selection_var: Nombre de variable Python donde guardar selecciones
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
         """
         from .matrix import MatrixLayout
         if self._data is None:
             raise ValueError("Debe usar set_data() o add_scatter() primero")
         if main_col is None or sub_col is None:
             raise ValueError("main_col y sub_col son requeridos")
-        # inicial
+        
+        # Determinar si será vista principal o enlazada
+        if linked_to is None:
+            if interactive is None:
+                interactive = True
+            is_primary = interactive
+        else:
+            is_primary = False
+            if interactive is None:
+                interactive = False
+        
+        # Si es vista principal, crear su propio SelectionModel
+        if is_primary:
+            grouped_selection = SelectionModel()
+            self._primary_view_models[letter] = grouped_selection
+            self._primary_view_types[letter] = 'grouped_barchart'
+            
+            if selection_var:
+                self._selection_variables[letter] = selection_var
+                import __main__
+                setattr(__main__, selection_var, [])
+                if MatrixLayout._debug:
+                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de grouped bar chart '{letter}'")
+            
+            def grouped_handler(payload):
+                event_letter = payload.get('__view_letter__')
+                if event_letter != letter:
+                    return
+                
+                items = payload.get('items', [])
+                
+                if MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Evento recibido para grouped bar chart '{letter}': {len(items)} items")
+                
+                grouped_selection.update(items)
+                self.selection_model.update(items)
+                self._selected_data = items
+                
+                if selection_var:
+                    import __main__
+                    setattr(__main__, selection_var, items)
+                    if MatrixLayout._debug:
+                        print(f"💾 Selección guardada en variable '{selection_var}': {len(items)} items")
+            
+            self._layout.on('select', grouped_handler)
+            
+            kwargs['__view_letter__'] = letter
+            kwargs['__is_primary_view__'] = True
+            kwargs['interactive'] = True
+        
+        # Crear gráfico inicial
         MatrixLayout.map_grouped_barchart(letter, self._data, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
-        # enlazar
-        if not self._scatter_selection_models:
-            return self
-        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
-        sel = self._scatter_selection_models[scatter_letter]
-        def update(items, count):
-            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
-            try:
-                MatrixLayout.map_grouped_barchart(letter, data_to_use, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
-            except Exception:
-                pass
-        sel.on_change(update)
+        
+        # Si es vista enlazada, configurar callback
+        if not is_primary:
+            if linked_to in self._scatter_selection_models:
+                primary_letter = linked_to
+                primary_selection = self._scatter_selection_models[primary_letter]
+            elif linked_to in self._primary_view_models:
+                primary_letter = linked_to
+                primary_selection = self._primary_view_models[primary_letter]
+            else:
+                all_primary = {**self._scatter_selection_models, **self._primary_view_models}
+                if not all_primary:
+                    return self
+                primary_letter = list(all_primary.keys())[-1]
+                primary_selection = all_primary[primary_letter]
+                if MatrixLayout._debug:
+                    print(f"💡 Grouped bar chart '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
+            
+            def update(items, count):
+                data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+                try:
+                    MatrixLayout.map_grouped_barchart(letter, data_to_use, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
+                except Exception:
+                    pass
+            primary_selection.on_change(update)
+        
         return self
     
     def link_chart(self, letter, chart_type, linked_to=None, update_func=None, **kwargs):
@@ -758,19 +913,30 @@ class ReactiveMatrixLayout:
         
         return self
     
-    def add_histogram(self, letter, column=None, bins=20, linked_to=None, **kwargs):
+    def add_histogram(self, letter, column=None, bins=20, linked_to=None, interactive=None, selection_var=None, **kwargs):
         """
-        Agrega un histograma enlazado que se actualiza automáticamente cuando se selecciona en scatter.
+        Agrega un histograma que puede ser vista principal o enlazada.
         
         Args:
             letter: Letra del layout ASCII donde irá el histograma
             column: Nombre de columna numérica para el histograma
             bins: Número de bins (default: 20)
-            linked_to: Letra del scatter plot que debe actualizar este histograma (opcional)
+            linked_to: Letra de la vista principal que debe actualizar este histograma (opcional)
+                      Si no se especifica y interactive=True, este histograma será vista principal
+            interactive: Si True, permite seleccionar bins. Si es None, se infiere de linked_to
+            selection_var: Nombre de variable Python donde guardar selecciones (ej: 'selected_bins')
             **kwargs: Argumentos adicionales (color, axes, etc.)
         
         Returns:
             self para encadenamiento
+        
+        Ejemplos:
+            # Histogram como vista principal
+            layout.add_histogram('H1', column='age', interactive=True, selection_var='selected_age_range')
+            
+            # Histogram enlazado a bar chart
+            layout.add_barchart('B', category_col='dept', interactive=True)
+            layout.add_histogram('H2', column='salary', linked_to='B')
         """
         from .matrix import MatrixLayout
         
@@ -780,83 +946,144 @@ class ReactiveMatrixLayout:
         if column is None:
             raise ValueError("Debe especificar 'column' para el histograma")
         
-        # Determinar a qué scatter plot enlazar
-        if linked_to:
-            if linked_to not in self._scatter_selection_models:
-                raise ValueError(f"Scatter plot '{linked_to}' no existe.")
-            scatter_letter = linked_to
+        # Determinar si será vista principal o enlazada
+        if linked_to is None:
+            if interactive is None:
+                interactive = True  # Por defecto, hacerlo interactivo si no está enlazado
+            is_primary = interactive
         else:
-            if not self._scatter_selection_models:
-                raise ValueError("No hay scatter plots disponibles.")
-            scatter_letter = list(self._scatter_selection_models.keys())[-1]
+            is_primary = False
+            if interactive is None:
+                interactive = False
         
-        # Guardar parámetros
-        hist_params = {
-            'letter': letter,
-            'column': column,
-            'bins': bins,
-            'kwargs': kwargs.copy(),
-            'layout_div_id': self._layout.div_id
-        }
-        
-        # Función de actualización del histograma
-        def update_histogram(items, count):
-            """Actualiza el histograma cuando cambia la selección"""
-            try:
-                import json
-                from IPython.display import Javascript
-                
-                # Usar datos seleccionados o todos los datos
-                data_to_use = self._data
-                if items and len(items) > 0:
-                    if HAS_PANDAS and isinstance(items[0], dict):
-                        import pandas as pd
-                        data_to_use = pd.DataFrame(items)
-                    else:
-                        data_to_use = items
-                
-                # Preparar datos para histograma
-                if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
-                    values = data_to_use[column].dropna().tolist()
-                else:
-                    values = [item.get(column, 0) for item in data_to_use if column in item]
-                
-                if not values:
+        # Si es vista principal, crear su propio SelectionModel
+        if is_primary:
+            histogram_selection = SelectionModel()
+            self._primary_view_models[letter] = histogram_selection
+            self._primary_view_types[letter] = 'histogram'
+            
+            # Guardar variable de selección si se especifica
+            if selection_var:
+                self._selection_variables[letter] = selection_var
+                import __main__
+                setattr(__main__, selection_var, [])
+                if MatrixLayout._debug:
+                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de histogram '{letter}'")
+            
+            # Crear handler para eventos de selección del histogram
+            def histogram_handler(payload):
+                """Handler que actualiza el SelectionModel de este histogram"""
+                event_letter = payload.get('__view_letter__')
+                if event_letter != letter:
                     return
                 
-                # Calcular bins
+                items = payload.get('items', [])
+                
+                if MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Evento recibido para histogram '{letter}': {len(items)} items")
+                
+                histogram_selection.update(items)
+                self.selection_model.update(items)
+                self._selected_data = items
+                
+                # Guardar en variable Python si se especificó
+                if selection_var:
+                    import __main__
+                    setattr(__main__, selection_var, items)
+                    if MatrixLayout._debug:
+                        print(f"💾 Selección guardada en variable '{selection_var}': {len(items)} items")
+            
+            self._layout.on('select', histogram_handler)
+            
+            kwargs['__view_letter__'] = letter
+            kwargs['__is_primary_view__'] = True
+            kwargs['interactive'] = True
+        
+        # Si es vista enlazada, determinar a qué vista principal enlazar
+        if not is_primary:
+            # Buscar en scatter plots primero (compatibilidad hacia atrás)
+            if linked_to in self._scatter_selection_models:
+                primary_letter = linked_to
+                primary_selection = self._scatter_selection_models[primary_letter]
+            elif linked_to in self._primary_view_models:
+                primary_letter = linked_to
+                primary_selection = self._primary_view_models[primary_letter]
+            else:
+                all_primary = {**self._scatter_selection_models, **self._primary_view_models}
+                if not all_primary:
+                    raise ValueError("No hay vistas principales disponibles. Agrega una vista principal primero.")
+                primary_letter = list(all_primary.keys())[-1]
+                primary_selection = all_primary[primary_letter]
+                if MatrixLayout._debug:
+                    print(f"💡 Histogram '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
+            
+            # Guardar parámetros
+            hist_params = {
+                'letter': letter,
+                'column': column,
+                'bins': bins,
+                'kwargs': kwargs.copy(),
+                'layout_div_id': self._layout.div_id
+            }
+            
+            # Función de actualización del histograma
+            def update_histogram(items, count):
+                """Actualiza el histograma cuando cambia la selección"""
                 try:
-                    import numpy as np
-                    hist, bin_edges = np.histogram(values, bins=bins)
-                except ImportError:
-                    # Fallback: calcular bins manualmente si numpy no está disponible
-                    min_val, max_val = min(values), max(values)
-                    bin_width = (max_val - min_val) / bins if max_val > min_val else 1
-                    hist = [0] * bins
-                    bin_edges = [min_val + i * bin_width for i in range(bins + 1)]
+                    import json
+                    from IPython.display import Javascript
                     
-                    for val in values:
-                        bin_idx = min(int((val - min_val) / bin_width), bins - 1) if bin_width > 0 else 0
-                        hist[bin_idx] += 1
-                bin_centers = [(bin_edges[i] + bin_edges[i+1]) / 2 for i in range(len(bin_edges)-1)]
-                
-                hist_data = [{'bin': center, 'count': count} for center, count in zip(bin_centers, hist)]
-                
-                # Actualizar mapping
-                from .matrix import MatrixLayout
-                MatrixLayout._map[letter] = {
-                    'type': 'histogram',
-                    'data': hist_data,
-                    'column': column,
-                    'bins': bins,
-                    **kwargs
-                }
-                
-                # JavaScript para actualizar el gráfico (similar a bar chart)
-                div_id = hist_params['layout_div_id']
-                hist_data_json = json.dumps(_sanitize_for_json(hist_data))
-                default_color = kwargs.get('color', '#4a90e2')
-                show_axes = kwargs.get('axes', True)
+                    # Usar datos seleccionados o todos los datos
+                    data_to_use = self._data
+                    if items and len(items) > 0:
+                        if HAS_PANDAS and isinstance(items[0], dict):
+                            import pandas as pd
+                            data_to_use = pd.DataFrame(items)
+                        else:
+                            data_to_use = items
+                    
+                    # Preparar datos para histograma
+                    if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
+                        values = data_to_use[column].dropna().tolist()
+                    else:
+                        values = [item.get(column, 0) for item in data_to_use if column in item]
+                    
+                    if not values:
+                        return
+                    
+                    # Calcular bins
+                    try:
+                        import numpy as np
+                        hist, bin_edges = np.histogram(values, bins=bins)
+                    except ImportError:
+                        # Fallback: calcular bins manualmente si numpy no está disponible
+                        min_val, max_val = min(values), max(values)
+                        bin_width = (max_val - min_val) / bins if max_val > min_val else 1
+                        hist = [0] * bins
+                        bin_edges = [min_val + i * bin_width for i in range(bins + 1)]
+                        
+                        for val in values:
+                            bin_idx = min(int((val - min_val) / bin_width), bins - 1) if bin_width > 0 else 0
+                            hist[bin_idx] += 1
+                    bin_centers = [(bin_edges[i] + bin_edges[i+1]) / 2 for i in range(len(bin_edges)-1)]
+                    
+                    hist_data = [{'bin': center, 'count': count} for center, count in zip(bin_centers, hist)]
+                    
+                    # Actualizar mapping
+                    from .matrix import MatrixLayout
+                    MatrixLayout._map[letter] = {
+                        'type': 'histogram',
+                        'data': hist_data,
+                        'column': column,
+                        'bins': bins,
+                        **kwargs
+                    }
+                    
+                    # JavaScript para actualizar el gráfico (similar a bar chart)
+                    div_id = hist_params['layout_div_id']
+                    hist_data_json = json.dumps(_sanitize_for_json(hist_data))
+                    default_color = kwargs.get('color', '#4a90e2')
+                    show_axes = kwargs.get('axes', True)
                 
                 js_update = f"""
                 (function() {{
@@ -949,51 +1176,22 @@ class ReactiveMatrixLayout:
                 }})();
                 """
                 
-                try:
-                    from IPython.display import Javascript, display
-                    display(Javascript(js_update), clear=False)
-                except:
-                    pass
+                    try:
+                        from IPython.display import Javascript, display
+                        display(Javascript(js_update), clear=False)
+                    except:
+                        pass
                     
-            except Exception as e:
-                from .matrix import MatrixLayout
-                if MatrixLayout._debug:
-                    print(f"⚠️ Error actualizando histograma: {e}")
-        
-        # Registrar callback
-        scatter_selection = self._scatter_selection_models[scatter_letter]
-        scatter_selection.on_change(update_histogram)
+                except Exception as e:
+                    from .matrix import MatrixLayout
+                    if MatrixLayout._debug:
+                        print(f"⚠️ Error actualizando histograma: {e}")
+            
+            # Registrar callback en el modelo de selección de la vista principal
+            primary_selection.on_change(update_histogram)
         
         # Crear histograma inicial con todos los datos
-        if HAS_PANDAS and isinstance(self._data, pd.DataFrame):
-            values = self._data[column].dropna().tolist()
-        else:
-            values = [item.get(column, 0) for item in self._data if column in item]
-        
-        if values:
-            try:
-                import numpy as np
-                hist, bin_edges = np.histogram(values, bins=bins)
-            except ImportError:
-                # Fallback: calcular bins manualmente si numpy no está disponible
-                min_val, max_val = min(values), max(values)
-                bin_width = (max_val - min_val) / bins if max_val > min_val else 1
-                hist = [0] * bins
-                bin_edges = [min_val + i * bin_width for i in range(bins + 1)]
-                
-                for val in values:
-                    bin_idx = min(int((val - min_val) / bin_width), bins - 1) if bin_width > 0 else 0
-                    hist[bin_idx] += 1
-            bin_centers = [(bin_edges[i] + bin_edges[i+1]) / 2 for i in range(len(bin_edges)-1)]
-            hist_data = [{'bin': center, 'count': count} for center, count in zip(bin_centers, hist)]
-            
-            MatrixLayout._map[letter] = {
-                'type': 'histogram',
-                'data': hist_data,
-                'column': column,
-                'bins': bins,
-                **kwargs
-            }
+        MatrixLayout.map_histogram(letter, self._data, value_col=column, bins=bins, **kwargs)
         
         return self
     

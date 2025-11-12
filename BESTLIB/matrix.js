@@ -2506,7 +2506,30 @@
       .attr('width', x.bandwidth())
       .attr('height', 0)
       .attr('fill', spec.color || '#4a90e2')
-      .style('cursor', 'pointer')
+      .style('cursor', spec.interactive ? 'pointer' : 'default')
+      .on('click', function(event, d) {
+        if (spec.interactive) {
+          // Obtener letra de la vista (para vistas principales)
+          let viewLetter = spec.__view_letter__ || null;
+          if (!viewLetter && container) {
+            const letterAttr = container.getAttribute('data-letter');
+            if (letterAttr) {
+              viewLetter = letterAttr;
+            }
+          }
+          
+          // Para histogram, necesitamos reconstruir los datos originales del bin
+          // Por ahora, enviamos información del bin seleccionado
+          sendEvent(divId, 'select', {
+            type: 'select',
+            items: [{ bin: d.bin, count: d.count }],
+            indices: [],
+            original_items: [d],
+            __view_letter__: viewLetter,
+            __is_primary_view__: spec.__is_primary_view__ || false
+          });
+        }
+      })
       .on('mouseenter', function(event, d) {
         // Resaltar barra
         d3.select(this)
@@ -2693,11 +2716,23 @@
       .style('cursor', spec.interactive ? 'pointer' : 'default')
       .on('click', function(event, d) {
         if (!spec.interactive) return;
+        
+        // Obtener letra de la vista (para vistas principales)
+        let viewLetter = spec.__view_letter__ || null;
+        if (!viewLetter && container) {
+          const letterAttr = container.getAttribute('data-letter');
+          if (letterAttr) {
+            viewLetter = letterAttr;
+          }
+        }
+        
         sendEvent(divId, 'select', {
           type: 'select',
           items: [{ group: d.group, series: d.series }],
           indices: [],
-          original_items: [d]
+          original_items: [d],
+          __view_letter__: viewLetter,
+          __is_primary_view__: spec.__is_primary_view__ || false
         });
       })
       .on('mouseenter', function(event, d) {
@@ -2791,11 +2826,23 @@
         if (spec.interactive) {
           const index = data.indexOf(d);
           const originalRow = d._original_row || d;
+          
+          // Obtener letra de la vista (para vistas principales)
+          let viewLetter = spec.__view_letter__ || null;
+          if (!viewLetter && container) {
+            const letterAttr = container.getAttribute('data-letter');
+            if (letterAttr) {
+              viewLetter = letterAttr;
+            }
+          }
+          
           sendEvent(divId, 'select', {
             type: 'select',
             items: [originalRow],
             indices: [index],
-            original_items: [d]
+            original_items: [d],
+            __view_letter__: viewLetter,
+            __is_primary_view__: spec.__is_primary_view__ || false
           });
         }
       })
