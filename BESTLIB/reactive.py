@@ -118,7 +118,9 @@ class ReactiveData(widgets.Widget):
     def update(self, items):
         """Actualiza los items manualmente desde Python"""
         # CRÍTICO: Flag para evitar actualizaciones múltiples simultáneas
-        if hasattr(self, '_updating'):
+        # PERO: Solo bloquear si realmente hay una actualización en progreso
+        # No bloquear si el flag existe pero está en False
+        if hasattr(self, '_updating') and self._updating:
             # Ya hay una actualización en progreso, ignorar esta llamada
             return
         self._updating = True
@@ -143,7 +145,7 @@ class ReactiveData(widgets.Widget):
                 # 2. Una vez en _items_changed() (automático por @observe)
                 # Esto es lo que estaba causando la duplicación del boxplot
         finally:
-            # Resetear flag después de completar
+            # CRÍTICO: Resetear flag después de completar, incluso si hay una excepción
             self._updating = False
     
     def clear(self):
@@ -1264,9 +1266,19 @@ class ReactiveMatrixLayout:
             # Función de actualización del histograma
             def update_histogram(items, count):
                 """Actualiza el histograma cuando cambia la selección"""
+                # CRÍTICO: Flag para evitar ejecuciones múltiples simultáneas
+                if hasattr(update_histogram, '_executing') and update_histogram._executing:
+                    if MatrixLayout._debug:
+                        print(f"   ⏭️ Histogram '{letter}' callback ya está ejecutándose, ignorando llamada duplicada")
+                    return
+                update_histogram._executing = True
+                
                 try:
                     import json
                     from IPython.display import Javascript
+                    
+                    if MatrixLayout._debug:
+                        print(f"   🔄 Histogram '{letter}' callback ejecutándose con {count} items")
                     
                     # Usar datos seleccionados o todos los datos
                     data_to_use = self._data
@@ -1543,6 +1555,13 @@ class ReactiveMatrixLayout:
                     from .matrix import MatrixLayout
                     if MatrixLayout._debug:
                         print(f"⚠️ Error actualizando histograma: {e}")
+                        import traceback
+                        traceback.print_exc()
+                finally:
+                    # CRÍTICO: Resetear flag después de completar
+                    update_histogram._executing = False
+                    if MatrixLayout._debug:
+                        print(f"   ✅ Histogram '{letter}' callback completado")
             
             # Registrar callback en el modelo de selección de la vista principal
             primary_selection.on_change(update_histogram)
