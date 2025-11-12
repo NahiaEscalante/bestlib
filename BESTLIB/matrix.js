@@ -2090,20 +2090,29 @@
     // Función para recalcular posiciones de puntos cuando se mueven los anchors
     function recalculateRadVizPoints() {
       // Recalcular todos los puntos
-      const updatedPoints = [];
       g.selectAll('.rvpt').each(function(d) {
         // Si el punto tiene _weights (valores normalizados de features), recalcular
         if (d._weights && Array.isArray(d._weights) && d._weights.length === anchorPos.length) {
           // Calcular nueva posición usando los nuevos anchors
           const weights = d._weights;
           const s = d3.sum(weights) || 1.0;
-          const newX = d3.sum(weights.map((w, i) => w * anchorPos[i].x)) / s;
-          const newY = d3.sum(weights.map((w, i) => w * anchorPos[i].y)) / s;
+          let newX = d3.sum(weights.map((w, i) => w * anchorPos[i].x)) / s;
+          let newY = d3.sum(weights.map((w, i) => w * anchorPos[i].y)) / s;
+          
+          // Normalizar para asegurar que el punto esté dentro del círculo
+          const distance = Math.sqrt(newX * newX + newY * newY);
+          const maxDistance = radius * 0.85; // Margen de seguridad
+          
+          if (distance > maxDistance) {
+            // Escalar hacia el centro para mantener dentro del círculo
+            const scale = maxDistance / distance;
+            newX = newX * scale;
+            newY = newY * scale;
+          }
           
           // Actualizar posición del punto en los datos
           d.x = newX;
           d.y = newY;
-          updatedPoints.push({x: newX, y: newY});
           
           // Actualizar visualmente con transición suave
           d3.select(this)
@@ -2113,22 +2122,6 @@
             .attr('cy', toY(newY));
         }
       });
-      
-      // Actualizar escalas si hay cambios significativos
-      if (updatedPoints.length > 0) {
-        const newXExtent = d3.extent(updatedPoints, p => p.x);
-        const newYExtent = d3.extent(updatedPoints, p => p.y);
-        const newMaxExtent = Math.max(
-          Math.abs(newXExtent[0] || 0),
-          Math.abs(newXExtent[1] || 0),
-          Math.abs(newYExtent[0] || 0),
-          Math.abs(newYExtent[1] || 0)
-        ) || 1;
-        
-        // Actualizar dominios de las escalas
-        toX.domain([-newMaxExtent, newMaxExtent]);
-        toY.domain([-newMaxExtent, newMaxExtent]);
-      }
     }
     
     // Dibujar líneas desde el centro hasta los anchors
@@ -2339,23 +2332,38 @@
       };
     });
     
-    // Escalas para proyectar puntos (normalizados)
-    const xExtent = d3.extent(validPoints, d => d.x);
-    const yExtent = d3.extent(validPoints, d => d.y);
-    const maxExtent = Math.max(
-      Math.abs(xExtent[0] || 0),
-      Math.abs(xExtent[1] || 0),
-      Math.abs(yExtent[0] || 0),
-      Math.abs(yExtent[1] || 0)
-    ) || 1;
+    // Escalas para proyectar puntos (normalizados) - se actualizarán dinámicamente
+    let toX = d3.scaleLinear().range([0, chartWidth]);
+    let toY = d3.scaleLinear().range([chartHeight, 0]);
     
-    const toX = d3.scaleLinear()
-      .domain([-maxExtent, maxExtent])
-      .range([0, chartWidth]);
-    
-    const toY = d3.scaleLinear()
-      .domain([-maxExtent, maxExtent])
-      .range([chartHeight, 0]);
+    // Función para actualizar escalas basadas en las posiciones actuales de los puntos
+    function updateScales() {
+      const allX = [];
+      const allY = [];
+      
+      g.selectAll('.scpt').each(function(d) {
+        if (d.x != null && d.y != null && !isNaN(d.x) && !isNaN(d.y)) {
+          allX.push(d.x);
+          allY.push(d.y);
+        }
+      });
+      
+      if (allX.length === 0) return;
+      
+      const xExtent = d3.extent(allX);
+      const yExtent = d3.extent(allY);
+      const maxExtent = Math.max(
+        Math.abs(xExtent[0] || 0),
+        Math.abs(xExtent[1] || 0),
+        Math.abs(yExtent[0] || 0),
+        Math.abs(yExtent[1] || 0)
+      ) || 1;
+      
+      // Actualizar dominios con un pequeño margen
+      const margin = maxExtent * 0.1;
+      toX.domain([-maxExtent - margin, maxExtent + margin]);
+      toY.domain([-maxExtent - margin, maxExtent + margin]);
+    }
     
     // Función para recalcular posiciones de puntos cuando se mueven los nodos
     function recalculateStarPoints() {
@@ -2370,16 +2378,22 @@
           
           d.x = newX;
           d.y = newY;
-          
-          // Actualizar visualmente
-          d3.select(this)
-            .transition()
-            .duration(200)
-            .attr('cx', toX(newX))
-            .attr('cy', toY(newY));
         }
       });
+      
+      // Actualizar escalas después de recalcular
+      updateScales();
+      
+      // Actualizar visualmente todos los puntos
+      g.selectAll('.scpt')
+        .transition()
+        .duration(200)
+        .attr('cx', d => toX(d.x))
+        .attr('cy', d => toY(d.y));
     }
+    
+    // Inicializar escalas con los puntos iniciales
+    updateScales();
     
     // Dibujar líneas desde el origen (centro) hasta los nodos
     const anchorLines = g.selectAll('.anchor-line')
@@ -2471,14 +2485,20 @@
     const categories = [...new Set(validPoints.map(p => p.category).filter(c => c != null && c !== ''))];
     const color = d3.scaleOrdinal(d3.schemeCategory10).domain(categories.length > 0 ? categories : ['default']);
     
-    // Dibujar puntos
+    // Dibujar puntos (después de inicializar escalas)
     g.selectAll('.scpt')
       .data(validPoints)
       .enter()
       .append('circle')
       .attr('class', 'scpt')
-      .attr('cx', d => toX(d.x))
-      .attr('cy', d => toY(d.y))
+      .attr('cx', d => {
+        if (d.x == null || isNaN(d.x)) return chartWidth / 2;
+        return toX(d.x);
+      })
+      .attr('cy', d => {
+        if (d.y == null || isNaN(d.y)) return chartHeight / 2;
+        return toY(d.y);
+      })
       .attr('r', 3)
       .attr('fill', d => d.category && categories.includes(d.category) ? color(d.category) : '#4a90e2')
       .attr('opacity', 0.6)
@@ -2587,6 +2607,21 @@
       });
     });
     
+    // Crear tooltip una sola vez (fuera de drawDataLines)
+    const tooltip = d3.select(container).append('div')
+        .attr('class', 'parallel-coords-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '8px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)');
+    
     // Función para dibujar líneas de datos
     function drawDataLines() {
       // Limpiar líneas anteriores
@@ -2630,15 +2665,54 @@
         .attr('stroke-width', 1.5)
         .attr('opacity', 0.6)
         .style('cursor', 'pointer')
-        .on('mouseenter', function() {
+        .on('mouseenter', function(event, d) {
           d3.select(this)
             .attr('stroke-width', 3)
             .attr('opacity', 1);
+          
+          // Mostrar tooltip con información de la línea
+          const mouseX = event.pageX || event.clientX || 0;
+          const mouseY = event.pageY || event.clientY || 0;
+          
+          let tooltipContent = '<strong>Datos:</strong><br/>';
+          dimensions.forEach(dim => {
+            const val = d[dim];
+            if (val != null && !isNaN(val)) {
+              tooltipContent += `${dim}: ${parseFloat(val).toFixed(2)}<br/>`;
+            }
+          });
+          if (categoryCol && d[categoryCol]) {
+            tooltipContent += `<br/><strong>Categoría:</strong> ${d[categoryCol]}`;
+          }
+          
+          tooltip
+            .style('left', (mouseX + 10) + 'px')
+            .style('top', (mouseY - 10) + 'px')
+            .style('display', 'block')
+            .html(tooltipContent)
+            .transition()
+            .duration(200)
+            .style('opacity', 1);
+        })
+        .on('mousemove', function(event) {
+          const mouseX = event.pageX || event.clientX || 0;
+          const mouseY = event.pageY || event.clientY || 0;
+          tooltip
+            .style('left', (mouseX + 10) + 'px')
+            .style('top', (mouseY - 10) + 'px');
         })
         .on('mouseleave', function() {
           d3.select(this)
             .attr('stroke-width', 1.5)
             .attr('opacity', 0.6);
+          
+          tooltip
+            .transition()
+            .duration(200)
+            .style('opacity', 0)
+            .on('end', function() {
+              tooltip.style('display', 'none');
+            });
         });
     }
     
@@ -2657,12 +2731,39 @@
           const [mx] = d3.pointer(event, g.node());
           // Limitar movimiento horizontal dentro del área
           const padding = 20;
-          d.x = Math.max(padding, Math.min(chartWidth - padding, mx));
+          let newX = Math.max(padding, Math.min(chartWidth - padding, mx));
+          
+          // Snap a posiciones de otros ejes o posiciones uniformes
+          const snapThreshold = 15; // Distancia para hacer snap
+          const uniformSpacing = chartWidth / (dimensions.length - 1);
+          
+          // Buscar si hay otro eje cerca para hacer snap
+          let snapped = false;
+          for (let otherAxis of axisPositions) {
+            if (otherAxis !== d && Math.abs(newX - otherAxis.x) < snapThreshold) {
+              newX = otherAxis.x;
+              snapped = true;
+              break;
+            }
+          }
+          
+          // Si no hay snap a otro eje, intentar snap a posición uniforme
+          if (!snapped) {
+            for (let i = 0; i < dimensions.length; i++) {
+              const uniformX = (chartWidth / (dimensions.length - 1)) * i;
+              if (Math.abs(newX - uniformX) < snapThreshold) {
+                newX = uniformX;
+                break;
+              }
+            }
+          }
+          
+          d.x = newX;
           
           // Actualizar posición del grupo
           d3.select(this).attr('transform', `translate(${d.x}, 0)`);
           
-          // Reordenar ejes si se cruzan (opcional: mantener orden)
+          // Reordenar ejes si se cruzan
           axisPositions.sort((a, b) => a.x - b.x);
           axisPositions.forEach((ax, idx) => {
             ax.index = idx;
@@ -2693,11 +2794,25 @@
       const dim = d.name;
       const scale = scales[dim];
       
-      // Ticks del eje
-      const axis = d3.axisLeft(scale).ticks(5);
-      axisG.append('g')
-        .attr('class', 'axis-ticks')
-        .call(axis);
+      // Ticks del eje Y (vertical) con números visibles
+      const axis = d3.axisLeft(scale)
+        .ticks(5)
+        .tickFormat(d3.format('.2f'));
+      
+      const axisTicks = axisG.append('g')
+        .attr('class', 'axis-ticks');
+      
+      axisTicks.call(axis);
+      
+      // Asegurar que los números sean visibles
+      axisTicks.selectAll('text')
+        .style('font-size', '10px')
+        .style('fill', '#333')
+        .style('font-weight', 'normal');
+      
+      axisTicks.selectAll('line, path')
+        .style('stroke', '#666')
+        .style('stroke-width', 1);
       
       // Etiqueta del eje
       axisG.append('text')
