@@ -91,6 +91,13 @@ class ReactiveData(widgets.Widget):
         Args:
             callback: Función que recibe (items, count) como argumentos
         """
+        # CRÍTICO: Verificar que el callback no esté ya registrado para evitar duplicados
+        # Comparar por referencia de función (closure) usando id()
+        callback_id = id(callback)
+        for existing_callback in self._callbacks:
+            if id(existing_callback) == callback_id:
+                # Callback ya está registrado, no agregar duplicado
+                return
         self._callbacks.append(callback)
     
     @observe('items')
@@ -100,7 +107,9 @@ class ReactiveData(widgets.Widget):
         self.count = len(new_items)
         
         # Ejecutar callbacks registrados
-        for callback in self._callbacks:
+        # CRÍTICO: Usar una copia de la lista para evitar problemas si se modifican durante la ejecución
+        callbacks_to_execute = list(self._callbacks)
+        for callback in callbacks_to_execute:
             try:
                 callback(new_items, self.count)
             except Exception as e:
@@ -108,26 +117,34 @@ class ReactiveData(widgets.Widget):
     
     def update(self, items):
         """Actualiza los items manualmente desde Python"""
-        # Convertir a lista si es necesario y asegurar que sea una nueva referencia
-        if items is None:
-            items = []
-        else:
-            items = list(items)  # Crear nueva lista para forzar cambio
+        # CRÍTICO: Flag para evitar actualizaciones múltiples simultáneas
+        if hasattr(self, '_updating'):
+            # Ya hay una actualización en progreso, ignorar esta llamada
+            return
+        self._updating = True
         
-        # Actualizar count primero
-        new_count = len(items)
-        
-        # Solo actualizar si hay cambio real (evitar loops infinitos)
-        if self.items != items or self.count != new_count:
-            self.items = items
-            self.count = new_count
-            # Nota: @observe se disparará automáticamente, pero también llamamos manualmente
-            # para asegurar que los callbacks se ejecuten incluso si traitlets no detecta el cambio
-            for callback in self._callbacks:
-                try:
-                    callback(items, new_count)
-                except Exception as e:
-                    print(f"Error en callback: {e}")
+        try:
+            # Convertir a lista si es necesario y asegurar que sea una nueva referencia
+            if items is None:
+                items = []
+            else:
+                items = list(items)  # Crear nueva lista para forzar cambio
+            
+            # Actualizar count primero
+            new_count = len(items)
+            
+            # Solo actualizar si hay cambio real (evitar loops infinitos)
+            if self.items != items or self.count != new_count:
+                self.items = items
+                self.count = new_count
+                # NOTA: NO llamar callbacks manualmente aquí porque @observe('items') ya los ejecutará
+                # Llamar callbacks manualmente aquí causaría que se ejecuten DOS VECES:
+                # 1. Una vez aquí (manual)
+                # 2. Una vez en _items_changed() (automático por @observe)
+                # Esto es lo que estaba causando la duplicación del boxplot
+        finally:
+            # Resetear flag después de completar
+            self._updating = False
     
     def clear(self):
         """Limpia los datos"""
@@ -1596,11 +1613,21 @@ class ReactiveMatrixLayout:
         # Función de actualización del boxplot
         def update_boxplot(items, count):
             """Actualiza el boxplot cuando cambia la selección"""
+            # CRÍTICO: Flag para evitar ejecuciones múltiples simultáneas
+            if hasattr(update_boxplot, '_executing'):
+                if MatrixLayout._debug:
+                    print(f"   ⏭️ Boxplot '{letter}' callback ya está ejecutándose, ignorando llamada duplicada")
+                return
+            update_boxplot._executing = True
+            
             try:
                 # Importar MatrixLayout dentro de la función para evitar problemas de scope
                 from .matrix import MatrixLayout
                 import json
                 from IPython.display import Javascript
+                
+                if MatrixLayout._debug:
+                    print(f"   🔄 Boxplot '{letter}' callback ejecutándose con {count} items")
                 
                 # Usar datos seleccionados o todos los datos
                 # Si los items tienen _original_row, usar esos datos
@@ -1902,6 +1929,11 @@ class ReactiveMatrixLayout:
                 if MatrixLayout._debug:
                     print(f"⚠️ Error actualizando boxplot: {e}")
                     traceback.print_exc()
+            finally:
+                # CRÍTICO: Resetear flag después de completar
+                update_boxplot._executing = False
+                if MatrixLayout._debug:
+                    print(f"   ✅ Boxplot '{letter}' callback completado")
         
         # Registrar callback en el SelectionModel de la vista principal
         primary_selection.on_change(update_boxplot)
