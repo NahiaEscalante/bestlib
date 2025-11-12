@@ -1913,15 +1913,22 @@
         .on('end', function(event) {
           isBrushing = false;
           
-          // Restaurar eventos de puntos
+          // Restaurar eventos de puntos inmediatamente para permitir nuevos brushes y clicks
           g.selectAll('.dot')
             .style('pointer-events', 'all');
           
-          // Si no hay selección, mantener la selección actual y salir
+          // CRÍTICO: Asegurar que el overlay del brush siga capturando eventos
+          // Esto permite que el usuario pueda hacer nuevos brushes después de una selección
+          brushGroup.selectAll('.overlay')
+            .style('pointer-events', 'all')
+            .style('cursor', 'crosshair');
+          
+          // Si no hay selección (usuario hizo click fuera o canceló), mantener la selección actual
+          // NO limpiar el brush visual - el usuario puede hacer un nuevo brush inmediatamente
           if (!event.selection) {
             updatePointVisualization(g.selectAll('.dot'), selectedIndices, false);
-            // Limpiar el brush visual
-            brushGroup.call(brush.move, null);
+            // El brush visual permanece, permitiendo nuevos brushes
+            // El overlay seguirá capturando eventos para permitir nuevos brushes
             return;
           }
           
@@ -1953,57 +1960,179 @@
             brushedIndices.forEach(i => selectedIndices.add(i));
           } else {
             // Modo reemplazar: reemplazar la selección actual con la del brush
-            selectedIndices = brushedIndices;
+            selectedIndices = new Set(brushedIndices);
           }
           
           // Actualizar visualización con la nueva selección
+          // Los puntos seleccionados se mostrarán con borde naranja
           updatePointVisualization(g.selectAll('.dot'), selectedIndices, false);
           
           // Enviar evento de selección
           sendSelectionEvent(selectedIndices);
           
-          // Limpiar el brush visual después de un breve delay
-          setTimeout(() => {
-            brushGroup.call(brush.move, null);
-          }, 100);
+          // CRÍTICO: NO limpiar el brush visual automáticamente
+          // El brush debe permanecer visible Y funcional para permitir múltiples selecciones
+          // El usuario puede hacer un nuevo brush en cualquier momento
+          // El área de brush permanecerá visible con la selección actual, y el usuario puede hacer un nuevo brush sobre ella
+          // El nuevo brush reemplazará o agregará a la selección actual según si tiene Ctrl/Cmd presionado
+          
+          // NO usar setTimeout para limpiar el brush - el brush debe permanecer visible y funcional
+          // El usuario puede hacer un nuevo brush en cualquier momento simplemente arrastrando sobre el gráfico
         });
       
       // Aplicar brush al grupo (esto lo renderiza visualmente encima de los puntos)
       brushGroup.call(brush);
       
-      // Estilo del brush overlay (área de captura de eventos)
-      brushGroup.selectAll('.overlay')
-        .style('cursor', 'crosshair')
-        .style('pointer-events', 'all');  // Asegurar que capture eventos
+      // Aplicar estilos CSS directamente al SVG para el brush
+      // Usar selector más general para asegurar que los estilos se apliquen
+      const styleId = `brush-style-${divId}`;
+      let styleElement = document.getElementById(styleId);
+      if (!styleElement) {
+        styleElement = document.createElement('style');
+        styleElement.id = styleId;
+        document.head.appendChild(styleElement);
+      }
       
-      // Estilo del brush selection (área seleccionada) - MEJORADO para mejor visibilidad
-      brushGroup.selectAll('.selection')
-        .attr('stroke', '#2563eb')
-        .attr('stroke-width', '2.5px')
-        .attr('stroke-dasharray', '8,4')
-        .attr('fill', '#3b82f6')
-        .attr('fill-opacity', 0.25)  // Aumentado de 0.1 a 0.25 para mejor visibilidad
-        .style('pointer-events', 'none');  // La selección no debe capturar eventos
+      // Actualizar contenido del estilo (puede cambiar si el divId cambia)
+      styleElement.textContent = `
+        .matrix-layout #${divId} .brush-layer .overlay,
+        #${divId} .brush-layer .overlay {
+          cursor: crosshair !important;
+          pointer-events: all !important;
+          fill: transparent !important;
+        }
+        .matrix-layout #${divId} .brush-layer .selection,
+        #${divId} .brush-layer .selection {
+          stroke: #2563eb !important;
+          stroke-width: 2.5px !important;
+          stroke-dasharray: 8,4 !important;
+          fill: #3b82f6 !important;
+          fill-opacity: 0.25 !important;
+          pointer-events: none !important;
+        }
+        .matrix-layout #${divId} .brush-layer .handle,
+        #${divId} .brush-layer .handle {
+          fill: #2563eb !important;
+          stroke: #1e40af !important;
+          stroke-width: 2px !important;
+          cursor: move !important;
+          pointer-events: all !important;
+        }
+        .matrix-layout #${divId} .brush-layer .handle--n,
+        .matrix-layout #${divId} .brush-layer .handle--s,
+        .matrix-layout #${divId} .brush-layer .handle--e,
+        .matrix-layout #${divId} .brush-layer .handle--w,
+        .matrix-layout #${divId} .brush-layer .handle--nw,
+        .matrix-layout #${divId} .brush-layer .handle--ne,
+        .matrix-layout #${divId} .brush-layer .handle--sw,
+        .matrix-layout #${divId} .brush-layer .handle--se,
+        #${divId} .brush-layer .handle--n,
+        #${divId} .brush-layer .handle--s,
+        #${divId} .brush-layer .handle--e,
+        #${divId} .brush-layer .handle--w,
+        #${divId} .brush-layer .handle--nw,
+        #${divId} .brush-layer .handle--ne,
+        #${divId} .brush-layer .handle--sw,
+        #${divId} .brush-layer .handle--se {
+          fill: #2563eb !important;
+          stroke: #1e40af !important;
+          stroke-width: 2px !important;
+        }
+      `;
       
-      // Estilo de los handles del brush (esquinas) - MEJORADO
-      brushGroup.selectAll('.handle')
-        .attr('fill', '#2563eb')
-        .attr('stroke', '#1e40af')
-        .attr('stroke-width', '2px')
-        .style('cursor', 'move')
-        .style('pointer-events', 'all');  // Los handles deben capturar eventos
+      // Aplicar estilos directamente después de que el brush se crea
+      // Esto asegura que los estilos se apliquen incluso si el CSS no se carga correctamente
+      setTimeout(function() {
+        brushGroup.selectAll('.overlay')
+          .style('cursor', 'crosshair')
+          .style('pointer-events', 'all')
+          .style('fill', 'transparent');
+        
+        brushGroup.selectAll('.selection')
+          .attr('stroke', '#2563eb')
+          .attr('stroke-width', '2.5px')
+          .attr('stroke-dasharray', '8,4')
+          .attr('fill', '#3b82f6')
+          .attr('fill-opacity', 0.25)
+          .style('pointer-events', 'none');
+        
+        brushGroup.selectAll('.handle')
+          .attr('fill', '#2563eb')
+          .attr('stroke', '#1e40af')
+          .attr('stroke-width', '2px')
+          .style('cursor', 'move')
+          .style('pointer-events', 'all');
+      }, 100);
       
-      // Agregar estilo para el handle del sur (handle-n)
-      brushGroup.selectAll('.handle--n, .handle--s, .handle--e, .handle--w')
-        .attr('fill', '#2563eb')
-        .attr('stroke', '#1e40af')
-        .attr('stroke-width', '2px');
+      // Aplicar estilos después de cada evento del brush para mantenerlos actualizados
+      // Usar un observer o aplicar estilos periódicamente
+      const styleUpdateInterval = setInterval(function() {
+        // Solo aplicar estilos si el brush existe
+        if (brushGroup.selectAll('.overlay').size() > 0 || brushGroup.selectAll('.selection').size() > 0) {
+          brushGroup.selectAll('.overlay')
+            .style('cursor', 'crosshair')
+            .style('pointer-events', 'all');
+          
+          brushGroup.selectAll('.selection')
+            .attr('stroke', '#2563eb')
+            .attr('stroke-width', '2.5px')
+            .attr('stroke-dasharray', '8,4')
+            .attr('fill', '#3b82f6')
+            .attr('fill-opacity', 0.25)
+            .style('pointer-events', 'none');
+          
+          brushGroup.selectAll('.handle')
+            .attr('fill', '#2563eb')
+            .attr('stroke', '#1e40af')
+            .attr('stroke-width', '2px')
+            .style('cursor', 'move')
+            .style('pointer-events', 'all');
+        }
+      }, 300);
       
-      // Agregar estilo para los handles de las esquinas
-      brushGroup.selectAll('.handle--nw, .handle--ne, .handle--sw, .handle--se')
-        .attr('fill', '#2563eb')
-        .attr('stroke', '#1e40af')
-        .attr('stroke-width', '2px');
+      // Función para limpiar selección y brush
+      const clearSelection = function() {
+        selectedIndices.clear();
+        updatePointVisualization(g.selectAll('.dot'), selectedIndices, false);
+        brushGroup.call(brush.move, null);
+        sendSelectionEvent(selectedIndices);
+      };
+      
+      // Doble click en el overlay para limpiar selección
+      // Aplicar el evento después de que el overlay se cree
+      setTimeout(function() {
+        brushGroup.selectAll('.overlay')
+          .on('dblclick', function() {
+            clearSelection();
+          });
+      }, 150);
+      
+      // Agregar listener para tecla Escape para limpiar selección
+      if (!window._bestlib_escape_handlers) {
+        window._bestlib_escape_handlers = new Map();
+        
+        // Agregar listener global al documento (solo una vez)
+        document.addEventListener('keydown', function(event) {
+          if (event.key === 'Escape' || event.key === 'Esc') {
+            // Ejecutar todos los handlers activos
+            window._bestlib_escape_handlers.forEach((handler, id) => {
+              handler(event);
+            });
+          }
+        });
+      }
+      
+      // Crear handler específico para este gráfico
+      const escapeHandler = function(event) {
+        // Verificar si el contenedor está visible
+        if (container && container.offsetParent !== null) {
+          clearSelection();
+          event.stopPropagation();
+        }
+      };
+      
+      // Agregar handler al mapa global
+      window._bestlib_escape_handlers.set(divId, escapeHandler);
     }
     
     // Ejes con texto NEGRO y visible (renderizar por defecto a menos que axes === false)
