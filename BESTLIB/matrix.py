@@ -1098,7 +1098,14 @@ class MatrixLayout:
             s = sum(weights) or 1.0
             x = sum(w * anchors[i][0] for i, w in enumerate(weights)) / s
             y = sum(w * anchors[i][1] for i, w in enumerate(weights)) / s
-            points.append({'x': float(x), 'y': float(y), 'category': str(row[class_col]) if class_col and class_col in df.columns else None})
+            # Guardar valores normalizados de features para recalcular cuando se muevan los anchors
+            point_data = {
+                'x': float(x), 
+                'y': float(y), 
+                'category': str(row[class_col]) if class_col and class_col in df.columns else None,
+                '_weights': [float(w) for w in weights]  # Valores normalizados de cada feature
+            }
+            points.append(point_data)
         
         # Procesar figsize si está en kwargs
         cls._process_figsize_in_kwargs(kwargs)

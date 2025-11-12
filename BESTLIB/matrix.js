@@ -1311,11 +1311,15 @@
           const mouseX = event.pageX || event.clientX || 0;
           const mouseY = event.pageY || event.clientY || 0;
           
+          // Obtener nombres de ejes del spec
+          const xLabel = spec.xLabel || 'X';
+          const yLabel = spec.yLabel || 'Y';
+          
           tooltip
             .style('left', (mouseX + 10) + 'px')
             .style('top', (mouseY - 10) + 'px')
             .style('display', 'block')
-            .html(`<strong>${name}</strong><br/>X: ${d.x.toFixed(2)}<br/>Y: ${d.y.toFixed(2)}`)
+            .html(`<strong>${name}</strong><br/><strong>${xLabel}:</strong> ${d.x.toFixed(2)}<br/><strong>${yLabel}:</strong> ${d.y.toFixed(2)}`)
             .transition()
             .duration(200)
             .style('opacity', 1);
@@ -2032,58 +2036,19 @@
       .attr('stroke-width', 1)
       .attr('stroke-dasharray', '2,2');
 
-    // Anchors (features)
+    // Anchors (features) - inicializar con posiciones uniformes
     const anchorPos = features.map((f, i) => {
       const ang = 2 * Math.PI * i / Math.max(1, features.length) - Math.PI / 2; // Empezar desde arriba
       return { 
         x: radius * Math.cos(ang), 
         y: radius * Math.sin(ang), 
         name: String(f),
-        angle: ang
+        angle: ang,
+        index: i
       };
     });
     
-    // Dibujar líneas desde el centro hasta los anchors
-    anchorPos.forEach(anchor => {
-      g.append('line')
-        .attr('x1', 0)
-        .attr('y1', 0)
-        .attr('x2', anchor.x)
-        .attr('y2', anchor.y)
-        .attr('stroke', '#ddd')
-        .attr('stroke-width', 1)
-        .attr('stroke-dasharray', '1,1');
-    });
-    
-    // Dibujar círculos en los anchors
-    g.selectAll('.anchor')
-      .data(anchorPos)
-      .enter()
-      .append('circle')
-      .attr('class', 'anchor')
-      .attr('r', 4)
-      .attr('cx', d => d.x)
-      .attr('cy', d => d.y)
-      .attr('fill', '#555')
-      .attr('stroke', '#fff')
-      .attr('stroke-width', 1);
-    
-    // Etiquetas de los anchors
-    g.selectAll('.alabel')
-      .data(anchorPos)
-      .enter()
-      .append('text')
-      .attr('class', 'alabel')
-      .attr('x', d => d.x * 1.15)
-      .attr('y', d => d.y * 1.15)
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'middle')
-      .style('font-size', '11px')
-      .style('fill', '#333')
-      .style('font-weight', 'bold')
-      .text(d => d.name);
-
-    // Escala para los puntos (normalizados en rango dinámico)
+    // Escala para los puntos (normalizados en rango dinámico) - definir antes de recalculateRadVizPoints
     const xExtent = d3.extent(validPoints, d => d.x);
     const yExtent = d3.extent(validPoints, d => d.y);
     
@@ -2103,6 +2068,138 @@
     const toY = d3.scaleLinear()
       .domain([-maxExtent, maxExtent])
       .range([-radius * 0.85, radius * 0.85]);
+    
+    // Función para recalcular posiciones de puntos cuando se mueven los anchors
+    function recalculateRadVizPoints() {
+      // Recalcular todos los puntos
+      const updatedPoints = [];
+      g.selectAll('.rvpt').each(function(d) {
+        // Si el punto tiene _weights (valores normalizados de features), recalcular
+        if (d._weights && Array.isArray(d._weights) && d._weights.length === anchorPos.length) {
+          // Calcular nueva posición usando los nuevos anchors
+          const weights = d._weights;
+          const s = d3.sum(weights) || 1.0;
+          const newX = d3.sum(weights.map((w, i) => w * anchorPos[i].x)) / s;
+          const newY = d3.sum(weights.map((w, i) => w * anchorPos[i].y)) / s;
+          
+          // Actualizar posición del punto en los datos
+          d.x = newX;
+          d.y = newY;
+          updatedPoints.push({x: newX, y: newY});
+          
+          // Actualizar visualmente con transición suave
+          d3.select(this)
+            .transition()
+            .duration(300)
+            .attr('cx', toX(newX))
+            .attr('cy', toY(newY));
+        }
+      });
+      
+      // Actualizar escalas si hay cambios significativos
+      if (updatedPoints.length > 0) {
+        const newXExtent = d3.extent(updatedPoints, p => p.x);
+        const newYExtent = d3.extent(updatedPoints, p => p.y);
+        const newMaxExtent = Math.max(
+          Math.abs(newXExtent[0] || 0),
+          Math.abs(newXExtent[1] || 0),
+          Math.abs(newYExtent[0] || 0),
+          Math.abs(newYExtent[1] || 0)
+        ) || 1;
+        
+        // Actualizar dominios de las escalas
+        toX.domain([-newMaxExtent, newMaxExtent]);
+        toY.domain([-newMaxExtent, newMaxExtent]);
+      }
+    }
+    
+    // Dibujar líneas desde el centro hasta los anchors
+    const anchorLines = g.selectAll('.anchor-line')
+      .data(anchorPos)
+      .enter()
+      .append('line')
+      .attr('class', (d, i) => `anchor-line anchor-line-${i}`)
+      .attr('x1', 0)
+      .attr('y1', 0)
+      .attr('x2', d => d.x)
+      .attr('y2', d => d.y)
+      .attr('stroke', '#ddd')
+      .attr('stroke-width', 1)
+      .attr('stroke-dasharray', '1,1')
+      .lower(); // Poner detrás de los puntos
+    
+    // Dibujar círculos en los anchors (arrastrables)
+    const anchorCircles = g.selectAll('.anchor')
+      .data(anchorPos)
+      .enter()
+      .append('circle')
+      .attr('class', 'anchor')
+      .attr('r', 6)
+      .attr('cx', d => d.x)
+      .attr('cy', d => d.y)
+      .attr('fill', '#555')
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 2)
+      .style('cursor', 'move')
+      .call(d3.drag()
+        .on('start', function(event, d) {
+          d3.select(this).attr('fill', '#ff6b35').attr('r', 8);
+        })
+        .on('drag', function(event, d) {
+          // Calcular nuevo ángulo basado en posición del mouse relativa al centro
+          const [mx, my] = d3.pointer(event, g.node());
+          const angle = Math.atan2(my, mx);
+          
+          // Actualizar posición del anchor (mantener en el círculo)
+          d.angle = angle;
+          d.x = radius * Math.cos(angle);
+          d.y = radius * Math.sin(angle);
+          
+          // Actualizar círculo
+          d3.select(this)
+            .attr('cx', d.x)
+            .attr('cy', d.y);
+          
+          // Actualizar línea correspondiente
+          const line = g.select(`.anchor-line-${d.index}`);
+          if (!line.empty()) {
+            line
+              .attr('x2', d.x)
+              .attr('y2', d.y);
+          }
+          
+          // Actualizar etiqueta
+          const label = g.select(`.alabel-${d.index}`);
+          if (!label.empty()) {
+            label
+              .attr('x', d.x * 1.15)
+              .attr('y', d.y * 1.15);
+          }
+          
+          // Recalcular posiciones de todos los puntos basado en los nuevos anchors
+          recalculateRadVizPoints();
+        })
+        .on('end', function(event, d) {
+          d3.select(this).attr('fill', '#555').attr('r', 6);
+        })
+      );
+    
+    // Etiquetas de los anchors
+    const anchorLabels = g.selectAll('.alabel')
+      .data(anchorPos)
+      .enter()
+      .append('text')
+      .attr('class', (d, i) => `alabel alabel-${i}`)
+      .attr('x', d => d.x * 1.15)
+      .attr('y', d => d.y * 1.15)
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .style('font-size', '11px')
+      .style('fill', '#333')
+      .style('font-weight', 'bold')
+      .style('pointer-events', 'none')
+      .text(d => d.name);
+
     
     // Obtener categorías únicas
     const categories = [...new Set(validPoints.map(p => p.category).filter(c => c != null && c !== ''))];
@@ -2168,14 +2265,90 @@
       .nice()
       .range([chartHeight, 0]);
     
-    // Dibujar boxplot para cada categoría
-    data.forEach((d) => {
+    // Crear tooltip para boxplot
+    const tooltipId = `boxplot-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'boxplot-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
+    const yLabel = spec.yLabel || 'Value';
+    
+    // Crear grupo para cada boxplot (para poder agregar eventos)
+    const boxGroups = g.selectAll('.boxplot-group')
+      .data(data)
+      .enter()
+      .append('g')
+      .attr('class', 'boxplot-group')
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(event, d) {
+        // Mostrar tooltip con información detallada
+        const mouseX = event.pageX || event.clientX || 0;
+        const mouseY = event.pageY || event.clientY || 0;
+        
+        const iqr = d.q3 - d.q1;
+        const minVal = d.min !== undefined ? d.min : d.lower;
+        const maxVal = d.max !== undefined ? d.max : d.upper;
+        
+        tooltip
+          .style('left', (mouseX + 10) + 'px')
+          .style('top', (mouseY - 10) + 'px')
+          .style('display', 'block')
+          .html(`
+            <strong>${d.category}</strong><br/>
+            <strong>${yLabel}:</strong><br/>
+            &nbsp;&nbsp;Mínimo: ${minVal.toFixed(2)}<br/>
+            &nbsp;&nbsp;Q1 (25%): ${d.q1.toFixed(2)}<br/>
+            &nbsp;&nbsp;Mediana: ${d.median.toFixed(2)}<br/>
+            &nbsp;&nbsp;Q3 (75%): ${d.q3.toFixed(2)}<br/>
+            &nbsp;&nbsp;Máximo: ${maxVal.toFixed(2)}<br/>
+            &nbsp;&nbsp;IQR: ${iqr.toFixed(2)}
+          `)
+          .transition()
+          .duration(200)
+          .style('opacity', 1);
+        
+        // Resaltar boxplot
+        d3.select(this).selectAll('rect, line')
+          .attr('opacity', 0.7);
+      })
+      .on('mouseleave', function(event, d) {
+        // Ocultar tooltip
+        tooltip.transition()
+          .duration(200)
+          .style('opacity', 0)
+          .on('end', function() {
+            tooltip.style('display', 'none');
+          });
+        
+        // Restaurar opacidad
+        d3.select(this).selectAll('rect, line')
+          .attr('opacity', 1);
+      });
+    
+    // Dibujar boxplot para cada categoría dentro del grupo
+    boxGroups.each(function(d) {
+      const group = d3.select(this);
       const xPos = x(d.category);
       const boxWidth = x.bandwidth();
       const centerX = xPos + boxWidth / 2;
       
       // Bigotes (whiskers)
-      g.append('line')
+      group.append('line')
         .attr('x1', centerX)
         .attr('x2', centerX)
         .attr('y1', y(d.lower))
@@ -2183,7 +2356,7 @@
         .attr('stroke', '#000')
         .attr('stroke-width', 2);
       
-      g.append('line')
+      group.append('line')
         .attr('x1', centerX)
         .attr('x2', centerX)
         .attr('y1', y(d.q3))
@@ -2192,7 +2365,7 @@
         .attr('stroke-width', 2);
       
       // Caja (box)
-      g.append('rect')
+      group.append('rect')
         .attr('x', xPos)
         .attr('y', y(d.q3))
         .attr('width', boxWidth)
@@ -2202,7 +2375,7 @@
         .attr('stroke-width', 2);
       
       // Mediana (median line)
-      g.append('line')
+      group.append('line')
         .attr('x1', xPos)
         .attr('x2', xPos + boxWidth)
         .attr('y1', y(d.median))
@@ -2298,6 +2471,30 @@
       .nice()
       .range([chartHeight, 0]);
     
+    // Crear tooltip para histograma
+    const tooltipId = `histogram-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'histogram-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
+    const xLabel = spec.xLabel || 'Bin';
+    const yLabel = spec.yLabel || 'Frequency';
+    
     // Barras del histograma
     g.selectAll('.bar')
       .data(data)
@@ -2309,6 +2506,39 @@
       .attr('width', x.bandwidth())
       .attr('height', 0)
       .attr('fill', spec.color || '#4a90e2')
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(event, d) {
+        // Resaltar barra
+        d3.select(this)
+          .attr('opacity', 0.8);
+        
+        // Mostrar tooltip
+        const mouseX = event.pageX || event.clientX || 0;
+        const mouseY = event.pageY || event.clientY || 0;
+        
+        const binValue = typeof d.bin === 'number' ? d.bin.toFixed(2) : d.bin;
+        tooltip
+          .style('left', (mouseX + 10) + 'px')
+          .style('top', (mouseY - 10) + 'px')
+          .style('display', 'block')
+          .html(`<strong>${xLabel}:</strong> ${binValue}<br/><strong>${yLabel}:</strong> ${d.count}`)
+          .transition()
+          .duration(200)
+          .style('opacity', 1);
+      })
+      .on('mouseleave', function(event, d) {
+        // Restaurar opacidad
+        d3.select(this)
+          .attr('opacity', 1);
+        
+        // Ocultar tooltip
+        tooltip.transition()
+          .duration(200)
+          .style('opacity', 0)
+          .on('end', function() {
+            tooltip.style('display', 'none');
+          });
+      })
       .transition()
       .duration(800)
       .attr('y', d => y(d.count))
@@ -2420,6 +2650,30 @@
     const y2 = d3.scaleLinear().domain([0, maxValue]).nice().range([chartHeight, 0]);
     const color = d3.scaleOrdinal(d3.schemeCategory10).domain(series);
 
+    // Crear tooltip para grouped bar chart
+    const tooltipId = `grouped-bar-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'grouped-bar-chart-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
+    const xLabel = spec.xLabel || 'Group';
+    const yLabel = spec.yLabel || 'Value';
+    
     const groupG = g.selectAll('.g-group')
       .data(groups)
       .enter()
@@ -2446,6 +2700,38 @@
           original_items: [d]
         });
       })
+      .on('mouseenter', function(event, d) {
+        // Resaltar barra
+        d3.select(this)
+          .attr('opacity', 0.9);
+        
+        // Mostrar tooltip
+        const mouseX = event.pageX || event.clientX || 0;
+        const mouseY = event.pageY || event.clientY || 0;
+        
+        const value = typeof d.value === 'number' ? d.value.toFixed(2) : d.value;
+        tooltip
+          .style('left', (mouseX + 10) + 'px')
+          .style('top', (mouseY - 10) + 'px')
+          .style('display', 'block')
+          .html(`<strong>${xLabel}:</strong> ${d.group}<br/><strong>Series:</strong> ${d.series}<br/><strong>${yLabel}:</strong> ${value}`)
+          .transition()
+          .duration(200)
+          .style('opacity', 1);
+      })
+      .on('mouseleave', function(event, d) {
+        // Restaurar opacidad
+        d3.select(this)
+          .attr('opacity', 1);
+        
+        // Ocultar tooltip
+        tooltip.transition()
+          .duration(200)
+          .style('opacity', 0)
+          .on('end', function() {
+            tooltip.style('display', 'none');
+          });
+      })
       .transition()
       .duration(700)
       .attr('y', d => y2(d.value))
@@ -2466,6 +2752,30 @@
     }
   } else {
     // Simple bars
+    // Crear tooltip para bar chart
+    const tooltipId = `bar-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'bar-chart-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
+    const xLabel = spec.xLabel || 'Category';
+    const yLabel = spec.yLabel || 'Value';
+    
     g.selectAll('.bar')
       .data(data)
       .enter()
@@ -2475,7 +2785,7 @@
       .attr('y', chartHeight)
       .attr('width', x.bandwidth())
       .attr('height', 0)
-      .attr('fill', spec.color || '#4a90e2')
+      .attr('fill', d => d.color || spec.color || '#4a90e2')
       .style('cursor', spec.interactive ? 'pointer' : 'default')
       .on('click', function(event, d) {
         if (spec.interactive) {
@@ -2489,15 +2799,39 @@
           });
         }
       })
-      .on('mouseenter', function() {
-        if (spec.interactive) {
-          d3.select(this).attr('fill', spec.hoverColor || '#357abd');
-        }
+      .on('mouseenter', function(event, d) {
+        // Resaltar barra
+        d3.select(this)
+          .attr('fill', d => d.color || spec.hoverColor || '#357abd')
+          .attr('opacity', 0.9);
+        
+        // Mostrar tooltip
+        const mouseX = event.pageX || event.clientX || 0;
+        const mouseY = event.pageY || event.clientY || 0;
+        
+        const value = typeof d.value === 'number' ? d.value.toFixed(2) : d.value;
+        tooltip
+          .style('left', (mouseX + 10) + 'px')
+          .style('top', (mouseY - 10) + 'px')
+          .style('display', 'block')
+          .html(`<strong>${xLabel}:</strong> ${d.category}<br/><strong>${yLabel}:</strong> ${value}`)
+          .transition()
+          .duration(200)
+          .style('opacity', 1);
       })
-      .on('mouseleave', function() {
-        if (spec.interactive) {
-          d3.select(this).attr('fill', spec.color || '#4a90e2');
-        }
+      .on('mouseleave', function(event, d) {
+        // Restaurar color
+        d3.select(this)
+          .attr('fill', d => d.color || spec.color || '#4a90e2')
+          .attr('opacity', 1);
+        
+        // Ocultar tooltip
+        tooltip.transition()
+          .duration(200)
+          .style('opacity', 0)
+          .on('end', function() {
+            tooltip.style('display', 'none');
+          });
       })
       .transition()
       .duration(800)
