@@ -936,10 +936,11 @@ class ReactiveMatrixLayout:
                     """
                     
                     # Ejecutar JavaScript para actualizar solo el bar chart
-                    # Usar eval_js en lugar de display para evitar duplicación
+                    # IMPORTANTE: Usar display_id para que Jupyter reemplace el output anterior
+                    # en lugar de crear uno nuevo, lo que previene la duplicación
                     try:
                         from IPython.display import Javascript, display
-                        display(Javascript(js_update), clear=False)
+                        display(Javascript(js_update), clear=False, display_id=f'barchart-update-{letter}', update=True)
                     except:
                         # Fallback si no está disponible
                         pass
@@ -1565,9 +1566,11 @@ class ReactiveMatrixLayout:
                 }})();
                 """
                     
+                    # IMPORTANTE: Usar display_id para que Jupyter reemplace el output anterior
+                    # en lugar de crear uno nuevo, lo que previene la duplicación
                     try:
                         from IPython.display import Javascript, display
-                        display(Javascript(js_update), clear=False)
+                        display(Javascript(js_update), clear=False, display_id=f'histogram-update-{letter}', update=True)
                     except:
                         pass
                     
@@ -2325,6 +2328,7 @@ class ReactiveMatrixLayout:
             def update_pie(items, count):
                 """Actualiza el pie chart cuando cambia la selección"""
                 from .matrix import MatrixLayout
+                from collections import defaultdict
                 import json
                 from IPython.display import Javascript
                 import traceback
@@ -2678,10 +2682,12 @@ class ReactiveMatrixLayout:
                         """
                         
                         # IMPORTANTE: Ejecutar JavaScript de forma directa sin causar re-renderización
+                        # IMPORTANTE: Usar display_id para que Jupyter reemplace el output anterior
+                        # en lugar de crear uno nuevo, lo que previene la duplicación
                         try:
                             from IPython.display import Javascript, display
                             # Ejecutar JavaScript directamente
-                            display(Javascript(js_update), clear=False)
+                            display(Javascript(js_update), clear=False, display_id=f'piechart-update-{letter}', update=True)
                         except Exception as e:
                             if MatrixLayout._debug:
                                 print(f"⚠️ Error ejecutando JavaScript del pie chart: {e}")
