@@ -4523,7 +4523,13 @@
       .on('click', function(event, d) {
         if (spec.interactive) {
           const index = data.indexOf(d);
-          const originalRow = d._original_row || d;
+          
+          // Obtener todas las filas originales de esta categoría
+          // El bar chart tiene _original_rows (plural) que contiene todas las filas de esa categoría
+          const originalRows = d._original_rows || d._original_row || (d._original_row ? [d._original_row] : null) || [d];
+          
+          // Asegurar que originalRows sea un array
+          const items = Array.isArray(originalRows) ? originalRows : [originalRows];
           
           // Obtener letra de la vista (para vistas principales)
           let viewLetter = spec.__view_letter__ || null;
@@ -4531,14 +4537,21 @@
             const letterAttr = container.getAttribute('data-letter');
             if (letterAttr) {
               viewLetter = letterAttr;
+            } else {
+              // Intentar extraer del ID del contenedor
+              const idMatch = container.id && container.id.match(/-cell-([A-Z])-/);
+              if (idMatch) {
+                viewLetter = idMatch[1];
+              }
             }
           }
           
           sendEvent(divId, 'select', {
             type: 'select',
-            items: [originalRow],
+            items: items,  // Enviar todas las filas originales de esta categoría
             indices: [index],
             original_items: [d],
+            _original_rows: items,  // También incluir como _original_rows para compatibilidad
             __view_letter__: viewLetter,
             __is_primary_view__: spec.__is_primary_view__ || false
           });

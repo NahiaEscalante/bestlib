@@ -1260,17 +1260,37 @@ class ReactiveMatrixLayout:
         def update_boxplot(items, count):
             """Actualiza el boxplot cuando cambia la selección"""
             try:
+                # Importar MatrixLayout dentro de la función para evitar problemas de scope
+                from .matrix import MatrixLayout
                 import json
                 from IPython.display import Javascript
                 
                 # Usar datos seleccionados o todos los datos
+                # Si los items tienen _original_row, usar esos datos
                 data_to_use = self._data
                 if items and len(items) > 0:
-                    if HAS_PANDAS and isinstance(items[0], dict):
-                        import pandas as pd
-                        data_to_use = pd.DataFrame(items)
+                    # Extraer datos originales si están disponibles
+                    processed_items = []
+                    for item in items:
+                        if isinstance(item, dict):
+                            # Si tiene _original_row, usar esos datos
+                            if '_original_row' in item:
+                                processed_items.append(item['_original_row'])
+                            elif '_original_rows' in item:
+                                # Si hay múltiples filas originales
+                                processed_items.extend(item['_original_rows'])
+                            else:
+                                processed_items.append(item)
+                    
+                    if processed_items:
+                        if HAS_PANDAS and isinstance(processed_items[0], dict):
+                            import pandas as pd
+                            data_to_use = pd.DataFrame(processed_items)
+                        else:
+                            data_to_use = processed_items
                     else:
-                        data_to_use = items
+                        # Si no hay items procesados, usar todos los datos
+                        data_to_use = self._data
                 
                 # Preparar datos para boxplot
                 if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
@@ -1488,8 +1508,10 @@ class ReactiveMatrixLayout:
                     
             except Exception as e:
                 from .matrix import MatrixLayout
+                import traceback
                 if MatrixLayout._debug:
                     print(f"⚠️ Error actualizando boxplot: {e}")
+                    traceback.print_exc()
         
         # Registrar callback en el SelectionModel de la vista principal
         primary_selection.on_change(update_boxplot)
@@ -1580,7 +1602,7 @@ class ReactiveMatrixLayout:
         return self
     
     def _prepare_barchart_data(self, data, category_col, value_col, kwargs):
-        """Helper para preparar datos del bar chart"""
+        """Helper para preparar datos del bar chart (incluyendo _original_rows)"""
         try:
             if HAS_PANDAS and isinstance(data, pd.DataFrame):
                 if value_col and value_col in data.columns:
@@ -1592,6 +1614,13 @@ class ReactiveMatrixLayout:
                     bar_data = [{'category': cat, 'value': count} for cat, count in counts.items()]
                 else:
                     return []
+                
+                # Agregar datos originales para referencia (IMPORTANTE para linked views)
+                original_data = data.to_dict('records')
+                for bar_item in bar_data:
+                    # Encontrar todas las filas con esta categoría
+                    matching_rows = [row for row in original_data if row.get(category_col) == bar_item['category']]
+                    bar_item['_original_rows'] = matching_rows
             else:
                 from collections import Counter
                 if value_col:
@@ -1605,6 +1634,12 @@ class ReactiveMatrixLayout:
                 else:
                     categories = Counter([item.get(category_col, 'unknown') for item in data])
                     bar_data = [{'category': cat, 'value': count} for cat, count in categories.items()]
+                
+                # Agregar datos originales
+                original_data = data if isinstance(data, list) else []
+                for bar_item in bar_data:
+                    matching_rows = [row for row in original_data if row.get(category_col or 'category') == bar_item['category']]
+                    bar_item['_original_rows'] = matching_rows
             
             # Obtener colorMap
             color_map = kwargs.get('colorMap', {})
@@ -1615,8 +1650,10 @@ class ReactiveMatrixLayout:
             return bar_data
         except Exception as e:
             from .matrix import MatrixLayout
+            import traceback
             if MatrixLayout._debug:
                 print(f"⚠️ Error preparando datos del bar chart: {e}")
+                traceback.print_exc()
             return []
     
     def map(self, mapping):
@@ -1797,29 +1834,75 @@ class ReactiveMatrixLayout:
             def update_pie(items, count):
                 """Actualiza el pie chart cuando cambia la selección"""
                 try:
+                    from .matrix import MatrixLayout
+                    import json
+                    from IPython.display import Javascript
+                    import traceback
+                    
                     if MatrixLayout._debug:
                         print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando pie chart '{letter}' con {count} items seleccionados")
                     
-                    data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+                    # Procesar items: los items del bar chart ya son las filas originales
+                    # Cuando el bar chart envía eventos, items contiene directamente las filas originales
+                    # de la categoría seleccionada (no necesitan extracción de _original_row)
+                    data_to_use = self._data
+                    if items and len(items) > 0:
+                        # Los items pueden ser:
+                        # 1. Filas originales directamente (del bar chart)
+                        # 2. Diccionarios con _original_row o _original_rows
+                        # 3. Lista vacía o None
+                        processed_items = []
+                        for item in items:
+                            if isinstance(item, dict):
+                                # Verificar si tiene _original_rows (viene del bar chart con múltiples filas)
+                                if '_original_rows' in item and isinstance(item['_original_rows'], list):
+                                    processed_items.extend(item['_original_rows'])
+                                # Verificar si tiene _original_row (una sola fila)
+                                elif '_original_row' in item:
+                                    processed_items.append(item['_original_row'])
+                                # Si no tiene _original_row/_original_rows, el item ya es una fila original
+                                else:
+                                    # Verificar si tiene las columnas esperadas (es una fila original)
+                                    processed_items.append(item)
+                        
+                        if processed_items:
+                            if HAS_PANDAS and isinstance(processed_items[0], dict):
+                                import pandas as pd
+                                data_to_use = pd.DataFrame(processed_items)
+                            else:
+                                data_to_use = processed_items
+                        else:
+                            # Si no hay items procesados, usar todos los datos
+                            data_to_use = self._data
+                    
+                    # Validar que category_col existe en los datos
+                    if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
+                        if category_col and category_col not in data_to_use.columns:
+                            if MatrixLayout._debug:
+                                print(f"⚠️ Columna '{category_col}' no encontrada en datos. Columnas disponibles: {list(data_to_use.columns)}")
+                            # Intentar usar todos los datos originales
+                            data_to_use = self._data
                     
                     # Actualizar el mapping
                     MatrixLayout.map_pie(letter, data_to_use, category_col=category_col, value_col=value_col, **kwargs)
                     
                     # Re-renderizar el pie chart usando JavaScript
                     try:
-                        import json
-                        from IPython.display import Javascript
-                        
                         # Preparar datos para el pie chart
                         if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
-                            if value_col and value_col in data_to_use.columns:
-                                pie_data = data_to_use.groupby(category_col)[value_col].sum().reset_index()
-                                pie_data.columns = ['category', 'value']
-                                pie_data = pie_data.to_dict('records')
+                            if category_col and category_col in data_to_use.columns:
+                                if value_col and value_col in data_to_use.columns:
+                                    pie_data = data_to_use.groupby(category_col)[value_col].sum().reset_index()
+                                    pie_data.columns = ['category', 'value']
+                                    pie_data = pie_data.to_dict('records')
+                                else:
+                                    pie_data = data_to_use[category_col].value_counts().reset_index()
+                                    pie_data.columns = ['category', 'value']
+                                    pie_data = pie_data.to_dict('records')
                             else:
-                                pie_data = data_to_use[category_col].value_counts().reset_index()
-                                pie_data.columns = ['category', 'value']
-                                pie_data = pie_data.to_dict('records')
+                                if MatrixLayout._debug:
+                                    print(f"⚠️ No se puede crear pie chart: columna '{category_col}' no encontrada")
+                                return
                         else:
                             from collections import Counter, defaultdict
                             if value_col:
