@@ -261,6 +261,7 @@ class ReactiveMatrixLayout:
         self._view_letters = {}  # {view_id: letter} - mapeo de vista a letra del layout
         self._barchart_callbacks = {}  # {letter: callback_func} - para evitar duplicados
         self._barchart_cell_ids = {}  # {letter: cell_id} - IDs de celdas de bar charts
+        self._boxplot_callbacks = {}  # {letter: callback_func} - para evitar duplicados en boxplots
         self._scatter_selection_models = {}  # {scatter_letter: SelectionModel} - Modelos por scatter
         self._barchart_to_scatter = {}  # {barchart_letter: scatter_letter} - Enlaces scatter->bar
         self._linked_charts = {}  # {chart_letter: {'type': str, 'linked_to': str, 'callback': func}} - Gráficos enlazados genéricos
@@ -1556,6 +1557,12 @@ class ReactiveMatrixLayout:
         if column is None:
             raise ValueError("Debe especificar 'column' para el boxplot")
         
+        # Verificar si ya existe un callback para este boxplot (evitar duplicados)
+        if letter in self._boxplot_callbacks:
+            if MatrixLayout._debug:
+                print(f"⚠️ Boxplot para '{letter}' ya está registrado. Ignorando registro duplicado.")
+            return self
+        
         # Determinar a qué vista principal enlazar
         if linked_to:
             # Buscar en scatter plots primero (compatibilidad hacia atrás)
@@ -1752,6 +1759,11 @@ class ReactiveMatrixLayout:
                         
                         // CRÍTICO: Solo limpiar el contenido de la celda, NO tocar el contenedor principal
                         // Esto evita que se dispare un re-render del layout completo
+                        // IMPORTANTE: Desconectar ResizeObserver temporalmente para evitar re-renders
+                        if (targetCell._resizeObserver) {{
+                            targetCell._resizeObserver.disconnect();
+                        }}
+                        
                         // En lugar de usar innerHTML = '', removemos solo el SVG existente
                         const existingSvg = targetCell.querySelector('svg');
                         if (existingSvg) {{
@@ -1760,6 +1772,8 @@ class ReactiveMatrixLayout:
                         // Limpiar cualquier otro contenido visual (divs, etc.) pero mantener la estructura de la celda
                         const otherContent = targetCell.querySelectorAll('div:not(.matrix-cell)');
                         otherContent.forEach(el => el.remove());
+                        
+                        // NO reconectar el ResizeObserver aquí - se reconectará después de renderizar si es necesario
                         
                         const width = Math.max(targetCell.clientWidth || 400, 200);
                         const availableHeight = Math.max(targetCell.clientHeight - 30, 320);
@@ -1846,6 +1860,11 @@ class ReactiveMatrixLayout:
                                 .call(window.d3.axisLeft(y));
                         }}
                         
+                        // IMPORTANTE: Marcar que esta celda ya no necesita ResizeObserver
+                        // porque se está actualizando manualmente
+                        targetCell._chartSpec = null;
+                        targetCell._chartDivId = null;
+                        
                         // Resetear flag después de completar la actualización
                         window._bestlib_updating_boxplot_{letter} = false;
                     }}
@@ -1856,9 +1875,13 @@ class ReactiveMatrixLayout:
                 
                 try:
                     from IPython.display import Javascript, display
-                    display(Javascript(js_update), clear=False)
-                except:
-                    pass
+                    # IMPORTANTE: Usar clear=False para evitar que se limpie el output anterior
+                    # y usar display_id para evitar duplicaciones
+                    display(Javascript(js_update), clear=False, display_id=f'boxplot-update-{letter}')
+                except Exception as e:
+                    from .matrix import MatrixLayout
+                    if MatrixLayout._debug:
+                        print(f"⚠️ Error ejecutando JavaScript del boxplot: {e}")
                     
             except Exception as e:
                 from .matrix import MatrixLayout
@@ -1870,11 +1893,15 @@ class ReactiveMatrixLayout:
         # Registrar callback en el SelectionModel de la vista principal
         primary_selection.on_change(update_boxplot)
         
+        # Guardar referencia al callback para evitar duplicados
+        self._boxplot_callbacks[letter] = update_boxplot
+        
         # Debug: verificar que el callback se registró
         if MatrixLayout._debug:
             print(f"🔗 [ReactiveMatrixLayout] Callback registrado para boxplot '{letter}' enlazado a vista principal '{primary_letter}'")
             print(f"   - SelectionModel ID: {id(primary_selection)}")
             print(f"   - Callbacks registrados: {len(primary_selection._callbacks)}")
+            print(f"   - Boxplot callbacks guardados: {list(self._boxplot_callbacks.keys())}")
         
         # Crear boxplot inicial con todos los datos
         if HAS_PANDAS and isinstance(self._data, pd.DataFrame):
