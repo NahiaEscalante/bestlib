@@ -723,7 +723,7 @@ class MatrixLayout:
         return spec
 
     @classmethod
-    def map_boxplot(cls, letter, data, category_col=None, value_col=None, **kwargs):
+    def map_boxplot(cls, letter, data, category_col=None, value_col=None, column=None, **kwargs):
         """
         Método helper para crear boxplot por categoría.
         
@@ -732,8 +732,13 @@ class MatrixLayout:
             data: DataFrame o lista de diccionarios
             category_col: Columna categórica (opcional; si None, usa una sola categoría)
             value_col: Columna numérica para calcular cuantiles (requerida con DataFrame)
+            column: Alias de value_col (para compatibilidad)
             **kwargs: color, axes, etc.
         """
+        # Permitir 'column' como alias de 'value_col' para compatibilidad
+        if value_col is None and column is not None:
+            value_col = column
+        
         import statistics
         def five_num_summary(values_list):
             vals = sorted([float(v) for v in values_list if v is not None])
