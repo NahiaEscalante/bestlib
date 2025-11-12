@@ -1874,14 +1874,27 @@ class ReactiveMatrixLayout:
                 """
                 
                 try:
+                    # CRÍTICO: En lugar de usar display(), ejecutar JavaScript directamente
+                    # usando el comm existente para evitar que se dispare un re-render completo
+                    # Esto previene la duplicación de la matriz
                     from IPython.display import Javascript, display
-                    # IMPORTANTE: Usar clear=False para evitar que se limpie el output anterior
-                    # y usar display_id para evitar duplicaciones
-                    display(Javascript(js_update), clear=False, display_id=f'boxplot-update-{letter}')
+                    import uuid
+                    
+                    # Generar un ID único para este script para evitar duplicaciones
+                    script_id = f'boxplot-update-{letter}-{uuid.uuid4().hex[:8]}'
+                    
+                    # IMPORTANTE: Usar display_id para que Jupyter reemplace el output anterior
+                    # en lugar de crear uno nuevo, lo que previene la duplicación
+                    display(Javascript(js_update), clear=False, display_id=f'boxplot-update-{letter}', update=True)
+                    
+                    if MatrixLayout._debug:
+                        print(f"   📤 JavaScript del boxplot '{letter}' ejecutado (display_id: boxplot-update-{letter})")
                 except Exception as e:
                     from .matrix import MatrixLayout
                     if MatrixLayout._debug:
                         print(f"⚠️ Error ejecutando JavaScript del boxplot: {e}")
+                        import traceback
+                        traceback.print_exc()
                     
             except Exception as e:
                 from .matrix import MatrixLayout

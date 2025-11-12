@@ -286,6 +286,7 @@ class MatrixLayout:
                         
                         # Buscar handlers: primero en instancia (puede haber múltiples), luego global
                         handlers = []
+                        handler_names = []  # Para debug: nombres de handlers
                         
                         # Obtener todos los handlers de la instancia (puede haber múltiples para LinkedViews)
                         if inst and hasattr(inst, "_handlers"):
@@ -294,8 +295,10 @@ class MatrixLayout:
                                 # Handler puede ser una función o lista de funciones
                                 if isinstance(handler, list):
                                     handlers.extend(handler)
+                                    handler_names.extend([f"inst_handler_{i}" for i in range(len(handler))])
                                 else:
                                     handlers.append(handler)
+                                    handler_names.append("inst_handler_0")
                                 if cls._debug:
                                     print(f"   ✓ {len(handlers)} handler(s) de instancia encontrado(s)")
                         
@@ -303,6 +306,7 @@ class MatrixLayout:
                         global_handler = cls._global_handlers.get(event_type)
                         if global_handler:
                             handlers.append(global_handler)
+                            handler_names.append("global_handler")
                             if cls._debug:
                                 print(f"   ✓ Handler global encontrado")
                         
@@ -310,9 +314,15 @@ class MatrixLayout:
                         if handlers:
                             for idx, handler in enumerate(handlers):
                                 try:
+                                    handler_name = handler_names[idx] if idx < len(handler_names) else f"handler_{idx}"
+                                    if cls._debug:
+                                        print(f"   🔄 Ejecutando {handler_name} (#{idx+1}/{len(handlers)})")
                                     handler(payload)
+                                    if cls._debug:
+                                        print(f"   ✅ {handler_name} completado")
                                 except Exception as e:
-                                    error_msg = f"   ❌ Error en handler #{idx+1} para evento '{event_type}': {e}"
+                                    handler_name = handler_names[idx] if idx < len(handler_names) else f"handler_{idx}"
+                                    error_msg = f"   ❌ Error en {handler_name} (#{idx+1}) para evento '{event_type}': {e}"
                                     if cls._debug:
                                         print(error_msg)
                                         import traceback
@@ -1608,9 +1618,14 @@ class MatrixLayout:
             event_scatter_letter = payload.get('__scatter_letter__')
             if scatter_letter and event_scatter_letter and event_scatter_letter != scatter_letter:
                 # Este evento no es para este scatter plot
+                if self._debug:
+                    print(f"   ⏭️ Connect_selection handler ignorando evento de '{event_scatter_letter}' (esperado: '{scatter_letter}')")
                 return
             
             items = payload.get('items', [])
+            if self._debug:
+                print(f"   📤 Connect_selection handler actualizando reactive_model con {len(items)} items")
+            
             # Extraer filas originales completas si existen
             original_rows = []
             for item in items:
@@ -1620,6 +1635,9 @@ class MatrixLayout:
                     # Si no hay _original_row, usar el item completo
                     original_rows.append(item)
             reactive_model.update(original_rows)
+            
+            if self._debug:
+                print(f"   ✅ Connect_selection handler completado")
         
         # Registrar el handler
         self.on('select', update_model)
