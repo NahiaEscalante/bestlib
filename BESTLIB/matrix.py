@@ -180,12 +180,39 @@ class MatrixLayout:
     
     @classmethod
     def set_debug(cls, enabled: bool):
-        """Activa/desactiva mensajes de debug."""
+        """
+        Activa/desactiva mensajes de debug.
+        
+        Args:
+            enabled (bool): Si True, activa mensajes detallados de debug.
+                           Si False, solo muestra errores críticos.
+        
+        Ejemplo:
+            MatrixLayout.set_debug(True)  # Activar debug
+            layout = MatrixLayout("S")
+            # ... código ...
+            MatrixLayout.set_debug(False)  # Desactivar debug
+        """
         cls._debug = enabled
     
     @classmethod
     def on_global(cls, event, func):
-        """Registra un callback global para un tipo de evento."""
+        """
+        Registra un callback global para un tipo de evento.
+        
+        Los callbacks globales se ejecutan para TODOS los layouts, no solo uno específico.
+        Útil para logging o procesamiento centralizado de eventos.
+        
+        Args:
+            event (str): Tipo de evento ('select', 'click', 'brush', etc.)
+            func (callable): Función callback que recibe el payload del evento
+        
+        Ejemplo:
+            def log_selection(payload):
+                print(f"Selección global: {payload['count']} elementos")
+            
+            MatrixLayout.on_global('select', log_selection)
+        """
         cls._global_handlers[event] = func
     
     @classmethod
@@ -281,23 +308,30 @@ class MatrixLayout:
                         
                         # Ejecutar todos los callbacks (múltiples para soportar múltiples scatter plots)
                         if handlers:
-                            for handler in handlers:
+                            for idx, handler in enumerate(handlers):
                                 try:
                                     handler(payload)
                                 except Exception as e:
+                                    error_msg = f"   ❌ Error en handler #{idx+1} para evento '{event_type}': {e}"
                                     if cls._debug:
-                                        print(f"   ❌ Error en handler: {e}")
+                                        print(error_msg)
                                         import traceback
                                         traceback.print_exc()
+                                    else:
+                                        # En modo no-debug, solo mostrar error crítico
+                                        print(f"⚠️ [MatrixLayout] {error_msg}")
                         else:
                             if cls._debug:
                                 print(f"   ⚠️ No hay handler registrado para '{event_type}'")
                     
                     except Exception as e:
-                        print(f"❌ [MatrixLayout] Error en handler: {e}")
+                        error_msg = f"❌ [MatrixLayout] Error procesando evento '{event_type}' para div_id '{div_id}': {e}"
+                        print(error_msg)
                         if cls._debug:
                             import traceback
+                            print("Traceback completo:")
                             traceback.print_exc()
+                        # No re-lanzar la excepción para evitar que rompa otros handlers
             
             km.register_target("bestlib_matrix", _target)
             cls._comm_registered = True
@@ -361,27 +395,32 @@ class MatrixLayout:
             MatrixLayout.map_scatter('S', df, x_col='edad', y_col='salario', category_col='dept', interactive=True)
             layout = MatrixLayout("S")
         """
-        # Validar datos
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            required_cols = []
-            if x_col:
-                required_cols.append(x_col)
-            if y_col:
-                required_cols.append(y_col)
-            if required_cols:
-                cls._validate_data(data, required_cols=required_cols, required_type='DataFrame')
-        else:
-            cls._validate_data(data, required_type='list')
-            if x_col or y_col:
-                # Verificar que los diccionarios tengan las keys necesarias
-                if isinstance(data, list) and len(data) > 0:
-                    required_keys = []
-                    if x_col:
-                        required_keys.append(x_col)
-                    if y_col:
-                        required_keys.append(y_col)
-                    if required_keys:
-                        cls._validate_data(data, required_cols=required_keys, required_type='list')
+        # Validar datos con mensajes de error más descriptivos
+        try:
+            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+                required_cols = []
+                if x_col:
+                    required_cols.append(x_col)
+                if y_col:
+                    required_cols.append(y_col)
+                if required_cols:
+                    cls._validate_data(data, required_cols=required_cols, required_type='DataFrame')
+            else:
+                cls._validate_data(data, required_type='list')
+                if x_col or y_col:
+                    # Verificar que los diccionarios tengan las keys necesarias
+                    if isinstance(data, list) and len(data) > 0:
+                        required_keys = []
+                        if x_col:
+                            required_keys.append(x_col)
+                        if y_col:
+                            required_keys.append(y_col)
+                        if required_keys:
+                            cls._validate_data(data, required_cols=required_keys, required_type='list')
+        except ValueError as e:
+            raise ValueError(f"Error validando datos para scatter plot '{letter}': {e}")
+        except Exception as e:
+            raise ValueError(f"Error inesperado validando datos para scatter plot '{letter}': {e}")
         
         processed_data, original_data = cls._prepare_data(data, x_col=x_col, y_col=y_col, category_col=category_col, value_col=size_col)
 
@@ -456,6 +495,20 @@ class MatrixLayout:
             layout = MatrixLayout("B")
         """
         from collections import Counter
+        
+        # Validar datos
+        try:
+            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+                if category_col and category_col not in data.columns:
+                    raise ValueError(f"Columna '{category_col}' no existe en el DataFrame. Columnas disponibles: {list(data.columns)}")
+                if value_col and value_col not in data.columns:
+                    raise ValueError(f"Columna '{value_col}' no existe en el DataFrame. Columnas disponibles: {list(data.columns)}")
+            else:
+                cls._validate_data(data, required_type='list')
+        except ValueError as e:
+            raise ValueError(f"Error validando datos para bar chart '{letter}': {e}")
+        except Exception as e:
+            raise ValueError(f"Error inesperado validando datos para bar chart '{letter}': {e}")
         
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
             # Si hay value_col, agrupar y sumar
@@ -1250,15 +1303,17 @@ class MatrixLayout:
             'mapping_js': mapping_js
         }
 
-    def _repr_html_(self):
-        # Preparar datos comunes
-        data = self._prepare_repr_data()
-
-        # Render HTML con contenedor + CSS + JS inline (compatible con Notebook clásico)
-        html = f"""
-        <style>{data['css_code']}</style>
-        <div id="{self.div_id}" class="matrix-layout"></div>
-        <script>
+    def _generate_render_js(self, data):
+        """
+        Genera el código JavaScript común para renderizar el layout.
+        
+        Args:
+            data: Diccionario con datos preparados por _prepare_repr_data()
+        
+        Returns:
+            str: Código JavaScript para renderizar
+        """
+        return f"""
         (function() {{
           {data['js_code']}
           const mapping = {data['mapping_js']};
@@ -1268,11 +1323,40 @@ class MatrixLayout:
           }}
           render("{self.div_id}", `{data['escaped_layout']}`, mapping);
         }})();
+        """
+    
+    def _repr_html_(self):
+        """
+        Representación HTML del layout (compatible con Jupyter Notebook clásico).
+        
+        Returns:
+            str: HTML con CSS, contenedor y JavaScript inline
+        """
+        # Preparar datos comunes
+        data = self._prepare_repr_data()
+
+        # Render HTML con contenedor + CSS + JS inline (compatible con Notebook clásico)
+        render_js = self._generate_render_js(data).strip()
+        html = f"""
+        <style>{data['css_code']}</style>
+        <div id="{self.div_id}" class="matrix-layout"></div>
+        <script>
+        {render_js}
         </script>
         """
         return html
 
     def _repr_mimebundle_(self, include=None, exclude=None):
+        """
+        Representación MIME bundle del layout (compatible con JupyterLab).
+        
+        Args:
+            include: Tipos MIME a incluir (ignorado)
+            exclude: Tipos MIME a excluir (ignorado)
+        
+        Returns:
+            dict: Diccionario con 'text/html' y 'application/javascript'
+        """
         # Asegurar que el comm target está registrado
         MatrixLayout._ensure_comm_target()
         
@@ -1284,11 +1368,9 @@ class MatrixLayout:
         <div id="{self.div_id}" class="matrix-layout"></div>
         """
         
-        js = (
-            data['js_code']
-            + "\n"
-            + f'(function() {{ const mapping = {data['mapping_js']}; const container = document.getElementById("{self.div_id}"); if (container) {{ container.__mapping__ = mapping; }} render("{self.div_id}", `{data['escaped_layout']}`, mapping); }})();'
-        )
+        # Generar JavaScript usando método helper
+        render_js = self._generate_render_js(data).strip()
+        js = data['js_code'] + "\n" + render_js
 
         return {
             "text/html": html,
@@ -1315,38 +1397,65 @@ class MatrixLayout:
             <div id="{self.div_id}" class="matrix-layout"></div>
             """
             
+            # Usar la función ensureD3 del JS (ya está implementada en matrix.js)
             js_content = f"""
             (function() {{
-                function ensureD3() {{
-                    if (window.d3) return Promise.resolve(window.d3);
-                    
-                    return new Promise((resolve, reject) => {{
-                        const script = document.createElement('script');
-                        script.src = 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js';
-                        script.onload = () => {{
-                            if (window.d3) resolve(window.d3);
-                            else reject(new Error('D3 no se cargó'));
-                        }};
-                        script.onerror = () => reject(new Error('Error al cargar D3'));
-                        document.head.appendChild(script);
+                // La función ensureD3 ya está definida en matrix.js
+                // Solo necesitamos esperar a que se cargue y luego renderizar
+                if (typeof ensureD3 === 'function') {{
+                    ensureD3().then(d3 => {{
+                        const mapping = {data['mapping_js']};
+                        const container = document.getElementById("{self.div_id}");
+                        if (container) {{
+                            container.__mapping__ = mapping;
+                        }}
+                        render("{self.div_id}", `{data['escaped_layout']}`, mapping);
+                    }}).catch(e => {{
+                        const errorDiv = document.getElementById("{self.div_id}");
+                        if (errorDiv) {{
+                            errorDiv.innerHTML = '<div style="color: #e74c3c; padding: 20px; border: 2px solid #e74c3c; border-radius: 5px;">' +
+                                '<strong>❌ Error:</strong> ' + e.message + '</div>';
+                        }}
+                        console.error('Error cargando D3.js:', e);
                     }});
+                }} else {{
+                    // Fallback: esperar a que se cargue el JS y luego intentar de nuevo
+                    setTimeout(() => {{
+                        if (typeof ensureD3 === 'function') {{
+                            ensureD3().then(d3 => {{
+                                const mapping = {data['mapping_js']};
+                                const container = document.getElementById("{self.div_id}");
+                                if (container) {{
+                                    container.__mapping__ = mapping;
+                                }}
+                                render("{self.div_id}", `{data['escaped_layout']}`, mapping);
+                            }}).catch(e => {{
+                                const errorDiv = document.getElementById("{self.div_id}");
+                                if (errorDiv) {{
+                                    errorDiv.innerHTML = '<div style="color: #e74c3c; padding: 20px; border: 2px solid #e74c3c; border-radius: 5px;">' +
+                                        '<strong>❌ Error:</strong> ' + e.message + '</div>';
+                                }}
+                                console.error('Error cargando D3.js:', e);
+                            }});
+                        }} else {{
+                            // Último fallback: intentar renderizar directamente (D3 puede estar ya cargado)
+                            const mapping = {data['mapping_js']};
+                            const container = document.getElementById("{self.div_id}");
+                            if (container) {{
+                                container.__mapping__ = mapping;
+                            }}
+                            if (window.d3) {{
+                                render("{self.div_id}", `{data['escaped_layout']}`, mapping);
+                            }} else {{
+                                const errorDiv = document.getElementById("{self.div_id}");
+                                if (errorDiv) {{
+                                    errorDiv.innerHTML = '<div style="color: #e74c3c; padding: 20px; border: 2px solid #e74c3c; border-radius: 5px;">' +
+                                        '<strong>❌ Error:</strong> D3.js no está disponible. Por favor, recarga la página.</div>';
+                                }}
+                            }}
+                        }}
+                    }}, 100);
                 }}
-                
-                ensureD3().then(d3 => {{
-                    {data['js_code']}
-                    const mapping = {data['mapping_js']};
-                    const container = document.getElementById("{self.div_id}");
-                    if (container) {{
-                        container.__mapping__ = mapping;
-                    }}
-                    render("{self.div_id}", `{data['escaped_layout']}`, mapping);
-                }}).catch(e => {{
-                    const errorDiv = document.getElementById("{self.div_id}");
-                    if (errorDiv) {{
-                        errorDiv.innerHTML = '<div style="color: #e74c3c; padding: 20px; border: 2px solid #e74c3c; border-radius: 5px;">' +
-                            '<strong>❌ Error:</strong> ' + e.message + '</div>';
-                    }}
-                }});
             }})();
             """
             

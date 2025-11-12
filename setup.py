@@ -10,8 +10,13 @@ setup(
     package_data={
         "BESTLIB": ["*.js", "*.css"],
     },
-    # No instalamos dependencias automáticamente para evitar conflictos
-    # El código maneja las importaciones de forma opcional (try/except)
+    # Dependencias opcionales: el código maneja las importaciones de forma opcional (try/except)
     # Los usuarios deben instalar las dependencias manualmente según su entorno
+    # Dependencias recomendadas:
+    # - ipython>=8.0 (requerido para Jupyter)
+    # - ipywidgets>=8.0 (requerido para widgets interactivos)
+    # - pandas>=1.3.0 (recomendado para trabajar con DataFrames)
+    # - numpy>=1.20.0 (recomendado para histogramas, violines, etc.)
+    # - scikit-learn>=1.0.0 (opcional, solo para add_confusion_matrix)
     install_requires=[],
 )

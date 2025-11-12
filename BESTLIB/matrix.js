@@ -683,14 +683,24 @@
   
   /**
    * Calcula dimensiones del gráfico basándose en figsize o valores por defecto
+   * Incluye validación para asegurar dimensiones válidas
    */
   function getChartDimensions(container, spec, defaultWidth, defaultHeight) {
-    // Si hay figsize en el spec, usarlo
+    // Validar que el contenedor exista
+    if (!container) {
+      console.warn('[BESTLIB] Contenedor no encontrado, usando dimensiones por defecto');
+      return { width: defaultWidth, height: defaultHeight };
+    }
+    
+    // Si hay figsize en el spec, validarlo y usarlo
     if (spec.figsize && Array.isArray(spec.figsize) && spec.figsize.length === 2) {
-      return {
-        width: spec.figsize[0],
-        height: spec.figsize[1]
-      };
+      const width = Math.max(parseInt(spec.figsize[0]) || defaultWidth, 100);
+      const height = Math.max(parseInt(spec.figsize[1]) || defaultHeight, 100);
+      if (isNaN(width) || isNaN(height) || !isFinite(width) || !isFinite(height)) {
+        console.warn('[BESTLIB] Dimensiones inválidas en figsize, usando valores por defecto');
+        return { width: defaultWidth, height: defaultHeight };
+      }
+      return { width, height };
     }
     
     // Buscar el contenedor padre matrix-layout para acceder al mapping
@@ -704,20 +714,40 @@
       parentContainer = parentContainer.parentElement;
     }
     
-    // Si hay figsize global en el mapping, usarlo
+    // Si hay figsize global en el mapping, validarlo y usarlo
     if (mapping && mapping.__figsize__ && Array.isArray(mapping.__figsize__) && mapping.__figsize__.length === 2) {
-      return {
-        width: mapping.__figsize__[0],
-        height: mapping.__figsize__[1]
-      };
+      const width = Math.max(parseInt(mapping.__figsize__[0]) || defaultWidth, 100);
+      const height = Math.max(parseInt(mapping.__figsize__[1]) || defaultHeight, 100);
+      if (isNaN(width) || isNaN(height) || !isFinite(width) || !isFinite(height)) {
+        console.warn('[BESTLIB] Dimensiones inválidas en figsize global, usando valores por defecto');
+      } else {
+        return { width, height };
+      }
     }
     
-    // Usar valores por defecto basados en el contenedor
-    const width = container.clientWidth || defaultWidth;
-    const availableHeight = Math.max(container.clientHeight - 30, defaultHeight - 30);
-    const height = Math.min(availableHeight, defaultHeight);
+    // Usar valores por defecto basados en el contenedor con validación
+    let width = container.clientWidth || defaultWidth;
+    let height = container.clientHeight || defaultHeight;
     
-    return { width, height };
+    // Validar dimensiones del contenedor
+    if (width <= 0 || !isFinite(width)) {
+      console.warn('[BESTLIB] Ancho del contenedor inválido:', width, 'usando valor por defecto');
+      width = defaultWidth;
+    }
+    if (height <= 0 || !isFinite(height)) {
+      console.warn('[BESTLIB] Altura del contenedor inválida:', height, 'usando valor por defecto');
+      height = defaultHeight;
+    }
+    
+    // Asegurar dimensiones mínimas
+    width = Math.max(width, 100);
+    height = Math.max(height, 100);
+    
+    // Ajustar altura disponible considerando padding
+    const availableHeight = Math.max(height - 30, defaultHeight - 30);
+    const finalHeight = Math.min(availableHeight, defaultHeight);
+    
+    return { width, height: finalHeight };
   }
   
   /**
