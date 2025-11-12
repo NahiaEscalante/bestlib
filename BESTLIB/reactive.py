@@ -62,8 +62,26 @@ class ReactiveData(widgets.Widget):
     
     def update(self, items):
         """Actualiza los items manualmente desde Python"""
-        self.items = items
-        self.count = len(items)
+        # Convertir a lista si es necesario y asegurar que sea una nueva referencia
+        if items is None:
+            items = []
+        else:
+            items = list(items)  # Crear nueva lista para forzar cambio
+        
+        # Actualizar count primero
+        new_count = len(items)
+        
+        # Solo actualizar si hay cambio real (evitar loops infinitos)
+        if self.items != items or self.count != new_count:
+            self.items = items
+            self.count = new_count
+            # Nota: @observe se disparará automáticamente, pero también llamamos manualmente
+            # para asegurar que los callbacks se ejecuten incluso si traitlets no detecta el cambio
+            for callback in self._callbacks:
+                try:
+                    callback(items, new_count)
+                except Exception as e:
+                    print(f"Error en callback: {e}")
     
     def clear(self):
         """Limpia los datos"""
@@ -252,12 +270,18 @@ class ReactiveMatrixLayout:
             event_scatter_letter = payload.get('__scatter_letter__')
             if event_scatter_letter != scatter_letter_capture:
                 # Este evento no es para este scatter plot, ignorar
+                if MatrixLayout._debug:
+                    print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{scatter_letter_capture}', recibido '{event_scatter_letter}'")
                 return
             
             # El payload ya viene con __scatter_letter__ del JavaScript
             items = payload.get('items', [])
             
+            if MatrixLayout._debug:
+                print(f"✅ [ReactiveMatrixLayout] Evento recibido para scatter '{scatter_letter_capture}': {len(items)} items")
+            
             # Actualizar el SelectionModel específico de este scatter plot
+            # Esto disparará los callbacks registrados (como update_barchart)
             scatter_selection_capture.update(items)
             
             # IMPORTANTE: También actualizar el selection_model principal para que selected_data se actualice
@@ -384,10 +408,22 @@ class ReactiveMatrixLayout:
             'layout_div_id': self._layout.div_id
         }
         
+        # Obtener el SelectionModel del scatter plot al que está enlazado
+        scatter_selection = self._scatter_selection_models[scatter_letter]
+        
+        # Debug: verificar que el scatter_selection existe
+        if MatrixLayout._debug:
+            print(f"🔗 [ReactiveMatrixLayout] Registrando callback para bar chart '{letter}' enlazado a scatter '{scatter_letter}'")
+            print(f"   - SelectionModel ID: {id(scatter_selection)}")
+            print(f"   - Callbacks actuales: {len(scatter_selection._callbacks)}")
+        
         # Configurar callback para actualizar bar chart cuando cambia selección
         def update_barchart(items, count):
             """Actualiza el bar chart cuando cambia la selección usando JavaScript"""
             try:
+                # Debug: verificar que el callback se está ejecutando
+                if MatrixLayout._debug:
+                    print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando bar chart '{letter}' con {count} items seleccionados")
                 import json
                 from IPython.display import Javascript
                 import time
@@ -493,7 +529,7 @@ class ReactiveMatrixLayout:
                                 setTimeout(updateBarchart, 100);
                                 return;
                             }} else {{
-                                console.warn('No se encontró celda para bar chart {letter} después de {maxAttempts} intentos');
+                                console.warn('No se encontró celda para bar chart {letter} después de ' + maxAttempts + ' intentos');
                                 window._bestlib_updating_{letter} = false;
                                 return;
                             }}
