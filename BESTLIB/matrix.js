@@ -1026,11 +1026,14 @@
    * Line chart (multi-series) con hover sincronizado
    */
   function renderLineD3(container, spec, d3, divId) {
+    // Limpiar contenedor primero
+    container.innerHTML = '';
+    
     const seriesMap = spec.series || {};
     const dims = getChartDimensions(container, spec, 520, 380);
     let width = dims.width;
     let height = dims.height;
-    const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
+    const defaultMargin = { top: 20, right: 150, bottom: 40, left: 50 }; // Más espacio a la derecha para leyenda
     const margin = calculateAxisMargins(spec, defaultMargin);
     
     // Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
@@ -1054,22 +1057,30 @@
       chartHeight = height - margin.top - margin.bottom;
     }
 
-    // Limpiar contenedor
-    container.innerHTML = '';
-
     // Obtener todos los puntos para calcular dominios
     const allPoints = [];
     const seriesNames = Object.keys(seriesMap);
     
+    // Validar que haya series
+    if (seriesNames.length === 0) {
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay series para mostrar</div>';
+      return;
+    }
+    
+    // Recopilar todos los puntos de todas las series
     seriesNames.forEach(name => {
-      const pts = seriesMap[name] || [];
-      if (pts && pts.length > 0) {
-        allPoints.push(...pts);
+      const pts = seriesMap[name];
+      if (pts && Array.isArray(pts) && pts.length > 0) {
+        // Validar que cada punto tenga x e y
+        const validPts = pts.filter(p => p != null && p.x != null && !isNaN(p.x) && p.y != null && !isNaN(p.y));
+        if (validPts.length > 0) {
+          allPoints.push(...validPts);
+        }
       }
     });
 
     if (allPoints.length === 0) {
-      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos para mostrar</div>';
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos válidos para mostrar</div>';
       return;
     }
 
@@ -1100,67 +1111,96 @@
     const line = d3.line()
       .x(d => x(d.x))
       .y(d => y(d.y))
-      .curve(d3.curveMonotoneX);  // Curva suave
+      .curve(d3.curveMonotoneX)  // Curva suave
+      .defined(d => d != null && d.x != null && !isNaN(d.x) && d.y != null && !isNaN(d.y));
 
     // Renderizar líneas (ordenar puntos por x antes de dibujar)
     seriesNames.forEach(name => {
-      const pts = seriesMap[name] || [];
-      if (!pts || pts.length === 0) return;
+      const pts = seriesMap[name];
+      if (!pts || !Array.isArray(pts) || pts.length === 0) {
+        console.warn(`Line chart: Serie "${name}" no tiene datos válidos`);
+        return;
+      }
       
-      // Ordenar puntos por x
-      const sortedPts = [...pts].sort((a, b) => a.x - b.x);
+      // Filtrar puntos válidos y ordenar por x
+      const validPts = pts.filter(p => p != null && p.x != null && !isNaN(p.x) && p.y != null && !isNaN(p.y));
+      if (validPts.length === 0) {
+        console.warn(`Line chart: Serie "${name}" no tiene puntos válidos después del filtrado`);
+        return;
+      }
       
-      if (sortedPts.length > 0) {
+      const sortedPts = [...validPts].sort((a, b) => a.x - b.x);
+      
+      // Crear path para esta serie
+      const pathData = line(sortedPts);
+      if (!pathData || pathData === 'M0,0') {
+        console.warn(`Line chart: No se pudo generar path para serie "${name}"`);
+        return;
+      }
+      
+      // Dibujar la línea
       g.append('path')
-          .datum(sortedPts)
+        .datum(sortedPts)
         .attr('fill', 'none')
         .attr('stroke', color(name))
-          .attr('stroke-width', spec.strokeWidth || 2)
-        .attr('d', line)
+        .attr('stroke-width', spec.strokeWidth || 2)
+        .attr('d', pathData)
         .attr('opacity', 0)
-          .transition()
-          .duration(500)
-          .attr('opacity', 1);
-      }
+        .transition()
+        .duration(500)
+        .attr('opacity', 1)
+        .attr('class', `line-series-${name.replace(/\s+/g, '-')}`);
     });
 
-    // Crear tooltip
-    const tooltip = d3.select('body').append('div')
-      .attr('class', 'line-chart-tooltip')
-      .style('position', 'absolute')
-      .style('background', 'rgba(0, 0, 0, 0.8)')
-      .style('color', '#fff')
-      .style('padding', '8px')
-      .style('border-radius', '4px')
-      .style('pointer-events', 'none')
-      .style('opacity', 0)
-      .style('font-size', '12px')
-      .style('z-index', 1000)
-      .style('display', 'none');
+    // Crear tooltip (usar ID único para evitar conflictos)
+    const tooltipId = `line-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'line-chart-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px')
+        .style('border-radius', '4px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)');
+    }
 
     // Puntos invisibles para hover y tooltip
     seriesNames.forEach(name => {
-      const pts = seriesMap[name] || [];
-      if (!pts || pts.length === 0) return;
+      const pts = seriesMap[name];
+      if (!pts || !Array.isArray(pts) || pts.length === 0) return;
       
-      const sortedPts = [...pts].sort((a, b) => a.x - b.x);
+      // Filtrar puntos válidos y ordenar
+      const validPts = pts.filter(p => p != null && p.x != null && !isNaN(p.x) && p.y != null && !isNaN(p.y));
+      if (validPts.length === 0) return;
       
-      g.selectAll(`.pt-${name.replace(/\s+/g, '-')}`)
+      const sortedPts = [...validPts].sort((a, b) => a.x - b.x);
+      const className = `pt-line-${name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '')}`;
+      
+      g.selectAll(`.${className}`)
         .data(sortedPts)
         .enter()
         .append('circle')
-        .attr('class', `pt pt-${name.replace(/\s+/g, '-')}`)
+        .attr('class', className)
         .attr('cx', d => x(d.x))
         .attr('cy', d => y(d.y))
-        .attr('r', 0)
+        .attr('r', 4)
         .attr('fill', color(name))
         .attr('stroke', '#fff')
         .attr('stroke-width', 2)
+        .attr('opacity', 0)
         .style('cursor', 'pointer')
         .on('mouseenter', function(event, d) {
           // Mostrar tooltip
-          const mouseX = event.pageX || event.clientX;
-          const mouseY = event.pageY || event.clientY;
+          const mouseX = event.pageX || event.clientX || 0;
+          const mouseY = event.pageY || event.clientY || 0;
           
           tooltip
             .style('left', (mouseX + 10) + 'px')
@@ -1176,21 +1216,17 @@
             .attr('r', 6)
             .attr('opacity', 1);
           
-          // Resaltar puntos con mismo x (hover sincronizado)
-          const xVal = d.x;
-          g.selectAll('.pt')
-            .attr('opacity', p => {
-              const diff = Math.abs(p.x - xVal);
-              return diff < 0.01 ? 0.8 : 0.3;
-            })
-            .attr('r', p => {
-              const diff = Math.abs(p.x - xVal);
-              return diff < 0.01 ? 5 : 3;
-            });
+          // Resaltar línea de esta serie
+          g.selectAll(`.line-series-${name.replace(/\s+/g, '-')}`)
+            .attr('stroke-width', (spec.strokeWidth || 2) + 1)
+            .attr('opacity', 1);
         })
         .on('mouseleave', function() {
           tooltip.transition().duration(200).style('opacity', 0).style('display', 'none');
-          g.selectAll('.pt').attr('opacity', 0).attr('r', 0);
+          d3.select(this).attr('r', 4).attr('opacity', 0);
+          g.selectAll(`.line-series-${name.replace(/\s+/g, '-')}`)
+            .attr('stroke-width', spec.strokeWidth || 2)
+            .attr('opacity', 1);
         });
     });
 
@@ -1261,30 +1297,34 @@
   }
 
   /**
-   * Pie / Donut con click que emite selección por categoría
+   * Pie / Donut con leyenda y tooltips interactivos
    */
   function renderPieD3(container, spec, d3, divId) {
+    // Limpiar contenedor
+    container.innerHTML = '';
+    
     const data = spec.data || [];
+    if (data.length === 0) {
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos para mostrar</div>';
+      return;
+    }
+    
     const dims = getChartDimensions(container, spec, 320, 240);
     let width = dims.width;
     let height = dims.height;
     
-    // Calcular radio del pie chart
-    // Dejar espacio para etiquetas externas (aproximadamente 50-60px de padding)
-    const paddingForLabels = 80; // Espacio adicional para etiquetas externas y líneas de conexión
+    // Calcular radio del pie chart (más espacio ahora que no hay etiquetas externas)
     const baseRadius = Math.min(width, height) / 2;
-    const radius = Math.max(baseRadius - paddingForLabels, 50); // Radio mínimo de 50px
+    const radius = Math.max(baseRadius - 40, 50); // Radio mínimo de 50px, menos padding
     const innerR = spec.innerRadius != null ? spec.innerRadius : (spec.donut ? radius * 0.5 : 0);
     
-    // Asegurar que el SVG tenga suficiente espacio para las etiquetas externas
-    // Expandir el SVG si es necesario para acomodar las etiquetas
-    const requiredWidth = (radius + paddingForLabels) * 2;
-    const requiredHeight = (radius + paddingForLabels) * 2;
-    if (width < requiredWidth) {
-      width = requiredWidth;
-    }
-    if (height < requiredHeight) {
-      height = requiredHeight;
+    // Ajustar dimensiones para acomodar leyenda a la derecha
+    const legendWidth = 150; // Ancho para la leyenda
+    const pieWidth = Math.min(width, height);
+    const totalWidth = pieWidth + legendWidth + 20; // Espacio adicional entre pie y leyenda
+    
+    if (width < totalWidth) {
+      width = totalWidth;
     }
     
     const color = d3.scaleOrdinal(d3.schemeCategory10).domain(data.map(d => d.category));
@@ -1292,15 +1332,39 @@
     const svg = d3.select(container).append('svg')
       .attr('width', width)
       .attr('height', height)
-      .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
-    const g = svg.append('g').attr('transform', `translate(${width/2},${height/2})`);
+      .style('overflow', 'visible');
+    
+    // Grupo principal para el pie chart (centrado a la izquierda)
+    const pieCenterX = pieWidth / 2;
+    const pieCenterY = height / 2;
+    const g = svg.append('g').attr('transform', `translate(${pieCenterX},${pieCenterY})`);
 
     const arc = d3.arc().innerRadius(innerR).outerRadius(radius);
-    const pie = d3.pie().value(d => d.value);
+    const pie = d3.pie().value(d => d.value).sort(null); // No ordenar para mantener el orden original
     const arcs = pie(data);
 
     // Calcular el total para porcentajes
     const total = d3.sum(data, d => d.value);
+    
+    // Crear tooltip (usar ID único para evitar conflictos)
+    const tooltipId = `pie-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'pie-chart-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px')
+        .style('border-radius', '4px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)');
+    }
     
     // Renderizar los paths (segmentos del pie)
     const paths = g.selectAll('path')
@@ -1312,12 +1376,10 @@
       .attr('opacity', 0.9)
       .attr('stroke', '#fff')
       .attr('stroke-width', 2)
-      .style('cursor', spec.interactive ? 'pointer' : 'default')
+      .style('cursor', 'pointer')
       .on('click', function(event, d) {
         if (!spec.interactive) return;
         const category = d.data.category;
-        // Emitir evento select con items filtrados si existen en spec._original_rows
-        // Compatibilidad: payload simple con categoría
         sendEvent(divId, 'select', {
           type: 'pie',
           items: [{ category }],
@@ -1329,110 +1391,102 @@
         // Resaltar el segmento al pasar el mouse
         d3.select(this)
           .attr('opacity', 1)
-          .attr('stroke-width', 3);
+          .attr('stroke-width', 3)
+          .attr('transform', 'scale(1.05)'); // Efecto de zoom
+        
+        // Mostrar tooltip con información detallada
+        const percentage = (d.value / total) * 100;
+        const mouseX = event.pageX || event.clientX || 0;
+        const mouseY = event.pageY || event.clientY || 0;
+        
+        tooltip
+          .style('left', (mouseX + 10) + 'px')
+          .style('top', (mouseY - 10) + 'px')
+          .style('display', 'block')
+          .html(`<strong>${d.data.category}</strong><br/>Cantidad: ${d.data.value.toFixed(2)}<br/>Porcentaje: ${percentage.toFixed(2)}%`)
+          .transition()
+          .duration(200)
+          .style('opacity', 1);
       })
       .on('mouseleave', function(event, d) {
         // Restaurar opacidad y stroke
         d3.select(this)
           .attr('opacity', 0.9)
-          .attr('stroke-width', 2);
+          .attr('stroke-width', 2)
+          .attr('transform', 'scale(1)'); // Restaurar escala
+        
+        // Ocultar tooltip
+        tooltip.transition().duration(200).style('opacity', 0).style('display', 'none');
       });
     
-    // Agregar etiquetas de texto para cada segmento
-    // Configuración de etiquetas desde el spec
-    const showLabels = spec.showLabels !== false; // Por defecto mostrar etiquetas
-    const showPercentage = spec.showPercentage === true; // Por defecto NO mostrar porcentaje
-    const showValue = spec.showValue === true; // Por defecto NO mostrar valor
-    const labelFontSize = spec.labelFontSize || 12;
+    // Crear leyenda a la derecha del pie chart
+    const legendX = pieWidth + 20;
+    const legendY = (height - (data.length * 25)) / 2; // Centrar verticalmente
+    const legend = svg.append('g')
+      .attr('class', 'pie-legend')
+      .attr('transform', `translate(${legendX}, ${legendY})`);
     
-    if (showLabels) {
-      // Crear grupos para cada etiqueta (TODAS las etiquetas van por fuera)
-      const labelGroups = g.selectAll('.pie-label-group')
-        .data(arcs)
-        .enter()
-        .append('g')
-        .attr('class', 'pie-label-group');
+    // Agregar título a la leyenda
+    legend.append('text')
+      .attr('x', 0)
+      .attr('y', -10)
+      .style('font-size', '14px')
+      .style('font-weight', 'bold')
+      .style('fill', '#000')
+      .text('Categorías');
+    
+    // Crear elementos de leyenda
+    data.forEach((d, i) => {
+      const percentage = (d.value / total) * 100;
+      const legendRow = legend.append('g')
+        .attr('transform', `translate(0, ${i * 25})`)
+        .style('cursor', 'pointer')
+        .on('mouseenter', function() {
+          // Resaltar el segmento correspondiente en el pie
+          const correspondingPath = paths.filter(p => p.data.category === d.category);
+          correspondingPath
+            .attr('opacity', 1)
+            .attr('stroke-width', 3)
+            .attr('transform', 'scale(1.05)');
+        })
+        .on('mouseleave', function() {
+          // Restaurar el segmento
+          const correspondingPath = paths.filter(p => p.data.category === d.category);
+          correspondingPath
+            .attr('opacity', 0.9)
+            .attr('stroke-width', 2)
+            .attr('transform', 'scale(1)');
+        });
       
-      // Para cada grupo, agregar etiqueta externa con línea de conexión
-      labelGroups.each(function(d) {
-        const group = d3.select(this);
-        const percentage = (d.value / total) * 100;
-        const midAngle = d.startAngle + (d.endAngle - d.startAngle) / 2;
-        
-        // TODAS las etiquetas van por fuera del círculo del pie
-        // Calcular posición de la etiqueta externa
-        const outerRadius = radius + 25; // Radio exterior para etiquetas
-        const labelX = Math.cos(midAngle) * outerRadius;
-        const labelY = Math.sin(midAngle) * outerRadius;
-        
-        // Punto en el borde del arco (donde comienza la línea)
-        const arcEdgeX = Math.cos(midAngle) * radius;
-        const arcEdgeY = Math.sin(midAngle) * radius;
-        
-        // Punto intermedio para una línea más elegante (polilínea)
-        const midRadius = radius + 12;
-        const midX = Math.cos(midAngle) * midRadius;
-        const midY = Math.sin(midAngle) * midRadius;
-        
-        // Línea de conexión desde el borde del arco hasta la etiqueta
-        // Crear una línea polilínea: borde del arco -> punto intermedio -> etiqueta
-        const linePath = d3.path();
-        linePath.moveTo(arcEdgeX, arcEdgeY);
-        linePath.lineTo(midX, midY);
-        linePath.lineTo(labelX, labelY);
-        
-        // Dibujar la línea de conexión
-        group.append('path')
-          .attr('d', linePath.toString())
-          .attr('fill', 'none')
-          .attr('stroke', '#666')
-          .attr('stroke-width', 1.5)
-          .style('pointer-events', 'none');
-        
-        // Determinar alineación del texto según la posición (izquierda o derecha)
-        const textAnchor = labelX > 0 ? 'start' : 'end';
-        const dx = labelX > 0 ? 10 : -10;
-        
-        // Etiqueta principal (nombre de la categoría)
-        // Siempre mostrar el nombre de la categoría por fuera
-        group.append('text')
-          .attr('x', labelX)
-          .attr('y', labelY)
-          .attr('text-anchor', textAnchor)
-          .attr('dominant-baseline', 'middle')
-          .attr('dx', dx)
-          .attr('dy', showPercentage || showValue ? '-0.4em' : '0')
-          .style('font-size', `${labelFontSize}px`)
-          .style('font-weight', '600')
-          .style('fill', '#000000')
-          .style('font-family', 'Arial, sans-serif')
-          .style('pointer-events', 'none')
-          .text(d.data.category);
-        
-        // Si también mostrar porcentaje o valor, agregar segunda línea debajo
-        if (showPercentage || showValue) {
-          const secondLineText = showPercentage && showValue 
-            ? `${d.data.value.toFixed(1)} (${percentage.toFixed(1)}%)`
-            : showPercentage 
-              ? `${percentage.toFixed(1)}%`
-              : `${d.data.value.toFixed(1)}`;
-          
-          group.append('text')
-            .attr('x', labelX)
-            .attr('y', labelY)
-            .attr('text-anchor', textAnchor)
-            .attr('dominant-baseline', 'middle')
-            .attr('dx', dx)
-            .attr('dy', '1.2em')
-            .style('font-size', `${labelFontSize - 2}px`)
-            .style('font-weight', '400')
-            .style('fill', '#555555')
-            .style('font-family', 'Arial, sans-serif')
-            .style('pointer-events', 'none')
-            .text(secondLineText);
-        }
-      });
-    }
+      // Círculo de color
+      legendRow.append('circle')
+        .attr('r', 8)
+        .attr('cx', 8)
+        .attr('cy', 0)
+        .attr('fill', color(d.category))
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 2);
+      
+      // Texto de la categoría
+      legendRow.append('text')
+        .attr('x', 22)
+        .attr('y', 0)
+        .attr('dy', '0.35em')
+        .style('font-size', '12px')
+        .style('fill', '#000')
+        .style('font-family', 'Arial, sans-serif')
+        .text(d.category);
+      
+      // Texto del porcentaje (debajo del nombre)
+      legendRow.append('text')
+        .attr('x', 22)
+        .attr('y', 0)
+        .attr('dy', '1.2em')
+        .style('font-size', '10px')
+        .style('fill', '#666')
+        .style('font-family', 'Arial, sans-serif')
+        .text(`${percentage.toFixed(1)}%`);
+    });
   }
 
   /**
@@ -1446,14 +1500,27 @@
     
     // Validar datos
     if (!violins || violins.length === 0) {
-      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos para mostrar</div>';
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos para mostrar (violins vacío)</div>';
       return;
     }
     
     // Validar que cada violín tenga un perfil válido
-    const validViolins = violins.filter(v => v && v.profile && Array.isArray(v.profile) && v.profile.length > 0);
+    // Validación más flexible: permitir perfiles con al menos 1 punto (dibujar línea)
+    const validViolins = violins.filter(v => {
+      if (!v || !v.category) return false;
+      if (!v.profile || !Array.isArray(v.profile)) return false;
+      // Permitir perfiles con al menos 1 punto válido
+      const validProfile = v.profile.filter(p => p != null && p.y != null && !isNaN(p.y) && p.w != null && !isNaN(p.w));
+      return validProfile.length > 0;
+    });
+    
     if (validViolins.length === 0) {
-      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos válidos para mostrar</div>';
+      // Mensaje más informativo
+      const debugInfo = violins.length > 0 
+        ? `Se encontraron ${violins.length} violines pero ninguno tiene datos válidos`
+        : 'No se encontraron violines en los datos';
+      container.innerHTML = `<div style="padding: 20px; text-align: center; color: #999;">${debugInfo}</div>`;
+      console.warn('Violin plot: No hay datos válidos', { violins, spec });
       return;
     }
     
@@ -1526,29 +1593,42 @@
     const color = d3.scaleOrdinal(d3.schemeSet2).domain(categories);
 
     // Renderizar violines
-    validViolins.forEach(v => {
+    validViolins.forEach((v, idx) => {
       const category = String(v.category || 'Unknown');
-      const cx = x(category) + x.bandwidth() / 2;
-      const profile = v.profile.filter(p => p != null && p.y != null && !isNaN(p.y) && p.w != null && !isNaN(p.w));
+      const cx = x(category);
+      if (cx == null || isNaN(cx)) {
+        console.warn(`Violin plot: No se pudo obtener posición X para categoría "${category}"`);
+        return;
+      }
+      const centerX = cx + x.bandwidth() / 2;
       
-      if (profile.length === 0) return;
+      // Filtrar y validar perfil
+      const profile = v.profile.filter(p => {
+        if (!p || p.y == null || isNaN(p.y)) return false;
+        // Si w no está definido, usar un valor por defecto pequeño
+        if (p.w == null || isNaN(p.w)) {
+          p.w = 0.01;
+        }
+        return true;
+      });
+      
+      if (profile.length === 0) {
+        console.warn(`Violin plot: Perfil vacío para categoría "${category}"`);
+        return;
+      }
       
       // Ordenar perfil por y (valor)
       profile.sort((a, b) => a.y - b.y);
       
       // Verificar que el perfil tenga datos válidos
-      if (profile.length < 2) {
-        // Si hay menos de 2 puntos, dibujar una línea vertical simple
-        const yMin = d3.min(profile.map(p => p.y));
-        const yMax = d3.max(profile.map(p => p.y));
-        const avgWidth = d3.mean(profile.map(p => p.w)) || 0.5;
-        g.append('line')
-          .attr('x1', cx)
-          .attr('x2', cx)
-          .attr('y1', y(yMin))
-          .attr('y2', y(yMax))
-          .attr('stroke', color(category))
-          .attr('stroke-width', 2)
+      if (profile.length === 1) {
+        // Si hay solo 1 punto, dibujar un círculo pequeño
+        const yVal = profile[0].y;
+        g.append('circle')
+          .attr('cx', centerX)
+          .attr('cy', y(yVal))
+          .attr('r', 3)
+          .attr('fill', color(category))
           .attr('opacity', 0.7);
         return;
       }
@@ -1557,48 +1637,58 @@
       // Asegurar que w no sea null o undefined y que sea positivo
       const safeProfile = profile.map(p => ({
         y: p.y,
-        w: Math.max((p.w != null && !isNaN(p.w)) ? p.w : 0.01, 0.01)  // Valor mínimo para w
+        w: Math.max((p.w != null && !isNaN(p.w) && p.w > 0) ? p.w : 0.01, 0.01)  // Valor mínimo para w
       }));
       
       // Verificar que el perfil tenga valores válidos
       if (safeProfile.length < 2) {
-        console.warn('Violin plot: Perfil con menos de 2 puntos para categoría', category);
+        // Dibujar línea vertical simple
+        const yMin = d3.min(safeProfile.map(p => p.y));
+        const yMax = d3.max(safeProfile.map(p => p.y));
+        g.append('line')
+          .attr('x1', centerX)
+          .attr('x2', centerX)
+          .attr('y1', y(yMin))
+          .attr('y2', y(yMax))
+          .attr('stroke', color(category))
+          .attr('stroke-width', 2)
+          .attr('opacity', 0.7);
         return;
       }
       
       // Crear área simétrica usando d3.area
       const area = d3.area()
-        .x0(p => cx - wScale(p.w))  // Lado izquierdo
-        .x1(p => cx + wScale(p.w))  // Lado derecho
+        .x0(p => centerX - wScale(p.w))  // Lado izquierdo
+        .x1(p => centerX + wScale(p.w))  // Lado derecho
         .y(p => y(p.y))
         .curve(d3.curveCatmullRom.alpha(0.5))
-        .defined(d => d != null && d.y != null && !isNaN(d.y) && d.w != null && !isNaN(d.w));
+        .defined(d => d != null && d.y != null && !isNaN(d.y) && d.w != null && !isNaN(d.w) && d.w > 0);
       
       // Generar el path y verificar que sea válido
       try {
         const pathData = area(safeProfile);
         if (!pathData || pathData === 'M0,0' || pathData.length < 10) {
-          console.warn('Violin plot: Path inválido para categoría', category, 'pathData:', pathData);
+          console.warn('Violin plot: Path inválido para categoría', category, 'pathData:', pathData?.substring(0, 50));
           // Intentar dibujar una línea vertical simple como fallback
           const yMin = d3.min(safeProfile.map(p => p.y));
           const yMax = d3.max(safeProfile.map(p => p.y));
           g.append('line')
-            .attr('x1', cx)
-            .attr('x2', cx)
+            .attr('x1', centerX)
+            .attr('x2', centerX)
             .attr('y1', y(yMin))
             .attr('y2', y(yMax))
             .attr('stroke', color(category))
-            .attr('stroke-width', 2)
+            .attr('stroke-width', 3)
             .attr('opacity', 0.7);
           return;
         }
         
         // Dibujar violín completo (área cerrada simétrica)
-      g.append('path')
+        g.append('path')
           .attr('d', pathData)
           .attr('fill', color(category))
-        .attr('opacity', 0.7)
-        .attr('stroke', '#333')
+          .attr('opacity', 0.7)
+          .attr('stroke', '#333')
           .attr('stroke-width', 1)
           .attr('stroke-linejoin', 'round')
           .attr('stroke-linecap', 'round');
@@ -1608,12 +1698,12 @@
         const yMin = d3.min(safeProfile.map(p => p.y));
         const yMax = d3.max(safeProfile.map(p => p.y));
         g.append('line')
-          .attr('x1', cx)
-          .attr('x2', cx)
+          .attr('x1', centerX)
+          .attr('x2', centerX)
           .attr('y1', y(yMin))
           .attr('y2', y(yMax))
           .attr('stroke', color(category))
-          .attr('stroke-width', 2)
+          .attr('stroke-width', 3)
           .attr('opacity', 0.7);
         return;
       }
@@ -1624,8 +1714,8 @@
         const maxW = d3.max(safeProfile.map(p => p.w));
         if (maxW != null && maxW > 0) {
           g.append('line')
-            .attr('x1', cx - wScale(maxW))
-            .attr('x2', cx + wScale(maxW))
+            .attr('x1', centerX - wScale(maxW))
+            .attr('x2', centerX + wScale(maxW))
             .attr('y1', y(medianY))
             .attr('y2', y(medianY))
             .attr('stroke', '#000')
@@ -1685,21 +1775,33 @@
     const points = spec.data || [];
     const features = spec.features || [];
     
-    // Validar datos
+    // Validar datos con mensajes más informativos
     if (!points || points.length === 0) {
-      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos para mostrar</div>';
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos para mostrar (points vacío)</div>';
+      console.warn('RadViz: No hay puntos', { spec });
       return;
     }
     
     if (!features || features.length === 0) {
       container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay features para mostrar</div>';
+      console.warn('RadViz: No hay features', { spec });
       return;
     }
     
     // Validar que los puntos tengan coordenadas válidas
-    const validPoints = points.filter(p => p != null && p.x != null && !isNaN(p.x) && p.y != null && !isNaN(p.y));
+    const validPoints = points.filter(p => {
+      if (!p) return false;
+      if (p.x == null || isNaN(p.x)) return false;
+      if (p.y == null || isNaN(p.y)) return false;
+      return true;
+    });
+    
     if (validPoints.length === 0) {
-      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay puntos válidos para mostrar</div>';
+      const debugInfo = points.length > 0 
+        ? `Se encontraron ${points.length} puntos pero ninguno tiene coordenadas válidas`
+        : 'No se encontraron puntos en los datos';
+      container.innerHTML = `<div style="padding: 20px; text-align: center; color: #999;">${debugInfo}</div>`;
+      console.warn('RadViz: No hay puntos válidos', { points: points.slice(0, 3), spec });
       return;
     }
     
