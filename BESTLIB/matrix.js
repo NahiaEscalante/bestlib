@@ -1692,6 +1692,85 @@
       return spec.pointRadius || 4;
     };
 
+    // Estado de selección persistente
+    // Mantener un conjunto de índices de puntos seleccionados
+    let selectedIndices = new Set();
+    let isBrushing = false;
+    
+    // Función para obtener el color base de un punto
+    const getBaseColor = (d) => {
+      if (d.color) return d.color;
+      if (spec.colorMap && d.category) {
+        return spec.colorMap[d.category] || spec.color || '#4a90e2';
+      }
+      return spec.color || '#4a90e2';
+    };
+    
+    // Función para actualizar la visualización de puntos según su estado de selección
+    const updatePointVisualization = (dotsSelection, selectedSet, isHighlighting = false) => {
+      dotsSelection.each(function(d, i) {
+        const dot = d3.select(this);
+        const isSelected = selectedSet.has(i);
+        const baseRadius = getRadius(d);
+        const baseColor = getBaseColor(d);
+        
+        if (isSelected) {
+          // Punto seleccionado: más grande, opacidad completa, borde destacado
+          dot
+            .attr('r', baseRadius * 1.5)
+            .attr('fill', baseColor)
+            .attr('stroke', '#ff6b35')
+            .attr('stroke-width', 2)
+            .attr('opacity', 1);
+        } else if (isHighlighting) {
+          // Durante el brush: puntos no seleccionados más tenues
+          dot
+            .attr('r', baseRadius)
+            .attr('fill', baseColor)
+            .attr('stroke', 'none')
+            .attr('stroke-width', 0)
+            .attr('opacity', 0.15);
+        } else {
+          // Estado normal: puntos no seleccionados
+          dot
+            .attr('r', baseRadius)
+            .attr('fill', baseColor)
+            .attr('stroke', 'none')
+            .attr('stroke-width', 0)
+            .attr('opacity', 0.6);
+        }
+      });
+    };
+    
+    // Función para enviar evento de selección
+    const sendSelectionEvent = (indices) => {
+      const selected = data.filter((d, i) => indices.has(i));
+      const selectedItems = selected.map(d => d._original_row || d);
+      
+      // Obtener letra del scatter plot
+      let scatterLetter = spec.__scatter_letter__ || null;
+      if (!scatterLetter && container) {
+        const letterAttr = container.getAttribute('data-letter');
+        if (letterAttr) {
+          scatterLetter = letterAttr;
+        } else {
+          const idMatch = container.id && container.id.match(/-cell-([A-Z])-/);
+          if (idMatch) {
+            scatterLetter = idMatch[1];
+          }
+        }
+      }
+      
+      // Enviar evento de selección
+      sendEvent(divId, 'select', {
+        type: 'select',
+        items: selectedItems,
+        count: selectedItems.length,
+        indices: Array.from(indices),
+        __scatter_letter__: scatterLetter
+      });
+    };
+    
     // Puntos con D3 (renderizar PRIMERO)
     const dots = g.selectAll('.dot')
       .data(data)
@@ -1701,48 +1780,67 @@
       .attr('cx', d => x(d.x))
       .attr('cy', d => y(d.y))
       .attr('r', d => getRadius(d))
-      .attr('fill', d => {
-        if (d.color) return d.color;
-        if (spec.colorMap && d.category) {
-          return spec.colorMap[d.category] || spec.color || '#4a90e2';
-        }
-        return spec.color || '#4a90e2';
-      })
-      .attr('opacity', 0.7)
-      .style('cursor', spec.interactive ? 'crosshair' : 'default')
+      .attr('fill', d => getBaseColor(d))
+      .attr('opacity', 0.6)
+      .attr('stroke', 'none')
+      .attr('stroke-width', 0)
+      .style('cursor', spec.interactive ? 'pointer' : 'default')
       .on('click', function(event, d) {
-        // Solo procesar clicks si NO estamos en modo brush
-        if (spec.interactive) {
-          event.stopPropagation();
-          const index = data.indexOf(d);
-          const originalRow = d._original_row || d;
-          sendEvent(divId, 'point_click', {
-            type: 'point_click',
-            point: originalRow,
-            index: index,
-            original_point: d
-          });
+        if (!spec.interactive || isBrushing) return;
+        
+        event.stopPropagation();
+        const index = data.indexOf(d);
+        const ctrlKey = event.ctrlKey || event.metaKey; // Cmd en Mac, Ctrl en Windows/Linux
+        
+        if (ctrlKey) {
+          // Modo multi-selección: agregar o quitar de la selección
+          if (selectedIndices.has(index)) {
+            selectedIndices.delete(index);
+          } else {
+            selectedIndices.add(index);
+          }
+        } else {
+          // Modo selección única: seleccionar solo este punto
+          selectedIndices.clear();
+          selectedIndices.add(index);
+        }
+        
+        // Actualizar visualización
+        updatePointVisualization(g.selectAll('.dot'), selectedIndices, false);
+        
+        // Enviar evento de selección
+        sendSelectionEvent(selectedIndices);
+      })
+      .on('mouseenter', function(event, d) {
+        if (!spec.interactive || isBrushing) return;
+        const dot = d3.select(this);
+        const index = data.indexOf(d);
+        const isSelected = selectedIndices.has(index);
+        
+        if (!isSelected) {
+          dot
+            .transition()
+            .duration(150)
+            .attr('r', d => getRadius(d) * 1.3)
+            .attr('opacity', 0.9);
         }
       })
-      .on('mouseenter', function() {
-        if (!spec.interactive) return;
-        d3.select(this)
-          .transition()
-          .duration(200)
-          .attr('r', d => (getRadius(d)) * 1.5)
-          .attr('opacity', 1);
-      })
-      .on('mouseleave', function() {
-        if (!spec.interactive) return;
-        d3.select(this)
-          .transition()
-          .duration(200)
-          .attr('r', d => getRadius(d))
-          .attr('opacity', 0.7);
+      .on('mouseleave', function(event, d) {
+        if (!spec.interactive || isBrushing) return;
+        const dot = d3.select(this);
+        const index = data.indexOf(d);
+        const isSelected = selectedIndices.has(index);
+        
+        if (!isSelected) {
+          dot
+            .transition()
+            .duration(150)
+            .attr('r', d => getRadius(d))
+            .attr('opacity', 0.6);
+        }
       });
     
     // BRUSH para selección de área (renderizar DESPUÉS de los puntos para estar visualmente encima)
-    // El brush captura eventos porque está en una capa superior
     if (spec.interactive) {
       // Crear grupo de brush que estará en la parte superior
       const brushGroup = g.append('g')
@@ -1751,45 +1849,79 @@
       const brush = d3.brush()
         .extent([[0, 0], [chartWidth, chartHeight]])
         .on('start', function(event) {
-          // Cuando comienza el brush, desactivar eventos de puntos temporalmente
+          isBrushing = true;
+          // Durante el brush, desactivar eventos de puntos temporalmente
           g.selectAll('.dot')
-            .style('pointer-events', 'none')
-            .style('opacity', 0.4);
+            .style('pointer-events', 'none');
         })
         .on('brush', function(event) {
           if (!event.selection) {
-            // Si no hay selección, resetear
-            g.selectAll('.dot')
-              .style('opacity', 0.7)
-              .attr('r', d => getRadius(d));
+            // Si no hay selección, mostrar todos los puntos normalmente (excepto los seleccionados)
+            updatePointVisualization(g.selectAll('.dot'), selectedIndices, false);
             return;
           }
           
           const [[x0, y0], [x1, y1]] = event.selection;
           
-          // Resaltar puntos dentro de la selección
-          g.selectAll('.dot')
-            .style('opacity', d => {
-              const px = x(d.x);
-              const py = y(d.y);
-              const inSelection = px >= x0 && px <= x1 && py >= y0 && py <= y1;
-              return inSelection ? 1 : 0.2;
-            })
-            .attr('r', d => {
-              const px = x(d.x);
-              const py = y(d.y);
-              const inSelection = px >= x0 && px <= x1 && py >= y0 && py <= y1;
-              const base = getRadius(d);
-              return inSelection ? base * 1.3 : base;
-            });
+          // Identificar puntos dentro del área de brush
+          const brushedIndices = new Set();
+          data.forEach((d, i) => {
+            const px = x(d.x);
+            const py = y(d.y);
+            if (px >= Math.min(x0, x1) && px <= Math.max(x0, x1) && 
+                py >= Math.min(y0, y1) && py <= Math.max(y0, y1)) {
+              brushedIndices.add(i);
+            }
+          });
+          
+          // Combinar selección actual con brush (union)
+          // Durante el brush, mostrar visualmente qué puntos están dentro
+          g.selectAll('.dot').each(function(d, i) {
+            const dot = d3.select(this);
+            const isInBrush = brushedIndices.has(i);
+            const isSelected = selectedIndices.has(i);
+            const baseRadius = getRadius(d);
+            const baseColor = getBaseColor(d);
+            
+            if (isInBrush) {
+              // Puntos dentro del brush: resaltar
+              dot
+                .attr('r', baseRadius * 1.4)
+                .attr('fill', baseColor)
+                .attr('stroke', '#4a90e2')
+                .attr('stroke-width', 2)
+                .attr('opacity', 1);
+            } else if (isSelected) {
+              // Puntos previamente seleccionados (pero fuera del brush): mantener selección
+              dot
+                .attr('r', baseRadius * 1.5)
+                .attr('fill', baseColor)
+                .attr('stroke', '#ff6b35')
+                .attr('stroke-width', 2)
+                .attr('opacity', 0.8);
+            } else {
+              // Puntos fuera del brush y no seleccionados: atenuar
+              dot
+                .attr('r', baseRadius)
+                .attr('fill', baseColor)
+                .attr('stroke', 'none')
+                .attr('stroke-width', 0)
+                .attr('opacity', 0.15);
+            }
+          });
         })
         .on('end', function(event) {
-          // Si no hay selección, resetear y salir
+          isBrushing = false;
+          
+          // Restaurar eventos de puntos
+          g.selectAll('.dot')
+            .style('pointer-events', 'all');
+          
+          // Si no hay selección, mantener la selección actual y salir
           if (!event.selection) {
-            g.selectAll('.dot')
-              .style('pointer-events', 'all')
-              .style('opacity', 0.7)
-              .attr('r', d => getRadius(d));
+            updatePointVisualization(g.selectAll('.dot'), selectedIndices, false);
+            // Limpiar el brush visual
+            brushGroup.call(brush.move, null);
             return;
           }
           
@@ -1802,60 +1934,38 @@
           const yInverted0 = y.invert(Math.max(y0, y1));  // y está invertido
           const yInverted1 = y.invert(Math.min(y0, y1));
           
-          // Filtrar puntos dentro de la selección usando valores de datos
-          const selected = data.filter(d => {
-            return d.x >= Math.min(xInverted0, xInverted1) && 
-                   d.x <= Math.max(xInverted0, xInverted1) &&
-                   d.y >= Math.min(yInverted0, yInverted1) && 
-                   d.y <= Math.max(yInverted0, yInverted1);
-          });
-          
-          // Extraer filas originales completas si existen
-          const selectedItems = selected.map(d => {
-            return d._original_row || d;
-          });
-          
-          // Obtener letra del scatter plot desde el spec o del contenedor
-          // El container es la celda, que tiene un data-letter attribute
-          let scatterLetter = spec.__scatter_letter__ || null;
-          if (!scatterLetter && container) {
-            // El container es la celda, obtener la letra del attribute
-            const letterAttr = container.getAttribute('data-letter');
-            if (letterAttr) {
-              scatterLetter = letterAttr;
-            } else {
-              // Si no hay attribute, intentar obtenerlo del ID de la celda
-              // El ID tiene formato: {divId}-cell-{letter}-{r}-{c}
-              const idMatch = container.id && container.id.match(/-cell-([A-Z])-/);
-              if (idMatch) {
-                scatterLetter = idMatch[1];
-              }
+          // Identificar índices de puntos dentro de la selección
+          const brushedIndices = new Set();
+          data.forEach((d, i) => {
+            if (d.x >= Math.min(xInverted0, xInverted1) && 
+                d.x <= Math.max(xInverted0, xInverted1) &&
+                d.y >= Math.min(yInverted0, yInverted1) && 
+                d.y <= Math.max(yInverted0, yInverted1)) {
+              brushedIndices.add(i);
             }
+          });
+          
+          // Verificar si se presionó Ctrl/Cmd para agregar a la selección existente
+          const ctrlKey = event.sourceEvent && (event.sourceEvent.ctrlKey || event.sourceEvent.metaKey);
+          
+          if (ctrlKey) {
+            // Modo agregar: unir la selección del brush con la selección actual
+            brushedIndices.forEach(i => selectedIndices.add(i));
+          } else {
+            // Modo reemplazar: reemplazar la selección actual con la del brush
+            selectedIndices = brushedIndices;
           }
           
-          // Enviar el evento de selección con filas originales
-          if (selectedItems.length > 0) {
-            sendEvent(divId, 'select', {
-              type: 'select',
-              items: selectedItems,
-              count: selected.length,
-              original_items: selected,
-              __scatter_letter__: scatterLetter
-            });
-          }
+          // Actualizar visualización con la nueva selección
+          updatePointVisualization(g.selectAll('.dot'), selectedIndices, false);
           
-          // Mantener puntos resaltados brevemente, luego resetear
+          // Enviar evento de selección
+          sendSelectionEvent(selectedIndices);
+          
+          // Limpiar el brush visual después de un breve delay
           setTimeout(() => {
-            g.selectAll('.dot')
-              .style('pointer-events', 'all')
-              .transition()
-              .duration(300)
-              .style('opacity', 0.7)
-              .attr('r', d => getRadius(d));
-            
-            // Limpiar el brush visual después de un breve delay
             brushGroup.call(brush.move, null);
-          }, 200);
+          }, 100);
         });
       
       // Aplicar brush al grupo (esto lo renderiza visualmente encima de los puntos)
@@ -1866,19 +1976,34 @@
         .style('cursor', 'crosshair')
         .style('pointer-events', 'all');  // Asegurar que capture eventos
       
-      // Estilo del brush selection (área seleccionada)
+      // Estilo del brush selection (área seleccionada) - MEJORADO para mejor visibilidad
       brushGroup.selectAll('.selection')
-        .attr('stroke', '#333')
-        .attr('stroke-width', '2px')
-        .attr('stroke-dasharray', '5,5')
-        .attr('fill', 'steelblue')
-        .attr('fill-opacity', 0.1)
+        .attr('stroke', '#2563eb')
+        .attr('stroke-width', '2.5px')
+        .attr('stroke-dasharray', '8,4')
+        .attr('fill', '#3b82f6')
+        .attr('fill-opacity', 0.25)  // Aumentado de 0.1 a 0.25 para mejor visibilidad
         .style('pointer-events', 'none');  // La selección no debe capturar eventos
       
-      // Estilo de los handles del brush (esquinas)
+      // Estilo de los handles del brush (esquinas) - MEJORADO
       brushGroup.selectAll('.handle')
+        .attr('fill', '#2563eb')
+        .attr('stroke', '#1e40af')
+        .attr('stroke-width', '2px')
         .style('cursor', 'move')
         .style('pointer-events', 'all');  // Los handles deben capturar eventos
+      
+      // Agregar estilo para el handle del sur (handle-n)
+      brushGroup.selectAll('.handle--n, .handle--s, .handle--e, .handle--w')
+        .attr('fill', '#2563eb')
+        .attr('stroke', '#1e40af')
+        .attr('stroke-width', '2px');
+      
+      // Agregar estilo para los handles de las esquinas
+      brushGroup.selectAll('.handle--nw, .handle--ne, .handle--sw, .handle--se')
+        .attr('fill', '#2563eb')
+        .attr('stroke', '#1e40af')
+        .attr('stroke-width', '2px');
     }
     
     // Ejes con texto NEGRO y visible (renderizar por defecto a menos que axes === false)
