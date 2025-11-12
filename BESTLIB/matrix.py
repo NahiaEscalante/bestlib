@@ -822,6 +822,9 @@ class MatrixLayout:
     def map_heatmap(cls, letter, data, x_col=None, y_col=None, value_col=None, **kwargs):
         """
         Crea heatmap a partir de DataFrame/lista: devuelve celdas {x,y,value}.
+        
+        Si se pasa un DataFrame sin especificar columnas, asume que es una matriz
+        y usa índices/columnas automáticamente.
         """
         cells = []
         x_labels, y_labels = [], []
@@ -835,8 +838,34 @@ class MatrixLayout:
                     {'x': str(r[x_col]), 'y': str(r[y_col]), 'value': float(r[value_col])}
                     for _, r in df.iterrows()
                 ]
+            elif x_col is None and y_col is None and value_col is None:
+                # Matriz: usar índices y columnas automáticamente
+                # Verificar si es una matriz cuadrada (mismo número de filas y columnas, y mismos nombres)
+                index_list = data.index.tolist()
+                cols_list = data.columns.tolist()
+                
+                if len(index_list) == len(cols_list) and set(index_list) == set(cols_list):
+                    # Matriz cuadrada (como matriz de correlación)
+                    # Ordenar para consistencia
+                    cols = sorted(cols_list)
+                    x_labels = cols
+                    y_labels = cols
+                    for i, xi in enumerate(cols):
+                        for j, yj in enumerate(cols):
+                            val = data.loc[yj, xi]  # Usar loc para acceso por etiqueta
+                            if pd.notna(val):
+                                cells.append({'x': str(xi), 'y': str(yj), 'value': float(val)})
+                else:
+                    # Matriz rectangular: usar índices como y, columnas como x
+                    x_labels = cols_list
+                    y_labels = index_list
+                    for i, y_val in enumerate(data.index):
+                        for j, x_val in enumerate(data.columns):
+                            val = data.iloc[i, j]
+                            if pd.notna(val):
+                                cells.append({'x': str(x_val), 'y': str(y_val), 'value': float(val)})
             else:
-                raise ValueError("Especifique x_col, y_col y value_col para heatmap")
+                raise ValueError("Especifique x_col, y_col y value_col para heatmap, o pase una matriz sin especificar columnas")
         else:
             # Lista de dicts
             if not isinstance(data, list):
