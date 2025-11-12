@@ -553,14 +553,18 @@
   /**
    * Renderiza etiquetas de ejes con soporte para personalización
    */
-  function renderAxisLabels(g, spec, chartWidth, chartHeight, margin) {
-    // Etiqueta del eje X
+  function renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg) {
+    // Etiqueta del eje X (debajo del gráfico)
     if (spec.xLabel) {
       const xLabelFontSize = spec.xLabelFontSize || 13;
       const xLabelRotation = spec.xLabelRotation || 0;
+      // Posición X: centro del gráfico (en coordenadas del grupo g)
+      // Posición Y: debajo del gráfico, dentro del margen inferior
+      const xLabelX = chartWidth / 2;
       const xLabelY = chartHeight + margin.bottom - 10;
+      
       const xLabelText = g.append('text')
-        .attr('x', chartWidth / 2)
+        .attr('x', xLabelX)
         .attr('y', xLabelY)
         .attr('text-anchor', 'middle')
         .style('font-size', `${xLabelFontSize}px`)
@@ -570,31 +574,53 @@
         .text(spec.xLabel);
       
       if (xLabelRotation !== 0) {
-        xLabelText.attr('transform', `rotate(${xLabelRotation} ${chartWidth / 2} ${xLabelY})`)
+        xLabelText.attr('transform', `rotate(${xLabelRotation} ${xLabelX} ${xLabelY})`)
           .attr('text-anchor', xLabelRotation > 0 ? 'start' : 'end')
           .attr('dx', xLabelRotation > 0 ? '0.5em' : '-0.5em')
           .attr('dy', '0.5em');
       }
     }
     
-    // Etiqueta del eje Y
-    if (spec.yLabel) {
+    // Etiqueta del eje Y (a la izquierda del gráfico, rotada -90 grados)
+    // IMPORTANTE: El texto debe renderizarse en el SVG principal, no en el grupo g,
+    // porque el grupo g tiene un transform que lo desplaza, y necesitamos
+    // colocar el texto en coordenadas absolutas del SVG para que sea visible
+    if (spec.yLabel && svg) {
       const yLabelFontSize = spec.yLabelFontSize || 13;
       const yLabelRotation = spec.yLabelRotation !== undefined ? spec.yLabelRotation : -90;
-      const yLabelX = -chartHeight / 2;
-      const yLabelY = -margin.left + 10;
-      const yLabelText = g.append('text')
-        .attr('x', yLabelY)
-        .attr('y', yLabelX)
+      
+      // Coordenadas en el espacio del SVG (no del grupo g)
+      // X: en el centro del margen izquierdo (margin.left / 2) - posición horizontal
+      // Y: en el centro vertical del área del gráfico (margin.top + chartHeight / 2) - posición vertical
+      // NOTA: Estas coordenadas están en el espacio del SVG, donde (0,0) es la esquina superior izquierda
+      const yLabelX = margin.left / 2;
+      const yLabelY = margin.top + chartHeight / 2;
+      
+      // DEBUG: Verificar que las coordenadas sean válidas
+      if (isNaN(yLabelX) || isNaN(yLabelY) || !isFinite(yLabelX) || !isFinite(yLabelY)) {
+        console.warn('[BESTLIB] Coordenadas inválidas para etiqueta Y:', { yLabelX, yLabelY, margin, chartHeight });
+        return;  // No renderizar si las coordenadas son inválidas
+      }
+      
+      // Crear texto en el SVG principal (no en el grupo g) para que sea visible
+      // El texto se renderiza primero sin rotar, luego se rota
+      const yLabelText = svg.append('text')
+        .attr('x', yLabelX)
+        .attr('y', yLabelY)
         .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'central')  // Usar 'central' en lugar de 'middle' para mejor alineación
         .style('font-size', `${yLabelFontSize}px`)
         .style('font-weight', '700')
         .style('fill', '#000000')
         .style('font-family', 'Arial, sans-serif')
+        .style('pointer-events', 'none')  // No interferir con eventos del gráfico
         .text(spec.yLabel);
       
+      // Aplicar rotación (por defecto -90 grados para texto vertical)
+      // La rotación se aplica alrededor del punto (yLabelX, yLabelY)
+      // IMPORTANTE: Después de la rotación, el texto vertical tendrá su centro en (yLabelX, yLabelY)
       if (yLabelRotation !== 0) {
-        yLabelText.attr('transform', `rotate(${yLabelRotation} ${yLabelY} ${yLabelX})`);
+        yLabelText.attr('transform', `rotate(${yLabelRotation} ${yLabelX} ${yLabelY})`);
       }
     }
   }
@@ -621,17 +647,34 @@
     }
     
     // Calcular espacio necesario para etiqueta Y
+    // IMPORTANTE: El texto del eje Y rotado necesita espacio en el margen izquierdo
     if (spec.yLabel) {
       const yLabelFontSize = spec.yLabelFontSize || 13;
-      const yLabelRotation = spec.yLabelRotation || -90;
-      // Si está rotada, necesita más espacio
-      if (Math.abs(yLabelRotation) !== 90) {
+      const yLabelRotation = spec.yLabelRotation !== undefined ? spec.yLabelRotation : -90;
+      
+      // Para texto vertical (-90 grados), necesitamos espacio HORIZONTAL para la altura del texto
+      // Cuando el texto se rota -90 grados, su ancho horizontal es igual a su altura vertical original
+      // IMPORTANTE: El margen izquierdo debe incluir:
+      //   1. Espacio para el eje Y y sus etiquetas (aprox. 40-50px)
+      //   2. Espacio para la etiqueta del eje Y rotada (altura del texto / 2 hacia la izquierda desde el centro)
+      if (Math.abs(yLabelRotation) === 90 || Math.abs(yLabelRotation) === 270) {
+        // Texto vertical: la altura del texto sin rotar se convierte en el ancho cuando está rotado
+        // Altura del texto ≈ número de caracteres * tamaño de fuente * 0.7
+        // Cuando se rota -90°, el texto vertical necesita espacio horizontal = altura del texto
+        // El centro del texto está en margin.left/2, pero el texto se extiende textHeight/2 en cada dirección
+        const textHeight = spec.yLabel.length * yLabelFontSize * 0.7; // Altura aproximada del texto
+        // Necesitamos espacio para: eje Y (40px) + etiqueta Y rotada (textHeight/2) + padding (20px)
+        // El margen izquierdo debe ser al menos: eje Y + mitad del texto rotado + padding
+        const minLeftMargin = 40 + (textHeight / 2) + 20; // Espacio para eje + texto + padding
+        margin.left = Math.max(margin.left, minLeftMargin);
+      } else {
+        // Texto rotado en otro ángulo: calcular ancho proyectado
         const rotationRad = Math.abs(yLabelRotation) * Math.PI / 180;
         const labelWidth = spec.yLabel.length * yLabelFontSize * 0.6;
-        const rotatedWidth = Math.abs(Math.cos(rotationRad) * labelWidth) + yLabelFontSize;
-        margin.left = Math.max(margin.left, rotatedWidth + 20);
-      } else {
-        margin.left = Math.max(margin.left, yLabelFontSize + 35);
+        const labelHeight = yLabelFontSize * 1.2;
+        // Calcular el ancho proyectado considerando tanto el ancho como la altura
+        const projectedWidth = Math.abs(Math.cos(rotationRad) * labelWidth) + Math.abs(Math.sin(rotationRad) * labelHeight);
+        margin.left = Math.max(margin.left, 40 + (projectedWidth / 2) + 20); // Eje Y + texto + padding
       }
     }
     
@@ -713,19 +756,39 @@
   function renderHeatmapD3(container, spec, d3, divId) {
     const data = spec.data || [];
     const dims = getChartDimensions(container, spec, 500, 400);
-    const width = dims.width;
-    const height = dims.height;
+    let width = dims.width;
+    let height = dims.height;
     const defaultMargin = { top: 30, right: 20, bottom: 60, left: 70 };
     const margin = calculateAxisMargins(spec, defaultMargin);
-    const chartWidth = width - margin.left - margin.right;
-    const chartHeight = height - margin.top - margin.bottom;
+    
+    // Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
+    // Calcular dimensiones del gráfico después de calcular márgenes
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    // Verificar que el ancho sea suficiente (ajustar si es necesario)
+    const minChartWidth = 200; // Ancho mínimo para el área del gráfico
+    const minWidth = margin.left + margin.right + minChartWidth;
+    if (width < minWidth) {
+      width = minWidth;
+      chartWidth = width - margin.left - margin.right;
+    }
+    
+    // Verificar que la altura sea suficiente
+    const minChartHeight = 200; // Altura mínima para el área del gráfico
+    const minHeight = margin.top + margin.bottom + minChartHeight;
+    if (height < minHeight) {
+      height = minHeight;
+      chartHeight = height - margin.top - margin.bottom;
+    }
 
     const xLabels = spec.xLabels || Array.from(new Set(data.map(d => d.x)));
     const yLabels = spec.yLabels || Array.from(new Set(data.map(d => d.y)));
 
     const svg = d3.select(container).append('svg')
       .attr('width', width)
-      .attr('height', height);
+      .attr('height', height)
+      .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const x = d3.scaleBand().domain(xLabels).range([0, chartWidth]).padding(0.05);
@@ -762,7 +825,7 @@
       yAxis.selectAll('text').style('font-size', `${tickFontSize}px`).style('fill', '#000');
       
       // Renderizar etiquetas de ejes usando función helper
-      renderAxisLabels(g, spec, chartWidth, chartHeight, margin);
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
     }
   }
 
@@ -772,18 +835,40 @@
   function renderLineD3(container, spec, d3, divId) {
     const seriesMap = spec.series || {};
     const dims = getChartDimensions(container, spec, 520, 380);
-    const width = dims.width;
-    const height = dims.height;
+    let width = dims.width;
+    let height = dims.height;
     const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
     const margin = calculateAxisMargins(spec, defaultMargin);
-    const chartWidth = width - margin.left - margin.right;
-    const chartHeight = height - margin.top - margin.bottom;
+    
+    // Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
+    // Calcular dimensiones del gráfico después de calcular márgenes
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    // Verificar que el ancho sea suficiente (ajustar si es necesario)
+    const minChartWidth = 200; // Ancho mínimo para el área del gráfico
+    const minWidth = margin.left + margin.right + minChartWidth;
+    if (width < minWidth) {
+      width = minWidth;
+      chartWidth = width - margin.left - margin.right;
+    }
+    
+    // Verificar que la altura sea suficiente
+    const minChartHeight = 200; // Altura mínima para el área del gráfico
+    const minHeight = margin.top + margin.bottom + minChartHeight;
+    if (height < minHeight) {
+      height = minHeight;
+      chartHeight = height - margin.top - margin.bottom;
+    }
 
     const allPoints = Object.values(seriesMap).flat();
     const x = d3.scaleLinear().domain(d3.extent(allPoints, d => d.x)).nice().range([0, chartWidth]);
     const y = d3.scaleLinear().domain(d3.extent(allPoints, d => d.y)).nice().range([chartHeight, 0]);
 
-    const svg = d3.select(container).append('svg').attr('width', width).attr('height', height);
+    const svg = d3.select(container).append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const color = d3.scaleOrdinal(d3.schemeCategory10).domain(Object.keys(seriesMap));
@@ -852,7 +937,7 @@
         .style('stroke-width', '1.5px');
       
       // Renderizar etiquetas de ejes usando función helper
-      renderAxisLabels(g, spec, chartWidth, chartHeight, margin);
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
     }
   }
 
@@ -868,7 +953,10 @@
     const innerR = spec.innerRadius != null ? spec.innerRadius : (spec.donut ? radius * 0.5 : 0);
     const color = d3.scaleOrdinal(d3.schemeCategory10).domain(data.map(d => d.category));
 
-    const svg = d3.select(container).append('svg').attr('width', width).attr('height', height);
+    const svg = d3.select(container).append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
     const g = svg.append('g').attr('transform', `translate(${width/2},${height/2})`);
 
     const arc = d3.arc().innerRadius(innerR).outerRadius(radius);
@@ -903,13 +991,36 @@
   function renderViolinD3(container, spec, d3, divId) {
     const violins = spec.data || [];
     const dims = getChartDimensions(container, spec, 520, 380);
-    const width = dims.width;
-    const height = dims.height;
-    const margin = { top: 20, right: 20, bottom: 60, left: 60 };
-    const chartWidth = width - margin.left - margin.right;
-    const chartHeight = height - margin.top - margin.bottom;
+    let width = dims.width;
+    let height = dims.height;
+    const defaultMargin = { top: 20, right: 20, bottom: 60, left: 60 };
+    const margin = calculateAxisMargins(spec, defaultMargin);
+    
+    // Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
+    // Calcular dimensiones del gráfico después de calcular márgenes
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    // Verificar que el ancho sea suficiente (ajustar si es necesario)
+    const minChartWidth = 200; // Ancho mínimo para el área del gráfico
+    const minWidth = margin.left + margin.right + minChartWidth;
+    if (width < minWidth) {
+      width = minWidth;
+      chartWidth = width - margin.left - margin.right;
+    }
+    
+    // Verificar que la altura sea suficiente
+    const minChartHeight = 200; // Altura mínima para el área del gráfico
+    const minHeight = margin.top + margin.bottom + minChartHeight;
+    if (height < minHeight) {
+      height = minHeight;
+      chartHeight = height - margin.top - margin.bottom;
+    }
 
-    const svg = d3.select(container).append('svg').attr('width', width).attr('height', height);
+    const svg = d3.select(container).append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const categories = violins.map(v => v.category);
@@ -936,8 +1047,16 @@
     });
 
     if (spec.axes !== false) {
-      g.append('g').attr('transform', `translate(0,${chartHeight})`).call(d3.axisBottom(x));
-      g.append('g').call(d3.axisLeft(y));
+      const xAxis = g.append('g').attr('transform', `translate(0,${chartHeight})`).call(d3.axisBottom(x));
+      xAxis.selectAll('text').style('font-size', '12px').style('font-weight', '600').style('fill', '#000000');
+      xAxis.selectAll('line, path').style('stroke', '#000000').style('stroke-width', '1.5px');
+      
+      const yAxis = g.append('g').call(d3.axisLeft(y));
+      yAxis.selectAll('text').style('font-size', '12px').style('font-weight', '600').style('fill', '#000000');
+      yAxis.selectAll('line, path').style('stroke', '#000000').style('stroke-width', '1.5px');
+      
+      // Renderizar etiquetas de ejes usando función helper
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
     }
   }
 
@@ -952,7 +1071,10 @@
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
 
-    const svg = d3.select(container).append('svg').attr('width', width).attr('height', height);
+    const svg = d3.select(container).append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
     const g = svg.append('g').attr('transform', `translate(${margin.left + chartWidth/2},${margin.top + chartHeight/2})`);
 
     const radius = Math.min(chartWidth, chartHeight) / 2 - 10;
@@ -1005,7 +1127,8 @@
     const svg = d3.select(container)
       .append('svg')
       .attr('width', width)
-      .attr('height', height);
+      .attr('height', height)
+      .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
     
     const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
@@ -1080,21 +1203,8 @@
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
       
-      // Agregar etiqueta del eje X
-      if (spec.xLabel) {
-        g.append('text')
-          .attr('x', chartWidth / 2)
-          .attr('y', chartHeight + 35)
-          .attr('text-anchor', 'middle')
-          .style('font-size', '13px')
-          .style('font-weight', '700')
-          .style('fill', '#000000')
-          .style('font-family', 'Arial, sans-serif')
-          .text(spec.xLabel);
-      }
-      
       const yAxis = g.append('g')
-        .call(d3.axisLeft(y));
+        .call(d3.axisLeft(y).ticks(5));
       
       yAxis.selectAll('text')
         .style('font-size', '12px')
@@ -1106,19 +1216,8 @@
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
       
-      // Agregar etiqueta del eje Y
-      if (spec.yLabel) {
-        g.append('text')
-          .attr('transform', 'rotate(-90)')
-          .attr('x', -chartHeight / 2)
-          .attr('y', -40)
-          .attr('text-anchor', 'middle')
-          .style('font-size', '13px')
-          .style('font-weight', '700')
-          .style('fill', '#000000')
-          .style('font-family', 'Arial, sans-serif')
-          .text(spec.yLabel);
-      }
+      // Renderizar etiquetas de ejes usando función helper
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
     }
   }
   
@@ -1128,18 +1227,38 @@
   function renderHistogramD3(container, spec, d3, divId) {
     const data = spec.data || [];
     const dims = getChartDimensions(container, spec, 400, 350);
-    const width = dims.width;
-    const height = dims.height;
+    let width = dims.width;
+    let height = dims.height;
     const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
     const margin = calculateAxisMargins(spec, defaultMargin);
-    const chartWidth = width - margin.left - margin.right;
-    const chartHeight = height - margin.top - margin.bottom;
+    
+    // Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
+    // Calcular dimensiones del gráfico después de calcular márgenes
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    // Verificar que el ancho sea suficiente (ajustar si es necesario)
+    const minChartWidth = 200; // Ancho mínimo para el área del gráfico
+    const minWidth = margin.left + margin.right + minChartWidth;
+    if (width < minWidth) {
+      width = minWidth;
+      chartWidth = width - margin.left - margin.right;
+    }
+    
+    // Verificar que la altura sea suficiente
+    const minChartHeight = 200; // Altura mínima para el área del gráfico
+    const minHeight = margin.top + margin.bottom + minChartHeight;
+    if (height < minHeight) {
+      height = minHeight;
+      chartHeight = height - margin.top - margin.bottom;
+    }
     
     // Crear SVG con D3
     const svg = d3.select(container)
       .append('svg')
       .attr('width', width)
-      .attr('height', height);
+      .attr('height', height)
+      .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
     
     const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
@@ -1201,7 +1320,7 @@
         .style('stroke-width', '1.5px');
       
       // Renderizar etiquetas de ejes usando función helper
-      renderAxisLabels(g, spec, chartWidth, chartHeight, margin);
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
     }
   }
   
@@ -1211,17 +1330,27 @@
   function renderBarChartD3(container, spec, d3, divId) {
     const data = spec.data || [];
     const dims = getChartDimensions(container, spec, 400, 350);
-    const width = dims.width;
-    const height = dims.height;
-    const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+    let width = dims.width;
+    let height = dims.height;
+    const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
+    const margin = calculateAxisMargins(spec, defaultMargin);
+    
+    // Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
+    
+    // Verificar que el ancho sea suficiente (ajustar si es necesario)
+    const minWidth = margin.left + margin.right + Math.max(chartWidth, 200); // Mínimo 200px para el gráfico
+    if (width < minWidth) {
+      width = minWidth;
+    }
     
     // Crear SVG con D3
     const svg = d3.select(container)
       .append('svg')
       .attr('width', width)
-      .attr('height', height);
+      .attr('height', height)
+      .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
     
     const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
@@ -1288,7 +1417,7 @@
       yAxis.selectAll('line, path').style('stroke', '#000000').style('stroke-width', '1.5px');
       
       // Renderizar etiquetas de ejes usando función helper
-      renderAxisLabels(g, spec, chartWidth, chartHeight, margin);
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
     }
   } else {
     // Simple bars
@@ -1361,7 +1490,7 @@
         .style('stroke-width', '1.5px');
       
       // Renderizar etiquetas de ejes usando función helper
-      renderAxisLabels(g, spec, chartWidth, chartHeight, margin);
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
     }
   }
   
@@ -1371,18 +1500,38 @@
   function renderScatterPlotD3(container, spec, d3, divId) {
     const data = spec.data || [];
     const dims = getChartDimensions(container, spec, 400, 350);
-    const width = dims.width;
-    const height = dims.height;
+    let width = dims.width;
+    let height = dims.height;
     const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
     const margin = calculateAxisMargins(spec, defaultMargin);
-    const chartWidth = width - margin.left - margin.right;
-    const chartHeight = height - margin.top - margin.bottom;
+    
+    // Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
+    // Calcular dimensiones del gráfico después de calcular márgenes
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    // Verificar que el ancho sea suficiente (ajustar si es necesario)
+    const minChartWidth = 200; // Ancho mínimo para el área del gráfico
+    const minWidth = margin.left + margin.right + minChartWidth;
+    if (width < minWidth) {
+      width = minWidth;
+      chartWidth = width - margin.left - margin.right;
+    }
+    
+    // Verificar que la altura sea suficiente
+    const minChartHeight = 200; // Altura mínima para el área del gráfico
+    const minHeight = margin.top + margin.bottom + minChartHeight;
+    if (height < minHeight) {
+      height = minHeight;
+      chartHeight = height - margin.top - margin.bottom;
+    }
     
     // Crear SVG con D3
     const svg = d3.select(container)
       .append('svg')
       .attr('width', width)
-      .attr('height', height);
+      .attr('height', height)
+      .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
     
     const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
@@ -1632,7 +1781,7 @@
         .style('stroke-width', '1.5px');
       
       // Renderizar etiquetas de ejes usando función helper
-      renderAxisLabels(g, spec, chartWidth, chartHeight, margin);
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
     }
   }
 
