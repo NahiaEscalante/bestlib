@@ -451,10 +451,15 @@ class ReactiveMatrixLayout:
         
         # Determinar si será vista principal o enlazada
         if linked_to is None:
-            # Si no hay linked_to, puede ser vista principal si interactive=True
+            # Si no hay linked_to, NO es vista enlazada
+            # Solo es vista principal si interactive=True se especifica EXPLÍCITAMENTE
             if interactive is None:
-                interactive = True  # Por defecto, hacerlo interactivo si no está enlazado
-            is_primary = interactive
+                # Por defecto, NO interactivo y NO enlazado (gráfico estático)
+                interactive = False
+                is_primary = False
+            else:
+                # Si el usuario especificó interactive explícitamente, respetarlo
+                is_primary = interactive
         else:
             # Si hay linked_to, es una vista enlazada
             is_primary = False
@@ -991,9 +996,15 @@ class ReactiveMatrixLayout:
         
         # Determinar si será vista principal o enlazada
         if linked_to is None:
+            # Si no hay linked_to, NO es vista enlazada
+            # Solo es vista principal si interactive=True se especifica EXPLÍCITAMENTE
             if interactive is None:
-                interactive = True
-            is_primary = interactive
+                # Por defecto, NO interactivo y NO enlazado (gráfico estático)
+                interactive = False
+                is_primary = False
+            else:
+                # Si el usuario especificó interactive explícitamente, respetarlo
+                is_primary = interactive
         else:
             is_primary = False
             if interactive is None:
@@ -1177,9 +1188,15 @@ class ReactiveMatrixLayout:
         
         # Determinar si será vista principal o enlazada
         if linked_to is None:
+            # Si no hay linked_to, NO es vista enlazada
+            # Solo es vista principal si interactive=True se especifica EXPLÍCITAMENTE
             if interactive is None:
-                interactive = True  # Por defecto, hacerlo interactivo si no está enlazado
-            is_primary = interactive
+                # Por defecto, NO interactivo y NO enlazado (gráfico estático)
+                interactive = False
+                is_primary = False
+            else:
+                # Si el usuario especificó interactive explícitamente, respetarlo
+                is_primary = interactive
         else:
             is_primary = False
             if interactive is None:
@@ -2208,9 +2225,15 @@ class ReactiveMatrixLayout:
         
         # Determinar si será vista principal o enlazada
         if linked_to is None:
+            # Si no hay linked_to, NO es vista enlazada
+            # Solo es vista principal si interactive=True se especifica EXPLÍCITAMENTE
             if interactive is None:
-                interactive = True  # Por defecto, hacerlo interactivo si no está enlazado
-            is_primary = interactive
+                # Por defecto, NO interactivo y NO enlazado (gráfico estático)
+                interactive = False
+                is_primary = False
+            else:
+                # Si el usuario especificó interactive explícitamente, respetarlo
+                is_primary = interactive
         else:
             is_primary = False
             if interactive is None:
@@ -2699,10 +2722,20 @@ class ReactiveMatrixLayout:
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
         MatrixLayout.map_violin(letter, self._data, value_col=value_col, category_col=category_col, bins=bins, **kwargs)
-        if not self._scatter_selection_models:
+        
+        # Solo registrar callback si linked_to está especificado explícitamente
+        if linked_to is None:
+            # No enlazar automáticamente, hacer gráfico estático
             return self
-        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
-        sel = self._scatter_selection_models[scatter_letter]
+        
+        # Buscar vista principal especificada
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
+        
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
@@ -2717,11 +2750,20 @@ class ReactiveMatrixLayout:
         if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
             raise ValueError("add_radviz requiere DataFrame")
         MatrixLayout.map_radviz(letter, self._data, features=features, class_col=class_col, **kwargs)
-        # RadViz como dependiente: redibujar con selección
-        if not self._scatter_selection_models:
+        
+        # Solo registrar callback si linked_to está especificado explícitamente
+        if linked_to is None:
+            # No enlazar automáticamente, hacer gráfico estático
             return self
-        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
-        sel = self._scatter_selection_models[scatter_letter]
+        
+        # Buscar vista principal especificada
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
+        
         def update(items, count):
             df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
             if df is None:
@@ -2751,11 +2793,20 @@ class ReactiveMatrixLayout:
         if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
             raise ValueError("add_star_coordinates requiere DataFrame")
         MatrixLayout.map_star_coordinates(letter, self._data, features=features, class_col=class_col, **kwargs)
-        # Star Coordinates como dependiente: redibujar con selección
-        if not self._scatter_selection_models:
+        
+        # Solo registrar callback si linked_to está especificado explícitamente
+        if linked_to is None:
+            # No enlazar automáticamente, hacer gráfico estático
             return self
-        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
-        sel = self._scatter_selection_models[scatter_letter]
+        
+        # Buscar vista principal especificada
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
+        
         def update(items, count):
             df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
             if df is None:
@@ -2785,11 +2836,20 @@ class ReactiveMatrixLayout:
         if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
             raise ValueError("add_parallel_coordinates requiere DataFrame")
         MatrixLayout.map_parallel_coordinates(letter, self._data, dimensions=dimensions, category_col=category_col, **kwargs)
-        # Parallel Coordinates como dependiente: redibujar con selección
-        if not self._scatter_selection_models:
+        
+        # Solo registrar callback si linked_to está especificado explícitamente
+        if linked_to is None:
+            # No enlazar automáticamente, hacer gráfico estático
             return self
-        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
-        sel = self._scatter_selection_models[scatter_letter]
+        
+        # Buscar vista principal especificada
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
+        
         def update(items, count):
             df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
             if df is None:
