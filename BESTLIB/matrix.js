@@ -1564,10 +1564,27 @@
           }
         }
         
+        // IMPORTANTE: Enviar todas las filas originales que corresponden a esta categoría
+        // El slice tiene _original_rows que contiene todas las filas del DataFrame con esta categoría
+        const originalRows = d.data._original_rows || d._original_row || (d._original_row ? [d._original_row] : null) || [];
+        
+        // Asegurar que originalRows sea un array
+        const items = Array.isArray(originalRows) && originalRows.length > 0 ? originalRows : [];
+        
+        // Si no hay filas originales, intentar enviar al menos información de la categoría
+        // (esto puede pasar si los datos no se prepararon correctamente)
+        if (items.length === 0) {
+          console.warn(`[Pie Chart] No se encontraron filas originales para la categoría ${category}. Asegúrese de que los datos se prepararon correctamente.`);
+          // Enviar información de la categoría como fallback
+          items.push({ category: category });
+        }
+        
         sendEvent(divId, 'select', {
-          type: 'pie',
-          items: [{ category }],
+          type: 'select',
+          items: items,  // Enviar todas las filas originales de esta categoría
           indices: [],
+          original_items: [d.data],
+          _original_rows: items,  // También incluir como _original_rows para compatibilidad
           selected_category: category,
           __view_letter__: viewLetter,
           __is_primary_view__: spec.__is_primary_view__ || false
@@ -4216,13 +4233,27 @@
             }
           }
           
-          // Para histogram, necesitamos reconstruir los datos originales del bin
-          // Por ahora, enviamos información del bin seleccionado
+          // IMPORTANTE: Enviar todas las filas originales que corresponden a este bin
+          // El bin tiene _original_rows que contiene todas las filas del DataFrame que caen en este bin
+          const originalRows = d._original_rows || d._original_row || (d._original_row ? [d._original_row] : null) || [];
+          
+          // Asegurar que originalRows sea un array
+          const items = Array.isArray(originalRows) && originalRows.length > 0 ? originalRows : [];
+          
+          // Si no hay filas originales, intentar enviar al menos información del bin
+          // (esto puede pasar si los datos no se prepararon correctamente)
+          if (items.length === 0) {
+            console.warn(`[Histogram] No se encontraron filas originales para el bin ${d.bin}. Asegúrese de que los datos se prepararon correctamente.`);
+            // Enviar información del bin como fallback
+            items.push({ bin: d.bin, count: d.count });
+          }
+          
           sendEvent(divId, 'select', {
             type: 'select',
-            items: [{ bin: d.bin, count: d.count }],
+            items: items,  // Enviar todas las filas originales de este bin
             indices: [],
             original_items: [d],
+            _original_rows: items,  // También incluir como _original_rows para compatibilidad
             __view_letter__: viewLetter,
             __is_primary_view__: spec.__is_primary_view__ || false
           });

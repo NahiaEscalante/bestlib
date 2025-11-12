@@ -683,24 +683,59 @@ class MatrixLayout:
             else:
                 edges = list(bins)
                 edges.sort()
-            counts = [0] * (len(edges) - 1)
-            for v in values:
-                # Asignar bin; incluir borde derecho en el último bin
-                idx = None
-                for i in range(len(edges) - 1):
-                    left, right = edges[i], edges[i + 1]
-                    if (v >= left and v < right) or (i == len(edges) - 2 and v == right):
-                        idx = i
-                        break
-                if idx is not None:
-                    counts[idx] += 1
+            
+            # IMPORTANTE: Almacenar filas originales para cada bin
+            # Esto permite que las vistas enlazadas reciban los datos correctos
+            bin_rows = [[] for _ in range(len(edges) - 1)]  # Lista de listas para cada bin
+            
+            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+                # Para DataFrame: almacenar todas las filas originales que caen en cada bin
+                original_data = data.to_dict('records')
+                for row in original_data:
+                    v = row.get(value_col)
+                    if v is not None:
+                        try:
+                            v_float = float(v)
+                            # Asignar bin
+                            idx = None
+                            for i in range(len(edges) - 1):
+                                left, right = edges[i], edges[i + 1]
+                                if (v_float >= left and v_float < right) or (i == len(edges) - 2 and v_float == right):
+                                    idx = i
+                                    break
+                            if idx is not None:
+                                bin_rows[idx].append(row)
+                        except Exception:
+                            continue
+            else:
+                # Para lista de dicts: almacenar items originales
+                items = data if isinstance(data, list) else []
+                for item in items:
+                    v = item.get(value_col or 'value')
+                    if v is not None:
+                        try:
+                            v_float = float(v)
+                            # Asignar bin
+                            idx = None
+                            for i in range(len(edges) - 1):
+                                left, right = edges[i], edges[i + 1]
+                                if (v_float >= left and v_float < right) or (i == len(edges) - 2 and v_float == right):
+                                    idx = i
+                                    break
+                            if idx is not None:
+                                bin_rows[idx].append(item)
+                        except Exception:
+                            continue
+            
             # Centro del bin para etiqueta; D3 usa 'bin' y 'count'
+            # IMPORTANTE: Incluir _original_rows para cada bin
             hist_data = [
                 {
                     'bin': float((edges[i] + edges[i + 1]) / 2.0),
-                    'count': int(counts[i])
+                    'count': int(len(bin_rows[i])),
+                    '_original_rows': bin_rows[i]  # Almacenar todas las filas originales de este bin
                 }
-                for i in range(len(counts))
+                for i in range(len(bin_rows))
             ]
         
         # Agregar etiquetas de ejes automáticamente si no están en kwargs
@@ -1002,22 +1037,79 @@ class MatrixLayout:
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
             if category_col is None:
                 raise ValueError("category_col requerido para pie")
+            
+            # IMPORTANTE: Almacenar filas originales para cada categoría
+            # Esto permite que las vistas enlazadas reciban los datos correctos
+            original_data = data.to_dict('records')
+            category_rows = defaultdict(list)  # Diccionario: categoría -> lista de filas
+            
+            # Agrupar filas por categoría
+            for row in original_data:
+                cat = row.get(category_col)
+                if cat is not None:
+                    category_rows[str(cat)].append(row)
+            
             if value_col and value_col in data.columns:
+                # Calcular suma por categoría
                 agg = data.groupby(category_col)[value_col].sum().reset_index()
-                slices = [{'category': r[category_col], 'value': float(r[value_col])} for _, r in agg.iterrows()]
+                slices = [
+                    {
+                        'category': str(r[category_col]),
+                        'value': float(r[value_col]),
+                        '_original_rows': category_rows.get(str(r[category_col]), [])  # Almacenar todas las filas originales de esta categoría
+                    }
+                    for _, r in agg.iterrows()
+                ]
             else:
+                # Contar por categoría
                 counts = data[category_col].value_counts()
-                slices = [{'category': cat, 'value': int(cnt)} for cat, cnt in counts.items()]
+                slices = [
+                    {
+                        'category': str(cat),
+                        'value': int(cnt),
+                        '_original_rows': category_rows.get(str(cat), [])  # Almacenar todas las filas originales de esta categoría
+                    }
+                    for cat, cnt in counts.items()
+                ]
         else:
             items = data or []
+            
+            # IMPORTANTE: Almacenar items originales para cada categoría
+            category_rows = defaultdict(list)  # Diccionario: categoría -> lista de items
+            
+            # Agrupar items por categoría
+            for it in items:
+                cat = it.get(category_col, 'unknown')
+                if cat is not None:
+                    category_rows[str(cat)].append(it)
+            
             if value_col:
                 sums = defaultdict(float)
                 for it in items:
-                    sums[str(it.get(category_col, 'unknown'))] += float(it.get(value_col, 0))
-                slices = [{'category': k, 'value': float(v)} for k, v in sums.items()]
+                    cat = str(it.get(category_col, 'unknown'))
+                    val = it.get(value_col, 0)
+                    try:
+                        sums[cat] += float(val)
+                    except Exception:
+                        pass
+                slices = [
+                    {
+                        'category': k,
+                        'value': float(v),
+                        '_original_rows': category_rows.get(k, [])  # Almacenar todos los items originales de esta categoría
+                    }
+                    for k, v in sums.items()
+                ]
             else:
                 counts = Counter([str(it.get(category_col, 'unknown')) for it in items])
-                slices = [{'category': k, 'value': int(v)} for k, v in counts.items()]
+                slices = [
+                    {
+                        'category': k,
+                        'value': int(v),
+                        '_original_rows': category_rows.get(k, [])  # Almacenar todos los items originales de esta categoría
+                    }
+                    for k, v in counts.items()
+                ]
         
         # Procesar figsize si está en kwargs
         cls._process_figsize_in_kwargs(kwargs)

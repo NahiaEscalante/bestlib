@@ -14,6 +14,52 @@ except ImportError:
     pd = None
 
 
+def _items_to_dataframe(items):
+    """
+    Convierte una lista de diccionarios a un DataFrame de pandas.
+    
+    Args:
+        items: Lista de diccionarios o DataFrame
+    
+    Returns:
+        DataFrame de pandas si items no está vacío, DataFrame vacío si items está vacío,
+        o None si pandas no está disponible
+    """
+    if not HAS_PANDAS:
+        # Si pandas no está disponible, retornar None y dar warning
+        if items:
+            print("⚠️ Advertencia: pandas no está disponible. Los datos no se pueden convertir a DataFrame.")
+        return None
+    
+    # Si ya es un DataFrame, retornarlo
+    if HAS_PANDAS and isinstance(items, pd.DataFrame):
+        return items.copy()
+    
+    # Si es None o lista vacía, retornar DataFrame vacío
+    if not items:
+        return pd.DataFrame()
+    
+    # Convertir lista de diccionarios a DataFrame
+    try:
+        if isinstance(items, list):
+            if len(items) == 0:
+                return pd.DataFrame()
+            # Verificar que todos los items sean diccionarios
+            if all(isinstance(item, dict) for item in items):
+                return pd.DataFrame(items)
+            else:
+                # Si hay items que no son diccionarios, intentar convertir de todas formas
+                return pd.DataFrame(items)
+        else:
+            # Si no es lista ni DataFrame, intentar convertir
+            return pd.DataFrame([items] if not isinstance(items, (list, tuple)) else items)
+    except Exception as e:
+        print(f"⚠️ Error al convertir items a DataFrame: {e}")
+        print(f"   Items tipo: {type(items)}, Longitud: {len(items) if hasattr(items, '__len__') else 'N/A'}")
+        # En caso de error, retornar DataFrame vacío
+        return pd.DataFrame()
+
+
 class ReactiveData(widgets.Widget):
     """
     Widget reactivo que mantiene datos sincronizados entre celdas.
@@ -211,7 +257,7 @@ class ReactiveMatrixLayout:
         # Sistema de vistas enlazadas
         self._views = {}  # {view_id: view_config}
         self._data = None  # DataFrame o lista de diccionarios
-        self._selected_data = []  # Datos seleccionados actualmente
+        self._selected_data = pd.DataFrame() if HAS_PANDAS else []  # Datos seleccionados actualmente (DataFrame)
         self._view_letters = {}  # {view_id: letter} - mapeo de vista a letra del layout
         self._barchart_callbacks = {}  # {letter: callback_func} - para evitar duplicados
         self._barchart_cell_ids = {}  # {letter: cell_id} - IDs de celdas de bar charts
@@ -285,16 +331,20 @@ class ReactiveMatrixLayout:
             if MatrixLayout._debug:
                 print(f"✅ [ReactiveMatrixLayout] Evento recibido para scatter '{scatter_letter_capture}': {len(items)} items")
             
+            # Convertir items a DataFrame antes de guardar
+            items_df = _items_to_dataframe(items)
+            
             # Actualizar el SelectionModel específico de este scatter plot
             # Esto disparará los callbacks registrados (como update_barchart)
+            # Nota: Los callbacks internos trabajan con listas, así que pasamos items
             scatter_selection_capture.update(items)
             
             # IMPORTANTE: También actualizar el selection_model principal para que selected_data se actualice
             # Esto asegura que los datos seleccionados estén disponibles globalmente
             self.selection_model.update(items)
             
-            # Actualizar también _selected_data para compatibilidad
-            self._selected_data = items
+            # Actualizar también _selected_data con DataFrame para que el usuario pueda acceder fácilmente
+            self._selected_data = items_df if items_df is not None else items
         
         # Registrar handler en el layout principal
         # Nota: Usamos el mismo layout pero cada scatter tiene su propio SelectionModel
@@ -400,11 +450,13 @@ class ReactiveMatrixLayout:
             # Guardar variable de selección si se especifica
             if selection_var:
                 self._selection_variables[letter] = selection_var
-                # Crear variable en el namespace del usuario
+                # Crear variable en el namespace del usuario (inicializar como DataFrame vacío)
                 import __main__
-                setattr(__main__, selection_var, [])
+                empty_df = pd.DataFrame() if HAS_PANDAS else []
+                setattr(__main__, selection_var, empty_df)
                 if MatrixLayout._debug:
-                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de bar chart '{letter}'")
+                    df_type = "DataFrame" if HAS_PANDAS else "lista"
+                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de bar chart '{letter}' como {df_type}")
             
             # Flag para prevenir actualizaciones recursivas del bar chart
             barchart_update_flag = f'_barchart_updating_{letter}'
@@ -436,21 +488,29 @@ class ReactiveMatrixLayout:
                 self._barchart_update_flags[barchart_update_flag] = True
                 
                 try:
+                    # Convertir items a DataFrame antes de guardar
+                    items_df = _items_to_dataframe(items)
+                    
                     # IMPORTANTE: Actualizar el SelectionModel de este bar chart
                     # Esto disparará callbacks registrados (como update_pie para el pie chart 'P')
                     # El callback update_pie NO debe causar que el bar chart se re-renderice
+                    # Nota: Los callbacks internos trabajan con listas, así que pasamos items
                     barchart_selection.update(items)
                     
                     # Actualizar también el selection_model principal
                     self.selection_model.update(items)
-                    self._selected_data = items
                     
-                    # Guardar en variable Python si se especificó
+                    # Guardar DataFrame en _selected_data para que el usuario pueda acceder fácilmente
+                    self._selected_data = items_df if items_df is not None else items
+                    
+                    # Guardar en variable Python si se especificó (como DataFrame)
                     if selection_var:
                         import __main__
-                        setattr(__main__, selection_var, items)
+                        # Guardar como DataFrame para facilitar el trabajo del usuario
+                        setattr(__main__, selection_var, items_df if items_df is not None else items)
                         if MatrixLayout._debug:
-                            print(f"💾 Selección guardada en variable '{selection_var}': {len(items)} items")
+                            count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
+                            print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
                 finally:
                     # Reset flag después de un delay más largo para evitar bucles
                     # El delay debe ser lo suficientemente largo para que el pie chart termine de actualizarse
@@ -664,10 +724,10 @@ class ReactiveMatrixLayout:
                             }}
                         }} else {{
                             // Solo limpiar si no hay SVG existente
-                            targetCell.innerHTML = '';
-                            
+                        targetCell.innerHTML = '';
+                        
                             // Crear nuevo SVG
-                            const width = Math.max(targetCell.clientWidth || 400, 200);
+                        const width = Math.max(targetCell.clientWidth || 400, 200);
                             const availableHeight = Math.max(targetCell.clientHeight - 30, 320);
                             const height = Math.min(availableHeight, 350);
                             
@@ -698,7 +758,7 @@ class ReactiveMatrixLayout:
                         
                         if (data.length === 0) {{
                             if (existingBars.length === 0) {{
-                                targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
+                            targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
                             }}
                             window._bestlib_updating_{letter} = false;
                             return;
@@ -842,7 +902,7 @@ class ReactiveMatrixLayout:
                         
                         // Reset flag al finalizar (con delay para evitar bucles)
                         setTimeout(() => {{
-                            window._bestlib_updating_{letter} = false;
+                        window._bestlib_updating_{letter} = false;
                         }}, 300);
                     }}
                     
@@ -928,9 +988,11 @@ class ReactiveMatrixLayout:
             if selection_var:
                 self._selection_variables[letter] = selection_var
                 import __main__
-                setattr(__main__, selection_var, [])
+                empty_df = pd.DataFrame() if HAS_PANDAS else []
+                setattr(__main__, selection_var, empty_df)
                 if MatrixLayout._debug:
-                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de grouped bar chart '{letter}'")
+                    df_type = "DataFrame" if HAS_PANDAS else "lista"
+                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de grouped bar chart '{letter}' como {df_type}")
             
             def grouped_handler(payload):
                 event_letter = payload.get('__view_letter__')
@@ -942,15 +1004,20 @@ class ReactiveMatrixLayout:
                 if MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Evento recibido para grouped bar chart '{letter}': {len(items)} items")
                 
+                # Convertir items a DataFrame antes de guardar
+                items_df = _items_to_dataframe(items)
+                
                 grouped_selection.update(items)
                 self.selection_model.update(items)
-                self._selected_data = items
+                self._selected_data = items_df if items_df is not None else items
                 
                 if selection_var:
                     import __main__
-                    setattr(__main__, selection_var, items)
+                    # Guardar como DataFrame para facilitar el trabajo del usuario
+                    setattr(__main__, selection_var, items_df if items_df is not None else items)
                     if MatrixLayout._debug:
-                        print(f"💾 Selección guardada en variable '{selection_var}': {len(items)} items")
+                        count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
+                        print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
             
             self._layout.on('select', grouped_handler)
             
@@ -1108,9 +1175,11 @@ class ReactiveMatrixLayout:
             if selection_var:
                 self._selection_variables[letter] = selection_var
                 import __main__
-                setattr(__main__, selection_var, [])
+                empty_df = pd.DataFrame() if HAS_PANDAS else []
+                setattr(__main__, selection_var, empty_df)
                 if MatrixLayout._debug:
-                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de histogram '{letter}'")
+                    df_type = "DataFrame" if HAS_PANDAS else "lista"
+                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de histogram '{letter}' como {df_type}")
             
             # Crear handler para eventos de selección del histogram
             def histogram_handler(payload):
@@ -1124,16 +1193,21 @@ class ReactiveMatrixLayout:
                 if MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Evento recibido para histogram '{letter}': {len(items)} items")
                 
+                # Convertir items a DataFrame antes de guardar
+                items_df = _items_to_dataframe(items)
+                
                 histogram_selection.update(items)
                 self.selection_model.update(items)
-                self._selected_data = items
+                self._selected_data = items_df if items_df is not None else items
                 
-                # Guardar en variable Python si se especificó
+                # Guardar en variable Python si se especificó (como DataFrame)
                 if selection_var:
                     import __main__
-                    setattr(__main__, selection_var, items)
+                    # Guardar como DataFrame para facilitar el trabajo del usuario
+                    setattr(__main__, selection_var, items_df if items_df is not None else items)
                     if MatrixLayout._debug:
-                        print(f"💾 Selección guardada en variable '{selection_var}': {len(items)} items")
+                        count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
+                        print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
             
             self._layout.on('select', histogram_handler)
             
@@ -1165,7 +1239,8 @@ class ReactiveMatrixLayout:
                 'column': column,
                 'bins': bins,
                 'kwargs': kwargs.copy(),
-                'layout_div_id': self._layout.div_id
+                'layout_div_id': self._layout.div_id,
+                'interactive': interactive  # Guardar si es interactivo
             }
             
             # Función de actualización del histograma
@@ -1178,17 +1253,64 @@ class ReactiveMatrixLayout:
                     # Usar datos seleccionados o todos los datos
                     data_to_use = self._data
                     if items and len(items) > 0:
-                        if HAS_PANDAS and isinstance(items[0], dict):
-                            import pandas as pd
-                            data_to_use = pd.DataFrame(items)
+                        # Procesar items: extraer filas originales si están disponibles
+                        processed_items = []
+                        for item in items:
+                            if isinstance(item, dict):
+                                # Verificar si tiene _original_rows (viene de otro gráfico con múltiples filas)
+                                if '_original_rows' in item and isinstance(item['_original_rows'], list):
+                                    processed_items.extend(item['_original_rows'])
+                                # Verificar si tiene _original_row (una sola fila)
+                                elif '_original_row' in item:
+                                    processed_items.append(item['_original_row'])
+                                # Si no tiene _original_row/_original_rows, el item ya es una fila original
+                                else:
+                                    processed_items.append(item)
+                            else:
+                                processed_items.append(item)
+                        
+                        if processed_items:
+                            if HAS_PANDAS and isinstance(processed_items[0], dict):
+                                import pandas as pd
+                                data_to_use = pd.DataFrame(processed_items)
+                            else:
+                                data_to_use = processed_items
                         else:
-                            data_to_use = items
+                            data_to_use = self._data
+                    else:
+                        data_to_use = self._data
                     
                     # Preparar datos para histograma
+                    # IMPORTANTE: Almacenar filas originales para cada bin
                     if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
-                        values = data_to_use[column].dropna().tolist()
+                        # Obtener valores y filas originales
+                        original_data = data_to_use.to_dict('records')
+                        values_with_rows = []
+                        for row in original_data:
+                            val = row.get(column)
+                            if val is not None:
+                                try:
+                                    val_float = float(val)
+                                    values_with_rows.append((val_float, row))
+                                except Exception:
+                                    continue
+                        values = [v for v, _ in values_with_rows]
+                        rows_by_value = {v: r for v, r in values_with_rows}
                     else:
-                        values = [item.get(column, 0) for item in data_to_use if column in item]
+                        items = data_to_use if isinstance(data_to_use, list) else []
+                        values = []
+                        rows_by_value = {}
+                        for item in items:
+                            val = item.get(column)
+                            if val is not None:
+                                try:
+                                    val_float = float(val)
+                                    values.append(val_float)
+                                    if val_float not in rows_by_value:
+                                        rows_by_value[val_float] = []
+                                    rows_by_value[val_float].append(item)
+                                except Exception:
+                                    continue
                     
                     if not values:
                         return
@@ -1207,19 +1329,65 @@ class ReactiveMatrixLayout:
                         for val in values:
                             bin_idx = min(int((val - min_val) / bin_width), bins - 1) if bin_width > 0 else 0
                             hist[bin_idx] += 1
+                    
+                    # IMPORTANTE: Almacenar filas originales para cada bin
+                    bin_rows = [[] for _ in range(len(bin_edges) - 1)]  # Lista de listas para cada bin
+                    
+                    if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
+                        # Para DataFrame: almacenar todas las filas originales que caen en cada bin
+                        original_data = data_to_use.to_dict('records')
+                        for row in original_data:
+                            val = row.get(column)
+                            if val is not None:
+                                try:
+                                    val_float = float(val)
+                                    # Asignar bin
+                                    idx = None
+                                    for i in range(len(bin_edges) - 1):
+                                        left, right = bin_edges[i], bin_edges[i + 1]
+                                        if (val_float >= left and val_float < right) or (i == len(bin_edges) - 2 and val_float == right):
+                                            idx = i
+                                            break
+                                    if idx is not None:
+                                        bin_rows[idx].append(row)
+                                except Exception:
+                                    continue
+                    else:
+                        # Para lista de dicts: almacenar items originales
+                        items = data_to_use if isinstance(data_to_use, list) else []
+                        for item in items:
+                            val = item.get(column)
+                            if val is not None:
+                                try:
+                                    val_float = float(val)
+                                    # Asignar bin
+                                    idx = None
+                                    for i in range(len(bin_edges) - 1):
+                                        left, right = bin_edges[i], bin_edges[i + 1]
+                                        if (val_float >= left and val_float < right) or (i == len(bin_edges) - 2 and val_float == right):
+                                            idx = i
+                                            break
+                                    if idx is not None:
+                                        bin_rows[idx].append(item)
+                                except Exception:
+                                    continue
+                    
                     bin_centers = [(bin_edges[i] + bin_edges[i+1]) / 2 for i in range(len(bin_edges)-1)]
                     
-                    hist_data = [{'bin': center, 'count': count} for center, count in zip(bin_centers, hist)]
+                    # IMPORTANTE: Incluir _original_rows para cada bin
+                    hist_data = [
+                        {
+                            'bin': float(center),
+                            'count': int(len(bin_rows[i])),
+                            '_original_rows': bin_rows[i]  # Almacenar todas las filas originales de este bin
+                        }
+                        for i, center in enumerate(bin_centers)
+                    ]
                     
-                    # Actualizar mapping
-                    from .matrix import MatrixLayout
-                    MatrixLayout._map[letter] = {
-                        'type': 'histogram',
-                        'data': hist_data,
-                        'column': column,
-                        'bins': bins,
-                        **kwargs
-                    }
+                    # IMPORTANTE: NO actualizar el mapping aquí para evitar bucles infinitos
+                    # Solo actualizar visualmente el gráfico con JavaScript
+                    # El mapping se actualiza cuando se crea inicialmente el histograma
+                    # Los _original_rows ya están incluidos en hist_data
                     
                     # JavaScript para actualizar el gráfico (similar a bar chart)
                     div_id = hist_params['layout_div_id']
@@ -1289,7 +1457,8 @@ class ReactiveMatrixLayout:
                             .nice()
                             .range([chartHeight, 0]);
                         
-                        g.selectAll('.bar')
+                        // IMPORTANTE: Agregar event listeners a las barras para interactividad
+                        const bars = g.selectAll('.bar')
                             .data(data)
                             .enter()
                             .append('rect')
@@ -1299,6 +1468,34 @@ class ReactiveMatrixLayout:
                             .attr('width', x.bandwidth())
                             .attr('height', 0)
                             .attr('fill', '{default_color}')
+                            .style('cursor', 'pointer')
+                            .on('click', function(event, d) {{
+                                // IMPORTANTE: Enviar todas las filas originales que corresponden a este bin
+                                const originalRows = d._original_rows || d._original_row || (d._original_row ? [d._original_row] : null) || [];
+                                
+                                // Asegurar que originalRows sea un array
+                                const items = Array.isArray(originalRows) && originalRows.length > 0 ? originalRows : [];
+                                
+                                // Si no hay filas originales, intentar enviar al menos información del bin
+                                if (items.length === 0) {{
+                                    console.warn(`[Histogram] No se encontraron filas originales para el bin ${{d.bin}}. Asegúrese de que los datos se prepararon correctamente.`);
+                                    items.push({{ bin: d.bin, count: d.count }});
+                                }}
+                                
+                                // Obtener letra de la vista
+                                const viewLetter = '{letter}';
+                                if (window.sendEvent && typeof window.sendEvent === 'function') {{
+                                    window.sendEvent('{div_id}', 'select', {{
+                                        type: 'select',
+                                        items: items,  // Enviar todas las filas originales de este bin
+                                        indices: [],
+                                        original_items: [d],
+                                        _original_rows: items,  // También incluir como _original_rows para compatibilidad
+                                        __view_letter__: viewLetter,
+                                        __is_primary_view__: false  // Histogram enlazado no es vista principal
+                                    }});
+                                }}
+                            }})
                             .transition()
                             .duration(500)
                             .attr('y', d => y(d.count))
@@ -1910,9 +2107,11 @@ class ReactiveMatrixLayout:
             if selection_var:
                 self._selection_variables[letter] = selection_var
                 import __main__
-                setattr(__main__, selection_var, [])
+                empty_df = pd.DataFrame() if HAS_PANDAS else []
+                setattr(__main__, selection_var, empty_df)
                 if MatrixLayout._debug:
-                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de pie chart '{letter}'")
+                    df_type = "DataFrame" if HAS_PANDAS else "lista"
+                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de pie chart '{letter}' como {df_type}")
             
             # Crear handler para eventos de selección del pie chart
             def pie_handler(payload):
@@ -1926,16 +2125,21 @@ class ReactiveMatrixLayout:
                 if MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Evento recibido para pie chart '{letter}': {len(items)} items")
                 
+                # Convertir items a DataFrame antes de guardar
+                items_df = _items_to_dataframe(items)
+                
                 pie_selection.update(items)
                 self.selection_model.update(items)
-                self._selected_data = items
+                self._selected_data = items_df if items_df is not None else items
                 
-                # Guardar en variable Python si se especificó
+                # Guardar en variable Python si se especificó (como DataFrame)
                 if selection_var:
                     import __main__
-                    setattr(__main__, selection_var, items)
+                    # Guardar como DataFrame para facilitar el trabajo del usuario
+                    setattr(__main__, selection_var, items_df if items_df is not None else items)
                     if MatrixLayout._debug:
-                        print(f"💾 Selección guardada en variable '{selection_var}': {len(items)} items")
+                        count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
+                        print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
             
             self._layout.on('select', pie_handler)
             
@@ -2049,32 +2253,86 @@ class ReactiveMatrixLayout:
                     # Re-renderizar el pie chart usando JavaScript (sin actualizar el mapping)
                     try:
                         # Preparar datos para el pie chart
+                        # IMPORTANTE: Incluir _original_rows para cada categoría
+                        # Esto permite que cuando se hace click en el pie chart, se envíen todas las filas originales
                         if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
                             if category_col and category_col in data_to_use.columns:
+                                # IMPORTANTE: Almacenar filas originales para cada categoría
+                                original_data = data_to_use.to_dict('records')
+                                category_rows = defaultdict(list)  # Diccionario: categoría -> lista de filas
+                                
+                                # Agrupar filas por categoría
+                                for row in original_data:
+                                    cat = row.get(category_col)
+                                    if cat is not None:
+                                        category_rows[str(cat)].append(row)
+                                
                                 if value_col and value_col in data_to_use.columns:
-                                    pie_data = data_to_use.groupby(category_col)[value_col].sum().reset_index()
-                                    pie_data.columns = ['category', 'value']
-                                    pie_data = pie_data.to_dict('records')
+                                    # Calcular suma por categoría
+                                    agg = data_to_use.groupby(category_col)[value_col].sum().reset_index()
+                                    pie_data = [
+                                        {
+                                            'category': str(r[category_col]),
+                                            'value': float(r[value_col]),
+                                            '_original_rows': category_rows.get(str(r[category_col]), [])
+                                        }
+                                        for _, r in agg.iterrows()
+                                    ]
                                 else:
-                                    pie_data = data_to_use[category_col].value_counts().reset_index()
-                                    pie_data.columns = ['category', 'value']
-                                    pie_data = pie_data.to_dict('records')
+                                    # Contar por categoría
+                                    counts = data_to_use[category_col].value_counts()
+                                    pie_data = [
+                                        {
+                                            'category': str(cat),
+                                            'value': int(cnt),
+                                            '_original_rows': category_rows.get(str(cat), [])
+                                        }
+                                        for cat, cnt in counts.items()
+                                    ]
                             else:
                                 if MatrixLayout._debug:
                                     print(f"⚠️ No se puede crear pie chart: columna '{category_col}' no encontrada")
                                 return
                         else:
                             from collections import Counter, defaultdict
+                            
+                            # IMPORTANTE: Almacenar items originales para cada categoría
+                            items = data_to_use if isinstance(data_to_use, list) else []
+                            category_rows = defaultdict(list)  # Diccionario: categoría -> lista de items
+                            
+                            # Agrupar items por categoría
+                            for it in items:
+                                cat = it.get(category_col, 'unknown')
+                                if cat is not None:
+                                    category_rows[str(cat)].append(it)
+                            
                             if value_col:
                                 sums = defaultdict(float)
-                                for item in data_to_use:
-                                    cat = item.get(category_col, 'unknown')
+                                for item in items:
+                                    cat = str(item.get(category_col, 'unknown'))
                                     val = item.get(value_col, 0)
-                                    sums[cat] += val
-                                pie_data = [{'category': k, 'value': v} for k, v in sums.items()]
+                                    try:
+                                        sums[cat] += float(val)
+                                    except Exception:
+                                        pass
+                                pie_data = [
+                                    {
+                                        'category': k,
+                                        'value': float(v),
+                                        '_original_rows': category_rows.get(k, [])
+                                    }
+                                    for k, v in sums.items()
+                                ]
                             else:
-                                counts = Counter([item.get(category_col, 'unknown') for item in data_to_use])
-                                pie_data = [{'category': k, 'value': v} for k, v in counts.items()]
+                                counts = Counter([str(item.get(category_col, 'unknown')) for item in items])
+                                pie_data = [
+                                    {
+                                        'category': k,
+                                        'value': int(v),
+                                        '_original_rows': category_rows.get(k, [])
+                                    }
+                                    for k, v in counts.items()
+                                ]
                         
                         if not pie_data:
                             self._update_flags[pie_update_flag] = False
