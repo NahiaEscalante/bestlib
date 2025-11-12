@@ -3431,7 +3431,29 @@
       }
     }
     
-    // Dibujar ejes (arrastrables y reordenables)
+    // Calcular posiciones uniformes fijas (no cambian, solo se intercambian)
+    const uniformPositions = [];
+    for (let i = 0; i < dimensions.length; i++) {
+      uniformPositions.push(dimensions.length > 1 ? (chartWidth / (dimensions.length - 1)) * i : chartWidth / 2);
+    }
+    
+    // Asignar posiciones uniformes a cada eje según su índice
+    axisPositions.forEach((ax, idx) => {
+      ax.x = uniformPositions[idx];
+      ax.targetX = uniformPositions[idx];  // Posición objetivo (uniforme)
+    });
+    
+    // Función para actualizar posiciones visuales de todos los ejes
+    function updateAxisPositions() {
+      axisPositions.forEach((ax) => {
+        const axisGroup = g.select(`[data-dimension="${ax.name}"]`);
+        if (!axisGroup.empty()) {
+          axisGroup.attr('transform', `translate(${ax.x}, 0)`);
+        }
+      });
+    }
+    
+    // Dibujar ejes (arrastrables para intercambiar posiciones)
     // Usar nombre de dimensión como identificador único (más estable que índice)
     const axisGroups = g.selectAll('.axis-group')
       .data(axisPositions)
@@ -3443,7 +3465,7 @@
       .style('cursor', 'move')
       .style('pointer-events', 'all');
     
-    // Agregar área invisible más grande para facilitar el drag (antes de la línea del eje)
+    // Agregar área invisible más grande para facilitar el drag
     axisGroups.append('rect')
       .attr('class', 'axis-drag-area')
       .attr('x', -30)  // Área de arrastre más ancha (60px total)
@@ -3454,14 +3476,25 @@
       .style('cursor', 'move')
       .style('pointer-events', 'all');
     
-    // Aplicar drag a los grupos de ejes
+    // Variable para rastrear qué eje se está arrastrando y con cuál se puede intercambiar
+    let draggingAxis = null;
+    let swapCandidate = null;
+    
+    // Aplicar drag a los grupos de ejes (sistema de intercambio)
     axisGroups.call(d3.drag()
         .on('start', function(event, d) {
           event.sourceEvent.stopPropagation();
           try {
+            draggingAxis = d;
+            swapCandidate = null;
+            
+            // Resaltar el eje que se está arrastrando
             d3.select(this).select('.axis-line').attr('stroke', '#ff6b35').attr('stroke-width', 3);
             // Elevar el eje que se está arrastrando
             d3.select(this).raise();
+            
+            // Guardar posición original
+            d.originalX = d.x;
           } catch (err) {
             console.error('Parallel Coordinates: Error en start drag', err);
           }
@@ -3479,51 +3512,155 @@
             
             // Limitar movimiento horizontal dentro del área
             const padding = 20;
-            let newX = Math.max(padding, Math.min(chartWidth - padding, mx));
+            let dragX = Math.max(padding, Math.min(chartWidth - padding, mx));
             
-            // Validar nueva posición
-            if (isNaN(newX) || !isFinite(newX)) {
-              return;
-            }
+            // Buscar la posición uniforme más cercana al mouse
+            let closestPosition = uniformPositions[0];
+            let closestIndex = 0;
+            let minDistance = Math.abs(dragX - uniformPositions[0]);
             
-            // Actualizar posición del eje que se está arrastrando
-            d.x = newX;
-            
-            // Actualizar posición visual del eje que se está arrastrando
-            d3.select(this).attr('transform', `translate(${d.x}, 0)`);
-            
-            // Reordenar ejes automáticamente según posición X (sin snap, movimiento libre)
-            axisPositions.sort((a, b) => a.x - b.x);
-            
-            // Actualizar índices y posiciones de todos los grupos de ejes
-            axisPositions.forEach((ax, idx) => {
-              ax.index = idx;
-              // Actualizar posición visual de todos los ejes usando el nombre como identificador
-              const axisGroup = g.select(`[data-dimension="${ax.name}"]`);
-              if (!axisGroup.empty()) {
-                axisGroup.attr('transform', `translate(${ax.x}, 0)`);
+            for (let i = 1; i < uniformPositions.length; i++) {
+              const distance = Math.abs(dragX - uniformPositions[i]);
+              if (distance < minDistance) {
+                minDistance = distance;
+                closestPosition = uniformPositions[i];
+                closestIndex = i;
               }
-            });
-            
-            // Redibujar líneas inmediatamente para feedback visual fluido
-            if (!isRedrawing) {
-              drawDataLines();
             }
+            
+            // Buscar qué eje está actualmente en la posición más cercana (candidato para intercambio)
+            const threshold = 80; // Distancia máxima para considerar intercambio (más generoso)
+            const newCandidate = axisPositions.find(ax => 
+              ax !== d && Math.abs(ax.x - closestPosition) < 10
+            );
+            
+            // Si hay un candidato válido y está cerca
+            if (newCandidate && minDistance < threshold) {
+              // Si es un candidato diferente, actualizar
+              if (newCandidate !== swapCandidate) {
+                // Restaurar visualización anterior si había otro candidato
+                if (swapCandidate) {
+                  const prevCandidateGroup = g.select(`[data-dimension="${swapCandidate.name}"]`);
+                  if (!prevCandidateGroup.empty()) {
+                    prevCandidateGroup.select('.axis-line')
+                      .attr('stroke', '#333')
+                      .attr('stroke-width', 2);
+                  }
+                }
+                
+                // Actualizar candidato
+                swapCandidate = newCandidate;
+                
+                // Resaltar el nuevo candidato
+                const candidateGroup = g.select(`[data-dimension="${swapCandidate.name}"]`);
+                if (!candidateGroup.empty()) {
+                  candidateGroup.select('.axis-line')
+                    .attr('stroke', '#4a90e2')  // Azul para indicar que se puede intercambiar
+                    .attr('stroke-width', 3);   // Más grueso para indicar intercambio
+                }
+              }
+            } else {
+              // No hay candidato cercano válido
+              if (swapCandidate) {
+                // Restaurar visualización del candidato anterior
+                const prevCandidateGroup = g.select(`[data-dimension="${swapCandidate.name}"]`);
+                if (!prevCandidateGroup.empty()) {
+                  prevCandidateGroup.select('.axis-line')
+                    .attr('stroke', '#333')
+                    .attr('stroke-width', 2);
+                }
+                swapCandidate = null;
+              }
+            }
+            
+            // Mover visualmente el eje que se está arrastrando a la posición del mouse
+            d3.select(this).attr('transform', `translate(${dragX}, 0)`);
           } catch (err) {
             console.error('Parallel Coordinates: Error en drag', err);
           }
         })
         .on('end', function(event, d) {
           event.sourceEvent.stopPropagation();
+          
           try {
-            d3.select(this).select('.axis-line').attr('stroke', '#333').attr('stroke-width', 2);
+            // Restaurar visualización de todos los ejes (color normal)
+            g.selectAll('.axis-group').select('.axis-line')
+              .attr('stroke', '#333')
+              .attr('stroke-width', 2);
             
-            // Asegurar que las líneas se redibujen al finalizar el drag
-            if (!isRedrawing) {
-              drawDataLines();
+            if (swapCandidate && swapCandidate !== d) {
+              // Intercambiar posiciones X de los ejes (intercambiar las posiciones uniformes)
+              const tempX = d.x;
+              const tempTargetX = d.targetX;
+              
+              d.x = swapCandidate.x;
+              d.targetX = swapCandidate.targetX;
+              
+              swapCandidate.x = tempX;
+              swapCandidate.targetX = tempTargetX;
+              
+              // Actualizar posiciones visuales de ambos ejes con transición suave
+              const draggedGroup = g.select(`[data-dimension="${d.name}"]`);
+              const swappedGroup = g.select(`[data-dimension="${swapCandidate.name}"]`);
+              
+              if (!draggedGroup.empty()) {
+                draggedGroup
+                  .transition()
+                  .duration(300)
+                  .ease(d3.easeCubicOut)
+                  .attr('transform', `translate(${d.x}, 0)`);
+              }
+              
+              if (!swappedGroup.empty()) {
+                swappedGroup
+                  .transition()
+                  .duration(300)
+                  .ease(d3.easeCubicOut)
+                  .attr('transform', `translate(${swapCandidate.x}, 0)`);
+              }
+              
+              // Redibujar líneas después de la transición para reflejar el nuevo orden
+              setTimeout(() => {
+                if (!isRedrawing) {
+                  drawDataLines();
+                }
+              }, 320);
+            } else {
+              // No hay intercambio, restaurar posición original del eje arrastrado
+              if (d.originalX !== undefined) {
+                d3.select(this)
+                  .transition()
+                  .duration(200)
+                  .ease(d3.easeCubicOut)
+                  .attr('transform', `translate(${d.originalX}, 0)`);
+                // Restaurar también la posición X en el objeto
+                d.x = d.originalX;
+              }
             }
+            
+            // Limpiar referencias
+            draggingAxis = null;
+            swapCandidate = null;
+            delete d.originalX;
           } catch (err) {
             console.error('Parallel Coordinates: Error en end drag', err);
+            // En caso de error, restaurar posición original
+            if (draggingAxis && draggingAxis.originalX !== undefined) {
+              const axisGroup = g.select(`[data-dimension="${draggingAxis.name}"]`);
+              if (!axisGroup.empty()) {
+                axisGroup
+                  .transition()
+                  .duration(200)
+                  .attr('transform', `translate(${draggingAxis.originalX}, 0)`);
+                draggingAxis.x = draggingAxis.originalX;
+              }
+            }
+            // Restaurar visualización de todos los ejes
+            g.selectAll('.axis-group').select('.axis-line')
+              .attr('stroke', '#333')
+              .attr('stroke-width', 2);
+            draggingAxis = null;
+            swapCandidate = null;
           }
         })
       );
