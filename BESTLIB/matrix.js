@@ -1277,10 +1277,18 @@
       .attr('y', d => y2(d.value))
       .attr('height', d => chartHeight - y2(d.value));
 
-    // axes for grouped version
-    if (spec.axes) {
-      g.append('g').attr('transform', `translate(0,${chartHeight})`).call(d3.axisBottom(x0));
-      g.append('g').call(d3.axisLeft(y2));
+    // axes for grouped version (renderizar por defecto a menos que axes === false)
+    if (spec.axes !== false) {
+      const xAxis = g.append('g').attr('transform', `translate(0,${chartHeight})`).call(d3.axisBottom(x0));
+      xAxis.selectAll('text').style('font-size', '12px').style('font-weight', '600').style('fill', '#000000');
+      xAxis.selectAll('line, path').style('stroke', '#000000').style('stroke-width', '1.5px');
+      
+      const yAxis = g.append('g').call(d3.axisLeft(y2));
+      yAxis.selectAll('text').style('font-size', '12px').style('font-weight', '600').style('fill', '#000000');
+      yAxis.selectAll('line, path').style('stroke', '#000000').style('stroke-width', '1.5px');
+      
+      // Renderizar etiquetas de ejes usando función helper
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin);
     }
   } else {
     // Simple bars
@@ -1323,8 +1331,8 @@
       .attr('height', d => chartHeight - y(d.value));
   }
     
-    // Ejes con D3 - Texto NEGRO y visible
-    if (spec.axes) {
+    // Ejes con D3 - Texto NEGRO y visible (renderizar por defecto a menos que axes === false)
+    if (spec.axes !== false) {
       const xAxis = g.append('g')
         .attr('transform', `translate(0,${chartHeight})`)
         .call(d3.axisBottom(x));
@@ -1339,19 +1347,6 @@
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
       
-      // Agregar etiqueta del eje X
-      if (spec.xLabel) {
-        g.append('text')
-          .attr('x', chartWidth / 2)
-          .attr('y', chartHeight + 35)
-          .attr('text-anchor', 'middle')
-          .style('font-size', '13px')
-          .style('font-weight', '700')
-          .style('fill', '#000000')
-          .style('font-family', 'Arial, sans-serif')
-          .text(spec.xLabel);
-      }
-      
       const yAxis = g.append('g')
         .call(d3.axisLeft(y).ticks(5));
       
@@ -1365,19 +1360,8 @@
         .style('stroke', '#000000')
         .style('stroke-width', '1.5px');
       
-      // Agregar etiqueta del eje Y
-      if (spec.yLabel) {
-        g.append('text')
-          .attr('transform', 'rotate(-90)')
-          .attr('x', -chartHeight / 2)
-          .attr('y', -40)
-          .attr('text-anchor', 'middle')
-          .style('font-size', '13px')
-          .style('font-weight', '700')
-          .style('fill', '#000000')
-          .style('font-family', 'Arial, sans-serif')
-          .text(spec.yLabel);
-      }
+      // Renderizar etiquetas de ejes usando función helper
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin);
     }
   }
   
@@ -1428,8 +1412,8 @@
       return spec.pointRadius || 4;
     };
 
-    // Puntos con D3
-    g.selectAll('.dot')
+    // Puntos con D3 (renderizar PRIMERO)
+    const dots = g.selectAll('.dot')
       .data(data)
       .enter()
       .append('circle')
@@ -1445,41 +1429,181 @@
         return spec.color || '#4a90e2';
       })
       .attr('opacity', 0.7)
-      .style('cursor', spec.interactive ? 'pointer' : 'default')
+      .style('cursor', spec.interactive ? 'crosshair' : 'default')
       .on('click', function(event, d) {
+        // Solo procesar clicks si NO estamos en modo brush
         if (spec.interactive) {
+          event.stopPropagation();
           const index = data.indexOf(d);
-          // Incluir fila original completa
           const originalRow = d._original_row || d;
           sendEvent(divId, 'point_click', {
             type: 'point_click',
-            point: originalRow,  // Fila original completa
+            point: originalRow,
             index: index,
-            original_point: d  // Mantener compatibilidad
+            original_point: d
           });
         }
       })
       .on('mouseenter', function() {
-        if (spec.interactive) {
-          d3.select(this)
-            .transition()
-            .duration(200)
-            .attr('r', d => (getRadius(d)) * 1.5)
-            .attr('opacity', 1);
-        }
+        if (!spec.interactive) return;
+        d3.select(this)
+          .transition()
+          .duration(200)
+          .attr('r', d => (getRadius(d)) * 1.5)
+          .attr('opacity', 1);
       })
       .on('mouseleave', function() {
-        if (spec.interactive) {
-          d3.select(this)
-            .transition()
-            .duration(200)
-            .attr('r', d => getRadius(d))
-            .attr('opacity', 0.7);
-        }
+        if (!spec.interactive) return;
+        d3.select(this)
+          .transition()
+          .duration(200)
+          .attr('r', d => getRadius(d))
+          .attr('opacity', 0.7);
       });
     
-    // Ejes con texto NEGRO y visible
-    if (spec.axes) {
+    // BRUSH para selección de área (renderizar DESPUÉS de los puntos para estar visualmente encima)
+    // El brush captura eventos porque está en una capa superior
+    if (spec.interactive) {
+      // Crear grupo de brush que estará en la parte superior
+      const brushGroup = g.append('g')
+        .attr('class', 'brush-layer');
+      
+      const brush = d3.brush()
+        .extent([[0, 0], [chartWidth, chartHeight]])
+        .on('start', function(event) {
+          // Cuando comienza el brush, desactivar eventos de puntos temporalmente
+          g.selectAll('.dot')
+            .style('pointer-events', 'none')
+            .style('opacity', 0.4);
+        })
+        .on('brush', function(event) {
+          if (!event.selection) {
+            // Si no hay selección, resetear
+            g.selectAll('.dot')
+              .style('opacity', 0.7)
+              .attr('r', d => getRadius(d));
+            return;
+          }
+          
+          const [[x0, y0], [x1, y1]] = event.selection;
+          
+          // Resaltar puntos dentro de la selección
+          g.selectAll('.dot')
+            .style('opacity', d => {
+              const px = x(d.x);
+              const py = y(d.y);
+              const inSelection = px >= x0 && px <= x1 && py >= y0 && py <= y1;
+              return inSelection ? 1 : 0.2;
+            })
+            .attr('r', d => {
+              const px = x(d.x);
+              const py = y(d.y);
+              const inSelection = px >= x0 && px <= x1 && py >= y0 && py <= y1;
+              const base = getRadius(d);
+              return inSelection ? base * 1.3 : base;
+            });
+        })
+        .on('end', function(event) {
+          // Si no hay selección, resetear y salir
+          if (!event.selection) {
+            g.selectAll('.dot')
+              .style('pointer-events', 'all')
+              .style('opacity', 0.7)
+              .attr('r', d => getRadius(d));
+            return;
+          }
+          
+          // Obtener coordenadas de la selección
+          const [[x0, y0], [x1, y1]] = event.selection;
+          
+          // Convertir coordenadas de píxeles a valores de datos
+          const xInverted0 = x.invert(Math.min(x0, x1));
+          const xInverted1 = x.invert(Math.max(x0, x1));
+          const yInverted0 = y.invert(Math.max(y0, y1));  // y está invertido
+          const yInverted1 = y.invert(Math.min(y0, y1));
+          
+          // Filtrar puntos dentro de la selección usando valores de datos
+          const selected = data.filter(d => {
+            return d.x >= Math.min(xInverted0, xInverted1) && 
+                   d.x <= Math.max(xInverted0, xInverted1) &&
+                   d.y >= Math.min(yInverted0, yInverted1) && 
+                   d.y <= Math.max(yInverted0, yInverted1);
+          });
+          
+          // Extraer filas originales completas si existen
+          const selectedItems = selected.map(d => {
+            return d._original_row || d;
+          });
+          
+          // Obtener letra del scatter plot desde el spec o del contenedor
+          // El container es la celda, que tiene un data-letter attribute
+          let scatterLetter = spec.__scatter_letter__ || null;
+          if (!scatterLetter && container) {
+            // El container es la celda, obtener la letra del attribute
+            const letterAttr = container.getAttribute('data-letter');
+            if (letterAttr) {
+              scatterLetter = letterAttr;
+            } else {
+              // Si no hay attribute, intentar obtenerlo del ID de la celda
+              // El ID tiene formato: {divId}-cell-{letter}-{r}-{c}
+              const idMatch = container.id && container.id.match(/-cell-([A-Z])-/);
+              if (idMatch) {
+                scatterLetter = idMatch[1];
+              }
+            }
+          }
+          
+          // Enviar el evento de selección con filas originales
+          if (selectedItems.length > 0) {
+            sendEvent(divId, 'select', {
+              type: 'select',
+              items: selectedItems,
+              count: selected.length,
+              original_items: selected,
+              __scatter_letter__: scatterLetter
+            });
+          }
+          
+          // Mantener puntos resaltados brevemente, luego resetear
+          setTimeout(() => {
+            g.selectAll('.dot')
+              .style('pointer-events', 'all')
+              .transition()
+              .duration(300)
+              .style('opacity', 0.7)
+              .attr('r', d => getRadius(d));
+            
+            // Limpiar el brush visual después de un breve delay
+            brushGroup.call(brush.move, null);
+          }, 200);
+        });
+      
+      // Aplicar brush al grupo (esto lo renderiza visualmente encima de los puntos)
+      brushGroup.call(brush);
+      
+      // Estilo del brush overlay (área de captura de eventos)
+      brushGroup.selectAll('.overlay')
+        .style('cursor', 'crosshair')
+        .style('pointer-events', 'all');  // Asegurar que capture eventos
+      
+      // Estilo del brush selection (área seleccionada)
+      brushGroup.selectAll('.selection')
+        .attr('stroke', '#333')
+        .attr('stroke-width', '2px')
+        .attr('stroke-dasharray', '5,5')
+        .attr('fill', 'steelblue')
+        .attr('fill-opacity', 0.1)
+        .style('pointer-events', 'none');  // La selección no debe capturar eventos
+      
+      // Estilo de los handles del brush (esquinas)
+      brushGroup.selectAll('.handle')
+        .style('cursor', 'move')
+        .style('pointer-events', 'all');  // Los handles deben capturar eventos
+    }
+    
+    // Ejes con texto NEGRO y visible (renderizar por defecto a menos que axes === false)
+    // IMPORTANTE: Renderizar ejes DESPUÉS del brush para que estén debajo visualmente
+    if (spec.axes !== false) {
       const xAxis = g.append('g')
         .attr('transform', `translate(0,${chartHeight})`)
         .call(d3.axisBottom(x).ticks(6));
@@ -1487,7 +1611,7 @@
       xAxis.selectAll('text')
         .style('font-size', '12px')
         .style('font-weight', '600')
-        .style('fill', '#000000')  // NEGRO
+        .style('fill', '#000000')
         .style('font-family', 'Arial, sans-serif');
       
       xAxis.selectAll('line, path')
@@ -1500,7 +1624,7 @@
       yAxis.selectAll('text')
         .style('font-size', '12px')
         .style('font-weight', '600')
-        .style('fill', '#000000')  // NEGRO
+        .style('fill', '#000000')
         .style('font-family', 'Arial, sans-serif');
       
       yAxis.selectAll('line, path')
@@ -1509,87 +1633,6 @@
       
       // Renderizar etiquetas de ejes usando función helper
       renderAxisLabels(g, spec, chartWidth, chartHeight, margin);
-    }
-    
-    // BRUSH para selección de área (MEJORADO)
-    if (spec.interactive) {
-      const brushGroup = g.append('g')
-        .attr('class', 'brush-layer');
-      
-      const brush = d3.brush()
-        .extent([[0, 0], [chartWidth, chartHeight]])
-        .on('start', function(event) {
-          if (!event.sourceEvent) return;
-          g.selectAll('.dot').style('opacity', 0.3);
-        })
-        .on('brush', function(event) {
-          if (!event.selection) return;
-          
-          const [[x0, y0], [x1, y1]] = event.selection;
-          
-          g.selectAll('.dot')
-            .style('opacity', d => {
-              const px = x(d.x);
-              const py = y(d.y);
-              return (px >= x0 && px <= x1 && py >= y0 && py <= y1) ? 1 : 0.1;
-            })
-            .attr('r', d => {
-              const px = x(d.x);
-              const py = y(d.y);
-              const inSelection = px >= x0 && px <= x1 && py >= y0 && py <= y1;
-              const base = getRadius(d);
-              return inSelection ? base * 1.5 : base;
-            });
-        })
-        .on('end', function(event) {
-          // Si no hay selección, resetear y salir
-          if (!event.selection) {
-            g.selectAll('.dot')
-              .style('opacity', 0.7)
-              .attr('r', d => getRadius(d));
-            return;
-          }
-          
-          // Obtener coordenadas de la selección
-          const [[x0, y0], [x1, y1]] = event.selection;
-          
-          // Filtrar puntos dentro de la selección
-          const selected = data.filter(d => {
-            const px = x(d.x);
-            const py = y(d.y);
-            return px >= x0 && px <= x1 && py >= y0 && py <= y1;
-          });
-          
-          // Extraer filas originales completas si existen
-          const selectedItems = selected.map(d => {
-            // Si tiene _original_row, devolverlo; si no, devolver el item completo
-            return d._original_row || d;
-          });
-          
-          // Obtener letra del scatter plot desde el spec
-          const scatterLetter = spec.__scatter_letter__ || null;
-          
-          // Enviar el evento de selección con filas originales
-          sendEvent(divId, 'select', {
-            type: 'select',
-            items: selectedItems,  // Filas originales completas
-            count: selected.length,
-            original_items: selected,  // Mantener compatibilidad con datos del gráfico
-            __scatter_letter__: scatterLetter  // Identificador del scatter plot
-          });
-          
-          // Resetear visualización de puntos
-          g.selectAll('.dot')
-            .transition()
-            .duration(300)
-            .style('opacity', 0.7)
-            .attr('r', d => getRadius(d));
-          
-          // Limpiar el brush visual
-          brushGroup.call(brush.move, null);
-        });
-      
-      brushGroup.call(brush);
     }
   }
 
