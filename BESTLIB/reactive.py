@@ -302,7 +302,12 @@ class ReactiveMatrixLayout:
         self._layout.on('select', scatter_handler)
         
         # Configurar el scatter plot en el mapping
-        # Agregar la letra del scatter en el spec para identificar eventos
+        # IMPORTANTE: Agregar __scatter_letter__ ANTES de crear el spec para asegurar que esté disponible
+        kwargs_with_identifier = kwargs.copy()
+        kwargs_with_identifier['__scatter_letter__'] = letter
+        kwargs_with_identifier['__selection_model_id__'] = id(scatter_selection)
+        
+        # Crear scatter plot spec con identificadores incluidos
         scatter_spec = MatrixLayout.map_scatter(
             letter, 
             self._data, 
@@ -310,14 +315,18 @@ class ReactiveMatrixLayout:
             y_col=y_col, 
             category_col=category_col,
             interactive=interactive,
-            **kwargs
+            **kwargs_with_identifier
         )
         
-        # Agregar identificador del scatter plot para enrutamiento de eventos
+        # Asegurar que los identificadores estén en el spec guardado
         if scatter_spec:
             scatter_spec['__scatter_letter__'] = letter
-            scatter_spec['__selection_model_id__'] = id(scatter_selection)  # ID único para identificar
+            scatter_spec['__selection_model_id__'] = id(scatter_selection)
             MatrixLayout._map[letter] = scatter_spec
+            
+            # Debug: verificar que el spec tiene los identificadores
+            if MatrixLayout._debug:
+                print(f"✅ [ReactiveMatrixLayout] Scatter plot '{letter}' configurado con __scatter_letter__={scatter_spec.get('__scatter_letter__')}")
         
         # Registrar vista para sistema de enlace
         view_id = f"scatter_{letter}"
@@ -1217,15 +1226,26 @@ class ReactiveMatrixLayout:
         if column is None:
             raise ValueError("Debe especificar 'column' para el boxplot")
         
-        # Determinar a qué scatter plot enlazar
+        # Determinar a qué vista principal enlazar
         if linked_to:
-            if linked_to not in self._scatter_selection_models:
-                raise ValueError(f"Scatter plot '{linked_to}' no existe.")
-            scatter_letter = linked_to
+            # Buscar en scatter plots primero (compatibilidad hacia atrás)
+            if linked_to in self._scatter_selection_models:
+                primary_letter = linked_to
+                primary_selection = self._scatter_selection_models[primary_letter]
+            elif linked_to in self._primary_view_models:
+                primary_letter = linked_to
+                primary_selection = self._primary_view_models[primary_letter]
+            else:
+                raise ValueError(f"Vista principal '{linked_to}' no existe. Vistas disponibles: scatter plots {list(self._scatter_selection_models.keys())}, vistas principales {list(self._primary_view_models.keys())}")
         else:
-            if not self._scatter_selection_models:
-                raise ValueError("No hay scatter plots disponibles.")
-            scatter_letter = list(self._scatter_selection_models.keys())[-1]
+            # Si no se especifica, usar la última vista principal disponible
+            all_primary = {**self._scatter_selection_models, **self._primary_view_models}
+            if not all_primary:
+                raise ValueError("No hay vistas principales disponibles. Agrega una vista principal primero (scatter, bar chart, etc.)")
+            primary_letter = list(all_primary.keys())[-1]
+            primary_selection = all_primary[primary_letter]
+            if MatrixLayout._debug:
+                print(f"💡 Boxplot '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
         
         # Guardar parámetros
         boxplot_params = {
@@ -1471,9 +1491,14 @@ class ReactiveMatrixLayout:
                 if MatrixLayout._debug:
                     print(f"⚠️ Error actualizando boxplot: {e}")
         
-        # Registrar callback
-        scatter_selection = self._scatter_selection_models[scatter_letter]
-        scatter_selection.on_change(update_boxplot)
+        # Registrar callback en el SelectionModel de la vista principal
+        primary_selection.on_change(update_boxplot)
+        
+        # Debug: verificar que el callback se registró
+        if MatrixLayout._debug:
+            print(f"🔗 [ReactiveMatrixLayout] Callback registrado para boxplot '{letter}' enlazado a vista principal '{primary_letter}'")
+            print(f"   - SelectionModel ID: {id(primary_selection)}")
+            print(f"   - Callbacks registrados: {len(primary_selection._callbacks)}")
         
         # Crear boxplot inicial con todos los datos
         if HAS_PANDAS and isinstance(self._data, pd.DataFrame):
@@ -1769,13 +1794,152 @@ class ReactiveMatrixLayout:
                 if MatrixLayout._debug:
                     print(f"💡 Pie chart '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
             
-            def update(items, count):
-                data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            def update_pie(items, count):
+                """Actualiza el pie chart cuando cambia la selección"""
                 try:
+                    if MatrixLayout._debug:
+                        print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando pie chart '{letter}' con {count} items seleccionados")
+                    
+                    data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+                    
+                    # Actualizar el mapping
                     MatrixLayout.map_pie(letter, data_to_use, category_col=category_col, value_col=value_col, **kwargs)
-                except Exception:
-                    pass
-            primary_selection.on_change(update)
+                    
+                    # Re-renderizar el pie chart usando JavaScript
+                    try:
+                        import json
+                        from IPython.display import Javascript
+                        
+                        # Preparar datos para el pie chart
+                        if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
+                            if value_col and value_col in data_to_use.columns:
+                                pie_data = data_to_use.groupby(category_col)[value_col].sum().reset_index()
+                                pie_data.columns = ['category', 'value']
+                                pie_data = pie_data.to_dict('records')
+                            else:
+                                pie_data = data_to_use[category_col].value_counts().reset_index()
+                                pie_data.columns = ['category', 'value']
+                                pie_data = pie_data.to_dict('records')
+                        else:
+                            from collections import Counter, defaultdict
+                            if value_col:
+                                sums = defaultdict(float)
+                                for item in data_to_use:
+                                    cat = item.get(category_col, 'unknown')
+                                    val = item.get(value_col, 0)
+                                    sums[cat] += val
+                                pie_data = [{'category': k, 'value': v} for k, v in sums.items()]
+                            else:
+                                counts = Counter([item.get(category_col, 'unknown') for item in data_to_use])
+                                pie_data = [{'category': k, 'value': v} for k, v in counts.items()]
+                        
+                        if not pie_data:
+                            return
+                        
+                        # JavaScript para actualizar el pie chart
+                        div_id = self._layout.div_id
+                        pie_data_json = json.dumps(_sanitize_for_json(pie_data))
+                        
+                        js_update = f"""
+                        (function() {{
+                            function updatePieChart() {{
+                                if (!window.d3) {{
+                                    setTimeout(updatePieChart, 100);
+                                    return;
+                                }}
+                                
+                                const container = document.getElementById('{div_id}');
+                                if (!container) return;
+                                
+                                const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
+                                let targetCell = null;
+                                
+                                for (let cell of cells) {{
+                                    const svg = cell.querySelector('svg');
+                                    if (svg) {{
+                                        targetCell = cell;
+                                        break;
+                                    }}
+                                }}
+                                
+                                if (!targetCell && cells.length > 0) {{
+                                    targetCell = cells[0];
+                                }}
+                                
+                                if (!targetCell) return;
+                                
+                                targetCell.innerHTML = '';
+                                
+                                const width = Math.max(targetCell.clientWidth || 400, 200);
+                                const height = Math.max(targetCell.clientHeight || 400, 200);
+                                const radius = Math.min(width, height) / 2 - 20;
+                                
+                                const data = {pie_data_json};
+                                
+                                if (data.length === 0) {{
+                                    targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
+                                    return;
+                                }}
+                                
+                                const svg = window.d3.select(targetCell)
+                                    .append('svg')
+                                    .attr('width', width)
+                                    .attr('height', height);
+                                
+                                const g = svg.append('g')
+                                    .attr('transform', `translate(${{width / 2}},${{height / 2}})`);
+                                
+                                const color = window.d3.scaleOrdinal(window.d3.schemeCategory10);
+                                
+                                const pie = window.d3.pie()
+                                    .value(d => d.value || 0)
+                                    .sort(null);
+                                
+                                const arc = window.d3.arc()
+                                    .innerRadius(0)
+                                    .outerRadius(radius);
+                                
+                                const arcs = g.selectAll('.arc')
+                                    .data(pie(data))
+                                    .enter()
+                                    .append('g')
+                                    .attr('class', 'arc');
+                                
+                                arcs.append('path')
+                                    .attr('d', arc)
+                                    .attr('fill', (d, i) => color(i))
+                                    .attr('stroke', '#fff')
+                                    .attr('stroke-width', 2);
+                                
+                                arcs.append('text')
+                                    .attr('transform', d => `translate(${{arc.centroid(d)}})`)
+                                    .attr('dy', '.35em')
+                                    .style('text-anchor', 'middle')
+                                    .style('font-size', '12px')
+                                    .text(d => d.data.category);
+                            }}
+                            
+                            updatePieChart();
+                        }})();
+                        """
+                        
+                        from IPython.display import display
+                        display(Javascript(js_update), clear=False)
+                    except Exception as e:
+                        if MatrixLayout._debug:
+                            print(f"⚠️ Error actualizando pie chart con JavaScript: {e}")
+                except Exception as e:
+                    if MatrixLayout._debug:
+                        print(f"⚠️ Error actualizando pie chart: {e}")
+            
+            # Registrar callback en el SelectionModel de la vista principal
+            primary_selection.on_change(update_pie)
+            
+            # Debug: verificar que el callback se registró
+            if MatrixLayout._debug:
+                print(f"🔗 [ReactiveMatrixLayout] Callback registrado para pie chart '{letter}' enlazado a vista principal '{primary_letter}'")
+                print(f"   - SelectionModel ID: {id(primary_selection)}")
+                print(f"   - Callbacks registrados: {len(primary_selection._callbacks)}")
         
         return self
 
