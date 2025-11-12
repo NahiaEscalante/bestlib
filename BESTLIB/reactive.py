@@ -540,14 +540,9 @@ class ReactiveMatrixLayout:
                     if not bar_data:
                         return
                     
-                    # Actualizar también el mapping para consistencia
-                    MatrixLayout.map_barchart(
-                        letter,
-                        data_to_use,
-                        category_col=barchart_params['category_col'],
-                        value_col=barchart_params['value_col'],
-                        **barchart_params['kwargs']
-                    )
+                    # IMPORTANTE: NO actualizar el mapping aquí para evitar bucles infinitos
+                    # Solo actualizar visualmente el gráfico con JavaScript
+                    # El mapping solo se actualiza cuando es necesario (no en callbacks de actualización)
                     
                     # Crear JavaScript para actualizar el gráfico de forma más robusta
                     div_id = barchart_params['layout_div_id']
@@ -1831,14 +1826,28 @@ class ReactiveMatrixLayout:
                 if MatrixLayout._debug:
                     print(f"💡 Pie chart '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
             
+            # Flag para evitar actualizaciones recursivas del pie chart
+            pie_update_flag = f'_pie_updating_{letter}'
+            if not hasattr(self, '_update_flags'):
+                self._update_flags = {}
+            self._update_flags[pie_update_flag] = False
+            
             def update_pie(items, count):
                 """Actualiza el pie chart cuando cambia la selección"""
+                from .matrix import MatrixLayout
+                import json
+                from IPython.display import Javascript
+                import traceback
+                
+                # Prevenir actualizaciones recursivas
+                if self._update_flags.get(pie_update_flag, False):
+                    if MatrixLayout._debug:
+                        print(f"⏭️ [ReactiveMatrixLayout] Actualización de pie chart '{letter}' ya en progreso, ignorando...")
+                    return
+                
+                self._update_flags[pie_update_flag] = True
+                
                 try:
-                    from .matrix import MatrixLayout
-                    import json
-                    from IPython.display import Javascript
-                    import traceback
-                    
                     if MatrixLayout._debug:
                         print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando pie chart '{letter}' con {count} items seleccionados")
                     
@@ -1864,6 +1873,8 @@ class ReactiveMatrixLayout:
                                 else:
                                     # Verificar si tiene las columnas esperadas (es una fila original)
                                     processed_items.append(item)
+                            else:
+                                processed_items.append(item)
                         
                         if processed_items:
                             if HAS_PANDAS and isinstance(processed_items[0], dict):
@@ -1874,6 +1885,9 @@ class ReactiveMatrixLayout:
                         else:
                             # Si no hay items procesados, usar todos los datos
                             data_to_use = self._data
+                    else:
+                        # Si no hay items, usar todos los datos
+                        data_to_use = self._data
                     
                     # Validar que category_col existe en los datos
                     if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
@@ -1883,10 +1897,11 @@ class ReactiveMatrixLayout:
                             # Intentar usar todos los datos originales
                             data_to_use = self._data
                     
-                    # Actualizar el mapping
-                    MatrixLayout.map_pie(letter, data_to_use, category_col=category_col, value_col=value_col, **kwargs)
+                    # IMPORTANTE: NO actualizar el mapping aquí para evitar bucles infinitos
+                    # Solo actualizar visualmente el gráfico con JavaScript
+                    # El mapping ya tiene los datos correctos desde la creación inicial
                     
-                    # Re-renderizar el pie chart usando JavaScript
+                    # Re-renderizar el pie chart usando JavaScript (sin actualizar el mapping)
                     try:
                         # Preparar datos para el pie chart
                         if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
@@ -1919,87 +1934,121 @@ class ReactiveMatrixLayout:
                         if not pie_data:
                             return
                         
-                        # JavaScript para actualizar el pie chart
+                        # JavaScript para actualizar el pie chart (sin disparar eventos)
                         div_id = self._layout.div_id
                         pie_data_json = json.dumps(_sanitize_for_json(pie_data))
                         
+                        # Flag para evitar actualizaciones múltiples simultáneas
+                        update_flag_key = f'_bestlib_updating_pie_{letter}'
+                        
                         js_update = f"""
                         (function() {{
+                            // Flag para evitar actualizaciones múltiples simultáneas
+                            if (window.{update_flag_key}) {{
+                                if (MatrixLayout && MatrixLayout._debug) {{
+                                    console.log('⏭️ Actualización de pie chart {letter} ya en progreso, ignorando...');
+                                }}
+                                return;
+                            }}
+                            window.{update_flag_key} = true;
+                            
                             function updatePieChart() {{
-                                if (!window.d3) {{
-                                    setTimeout(updatePieChart, 100);
-                                    return;
-                                }}
-                                
-                                const container = document.getElementById('{div_id}');
-                                if (!container) return;
-                                
-                                const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
-                                let targetCell = null;
-                                
-                                for (let cell of cells) {{
-                                    const svg = cell.querySelector('svg');
-                                    if (svg) {{
-                                        targetCell = cell;
-                                        break;
+                                try {{
+                                    if (!window.d3) {{
+                                        setTimeout(updatePieChart, 100);
+                                        return;
                                     }}
+                                    
+                                    const container = document.getElementById('{div_id}');
+                                    if (!container) {{
+                                        window.{update_flag_key} = false;
+                                        return;
+                                    }}
+                                    
+                                    const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
+                                    let targetCell = null;
+                                    
+                                    for (let cell of cells) {{
+                                        const svg = cell.querySelector('svg');
+                                        if (svg) {{
+                                            targetCell = cell;
+                                            break;
+                                        }}
+                                    }}
+                                    
+                                    if (!targetCell && cells.length > 0) {{
+                                        targetCell = cells[0];
+                                    }}
+                                    
+                                    if (!targetCell) {{
+                                        window.{update_flag_key} = false;
+                                        return;
+                                    }}
+                                    
+                                    // Limpiar solo el contenido del pie chart, no toda la celda
+                                    // Esto evita que se re-rendericen otros gráficos
+                                    targetCell.innerHTML = '';
+                                    
+                                    const width = Math.max(targetCell.clientWidth || 400, 200);
+                                    const height = Math.max(targetCell.clientHeight || 400, 200);
+                                    const radius = Math.min(width, height) / 2 - 20;
+                                    
+                                    const data = {pie_data_json};
+                                    
+                                    if (data.length === 0) {{
+                                        targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
+                                        window.{update_flag_key} = false;
+                                        return;
+                                    }}
+                                    
+                                    const svg = window.d3.select(targetCell)
+                                        .append('svg')
+                                        .attr('width', width)
+                                        .attr('height', height);
+                                    
+                                    const g = svg.append('g')
+                                        .attr('transform', `translate(${{width / 2}},${{height / 2}})`);
+                                    
+                                    const color = window.d3.scaleOrdinal(window.d3.schemeCategory10);
+                                    
+                                    const pie = window.d3.pie()
+                                        .value(d => d.value || 0)
+                                        .sort(null);
+                                    
+                                    const arc = window.d3.arc()
+                                        .innerRadius(0)
+                                        .outerRadius(radius);
+                                    
+                                    // Limpiar arcs anteriores si existen
+                                    g.selectAll('.arc').remove();
+                                    
+                                    const arcs = g.selectAll('.arc')
+                                        .data(pie(data))
+                                        .enter()
+                                        .append('g')
+                                        .attr('class', 'arc');
+                                    
+                                    arcs.append('path')
+                                        .attr('d', arc)
+                                        .attr('fill', (d, i) => color(i))
+                                        .attr('stroke', '#fff')
+                                        .attr('stroke-width', 2)
+                                        .style('pointer-events', 'none');  // Deshabilitar eventos para evitar bucles
+                                    
+                                    arcs.append('text')
+                                        .attr('transform', d => `translate(${{arc.centroid(d)}})`)
+                                        .attr('dy', '.35em')
+                                        .style('text-anchor', 'middle')
+                                        .style('font-size', '12px')
+                                        .style('pointer-events', 'none')  // Deshabilitar eventos
+                                        .text(d => d.data.category);
+                                    
+                                    // Reset flag después de actualizar
+                                    window.{update_flag_key} = false;
+                                }} catch (error) {{
+                                    console.error('Error actualizando pie chart:', error);
+                                    window.{update_flag_key} = false;
                                 }}
-                                
-                                if (!targetCell && cells.length > 0) {{
-                                    targetCell = cells[0];
-                                }}
-                                
-                                if (!targetCell) return;
-                                
-                                targetCell.innerHTML = '';
-                                
-                                const width = Math.max(targetCell.clientWidth || 400, 200);
-                                const height = Math.max(targetCell.clientHeight || 400, 200);
-                                const radius = Math.min(width, height) / 2 - 20;
-                                
-                                const data = {pie_data_json};
-                                
-                                if (data.length === 0) {{
-                                    targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
-                                    return;
-                                }}
-                                
-                                const svg = window.d3.select(targetCell)
-                                    .append('svg')
-                                    .attr('width', width)
-                                    .attr('height', height);
-                                
-                                const g = svg.append('g')
-                                    .attr('transform', `translate(${{width / 2}},${{height / 2}})`);
-                                
-                                const color = window.d3.scaleOrdinal(window.d3.schemeCategory10);
-                                
-                                const pie = window.d3.pie()
-                                    .value(d => d.value || 0)
-                                    .sort(null);
-                                
-                                const arc = window.d3.arc()
-                                    .innerRadius(0)
-                                    .outerRadius(radius);
-                                
-                                const arcs = g.selectAll('.arc')
-                                    .data(pie(data))
-                                    .enter()
-                                    .append('g')
-                                    .attr('class', 'arc');
-                                
-                                arcs.append('path')
-                                    .attr('d', arc)
-                                    .attr('fill', (d, i) => color(i))
-                                    .attr('stroke', '#fff')
-                                    .attr('stroke-width', 2);
-                                
-                                arcs.append('text')
-                                    .attr('transform', d => `translate(${{arc.centroid(d)}})`)
-                                    .attr('dy', '.35em')
-                                    .style('text-anchor', 'middle')
-                                    .style('font-size', '12px')
-                                    .text(d => d.data.category);
                             }}
                             
                             updatePieChart();
@@ -2011,9 +2060,21 @@ class ReactiveMatrixLayout:
                     except Exception as e:
                         if MatrixLayout._debug:
                             print(f"⚠️ Error actualizando pie chart con JavaScript: {e}")
+                            traceback.print_exc()
+                    finally:
+                        # Reset flag después de un pequeño delay para evitar bucles
+                        import threading
+                        def reset_flag():
+                            import time
+                            time.sleep(0.15)  # Pequeño delay para evitar bucles
+                            self._update_flags[pie_update_flag] = False
+                        threading.Thread(target=reset_flag, daemon=True).start()
                 except Exception as e:
                     if MatrixLayout._debug:
                         print(f"⚠️ Error actualizando pie chart: {e}")
+                        traceback.print_exc()
+                    # Reset flag en caso de error
+                    self._update_flags[pie_update_flag] = False
             
             # Registrar callback en el SelectionModel de la vista principal
             primary_selection.on_change(update_pie)
