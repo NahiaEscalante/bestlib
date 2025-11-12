@@ -2587,10 +2587,17 @@
     // Calcular centro del área del gráfico
     const centerX = chartWidth / 2;
     const centerY = chartHeight / 2;
-    const initialRadius = Math.min(chartWidth, chartHeight) / 2 - 40;
+    // IMPORTANTE: Usar un radio más pequeño para el círculo inicial
+    // Esto asegura que haya espacio para que los nodos se muevan dentro del área visible
+    const initialRadius = Math.min(chartWidth, chartHeight) / 2 - 60;
+    const maxRadius = Math.min(chartWidth, chartHeight) / 2 - 40; // Radio máximo para nodos
     
-    // Inicializar posiciones de nodos (features) distribuidas uniformemente en el área
-    // Por defecto, los colocamos en un círculo, pero pueden moverse libremente
+    // IMPORTANTE: Los features ya vienen ordenados alfabéticamente desde Python
+    // No es necesario ordenarlos de nuevo, solo usarlos directamente
+    // Esto asegura que los nodos estén en el mismo orden que los weights en los puntos
+    
+    // Inicializar posiciones de nodos (features) distribuidas uniformemente en un círculo
+    // Los nodos pueden moverse, pero se mantendrán dentro del área del círculo máximo
     const anchorPos = features.map((f, i) => {
       const ang = 2 * Math.PI * i / features.length - Math.PI / 2;
       return {
@@ -2601,41 +2608,47 @@
       };
     });
     
-    // Escalas para proyectar puntos - usar dominio dinámico
-    let toX = d3.scaleLinear().range([0, chartWidth]);
-    let toY = d3.scaleLinear().range([chartHeight, 0]);
+    // IMPORTANTE: Usar escalas fijas basadas en coordenadas normalizadas [-1, 1]
+    // Esto asegura que los puntos siempre estén dentro del área visible
+    // Las coordenadas de los puntos están normalizadas a [-1, 1] en Python
+    const scaleFactor = Math.min(chartWidth, chartHeight) / 2 - 50; // Factor de escala para el círculo
+    let toX = d3.scaleLinear()
+      .domain([-1, 1])
+      .range([centerX - scaleFactor, centerX + scaleFactor]);
+    let toY = d3.scaleLinear()
+      .domain([-1, 1])
+      .range([centerY + scaleFactor, centerY - scaleFactor]); // Invertir Y para que -1 esté abajo
     
-    // Función para actualizar escalas basadas en las posiciones actuales de los puntos
+    // Función para actualizar escalas basadas en posiciones de nodos
+    // IMPORTANTE: Usar escalas fijas basadas en dominio [-1, 1] para mantener puntos visibles
     function updateScales() {
-      const allX = [];
-      const allY = [];
+      // Calcular el radio máximo de los nodos desde el centro
+      const nodeRadius = Math.max(
+        ...anchorPos.map(n => {
+          const dx = n.x - centerX;
+          const dy = n.y - centerY;
+          return Math.sqrt(dx * dx + dy * dy);
+        })
+      ) || initialRadius;
       
-      g.selectAll('.scpt').each(function(d) {
-        if (d.x != null && d.y != null && !isNaN(d.x) && !isNaN(d.y) && isFinite(d.x) && isFinite(d.y)) {
-          allX.push(d.x);
-          allY.push(d.y);
-        }
-      });
+      // Asegurar que el radio no sea demasiado grande
+      const maxAllowedRadius = Math.min(chartWidth, chartHeight) / 2 - 50;
+      // IMPORTANTE: Usar un radio estable basado en el radio máximo permitido
+      // Esto mantiene los puntos visibles incluso cuando los nodos están cerca del centro
+      // Usar el máximo entre el radio de los nodos (con margen) y el radio inicial (con margen)
+      const actualRadius = Math.max(
+        Math.min(nodeRadius * 1.2, maxAllowedRadius), // Permitir un 20% más de espacio basado en nodos
+        Math.min(initialRadius * 1.1, maxAllowedRadius) // O usar el radio inicial con margen
+      );
       
-      if (allX.length === 0) {
-        // Usar dominio por defecto si no hay puntos
-        toX.domain([0, chartWidth]);
-        toY.domain([0, chartHeight]);
-        return;
-      }
-      
-      const xExtent = d3.extent(allX);
-      const yExtent = d3.extent(allY);
-      
-      // Calcular margen dinámico
-      const xRange = xExtent[1] - xExtent[0];
-      const yRange = yExtent[1] - yExtent[0];
-      const xMargin = xRange * 0.1 || chartWidth * 0.1;
-      const yMargin = yRange * 0.1 || chartHeight * 0.1;
-      
-      // Actualizar dominios con margen
-      toX.domain([xExtent[0] - xMargin, xExtent[1] + xMargin]);
-      toY.domain([yExtent[0] - yMargin, yExtent[1] + yMargin]);
+      // Actualizar escalas para que los puntos estén dentro del área visible
+      // Los puntos están normalizados a [-1, 1], así que mapeamos a un círculo alrededor del centro
+      toX = d3.scaleLinear()
+        .domain([-1, 1])
+        .range([centerX - actualRadius, centerX + actualRadius]);
+      toY = d3.scaleLinear()
+        .domain([-1, 1])
+        .range([centerY + actualRadius, centerY - actualRadius]); // Invertir Y para que -1 esté abajo
     }
     
     // Flag para evitar actualizaciones múltiples simultáneas
@@ -2647,10 +2660,52 @@
       isUpdating = true;
       
       try {
+        // Primero, actualizar escalas basadas en posiciones de nodos
+        updateScales();
+        
+        // IMPORTANTE: Normalizar posiciones de nodos a coordenadas relativas al centro del gráfico
+        // Convertir coordenadas de pantalla a coordenadas normalizadas [-1, 1]
+        // Usar el radio máximo permitido como scale fijo para mantener consistencia
+        // Esto asegura que los puntos siempre estén dentro del área visible
+        const maxAllowedRadius = Math.min(chartWidth, chartHeight) / 2 - 50;
+        
+        // Calcular distancias de los nodos desde el centro
+        const nodeDistances = anchorPos.map(n => {
+          const dx = n.x - centerX;
+          const dy = n.y - centerY;
+          return Math.sqrt(dx * dx + dy * dy);
+        });
+        const maxNodeDistance = Math.max(...nodeDistances, 1) || initialRadius;
+        
+        // IMPORTANTE: Usar el radio máximo permitido como scale fijo para normalizar nodos
+        // Esto asegura que las coordenadas normalizadas de los nodos estén dentro de [-1, 1]
+        // incluso cuando los nodos están en el borde del círculo máximo
+        // Usar el máximo entre la distancia máxima de los nodos y el radio máximo permitido
+        // para mantener consistencia y evitar que los nodos se salgan del área visible
+        const nodeScale = Math.max(maxNodeDistance, maxAllowedRadius * 0.9);
+        // IMPORTANTE: Limitar nodeScale al máximo permitido para mantener consistencia
+        // Esto asegura que los nodos siempre estén dentro del área visible
+        const finalNodeScale = Math.min(nodeScale, maxAllowedRadius);
+        
+        // Normalizar posiciones de nodos a coordenadas [-1, 1] relativas al centro del gráfico
+        // IMPORTANTE: Los weights están en el mismo orden que los features (orden alfabético)
+        const normalizedNodes = anchorPos.map(n => {
+          const nx = (n.x - centerX) / finalNodeScale;
+          const ny = (n.y - centerY) / finalNodeScale;
+          // IMPORTANTE: Limitar las coordenadas normalizadas a [-1, 1]
+          // Esto asegura que los puntos calculados estén dentro del área visible
+          // y mantiene la consistencia visual
+          return {
+            x: Math.max(-1.0, Math.min(1.0, nx)),
+            y: Math.max(-1.0, Math.min(1.0, ny))
+          };
+        });
+        
         g.selectAll('.scpt').each(function(d) {
           try {
             // Verificar que el punto tenga _weights válidos
-            if (!d._weights || !Array.isArray(d._weights) || d._weights.length !== anchorPos.length) {
+            // IMPORTANTE: Los weights están en el mismo orden que los features (orden alfabético)
+            if (!d._weights || !Array.isArray(d._weights) || d._weights.length !== features.length) {
               console.warn('Star Coordinates: Punto sin _weights válidos', d);
               return;
             }
@@ -2658,17 +2713,35 @@
             const weights = d._weights;
             const s = d3.sum(weights) || 1.0;
             
-            // Calcular posición ponderada
+            // IMPORTANTE: Calcular posición ponderada usando nodos normalizados
+            // Los weights y los nodos están en el mismo orden (alfabético)
             let newX = 0;
             let newY = 0;
-            for (let i = 0; i < weights.length; i++) {
-              if (i < anchorPos.length && !isNaN(weights[i]) && isFinite(weights[i])) {
-                newX += weights[i] * anchorPos[i].x;
-                newY += weights[i] * anchorPos[i].y;
+            
+            for (let i = 0; i < normalizedNodes.length && i < weights.length; i++) {
+              const node = normalizedNodes[i];
+              const weight = weights[i];
+              
+              if (!isNaN(weight) && isFinite(weight)) {
+                newX += weight * node.x;
+                newY += weight * node.y;
               }
             }
+            
             newX = newX / s;
             newY = newY / s;
+            
+            // IMPORTANTE: Normalizar para que los puntos estén dentro de [-1, 1]
+            // Esto asegura que los puntos siempre estén dentro del área visible
+            const distance = Math.sqrt(newX * newX + newY * newY);
+            if (distance > 1.0) {
+              newX = newX / distance;
+              newY = newY / distance;
+            }
+            
+            // Asegurar que las coordenadas estén en [-1, 1]
+            newX = Math.max(-1.0, Math.min(1.0, newX));
+            newY = Math.max(-1.0, Math.min(1.0, newY));
             
             // Validar que las nuevas coordenadas sean válidas
             if (isNaN(newX) || !isFinite(newX) || isNaN(newY) || !isFinite(newY)) {
@@ -2676,11 +2749,11 @@
               return;
             }
             
-            // Actualizar posición del punto en los datos
+            // Actualizar posición del punto en los datos (en coordenadas normalizadas)
             d.x = newX;
             d.y = newY;
             
-            // Actualizar visualmente (solo si el elemento existe)
+            // Actualizar visualmente usando las escalas
             const element = d3.select(this);
             if (!element.empty()) {
               element
@@ -2693,28 +2766,6 @@
             console.error('Star Coordinates: Error recalculando punto', err, d);
           }
         });
-        
-        // Actualizar escalas después de recalcular
-        updateScales();
-        
-        // Actualizar visualmente todos los puntos con las nuevas escalas
-        g.selectAll('.scpt')
-          .transition()
-          .duration(200)
-          .attr('cx', d => {
-            try {
-              return toX(d.x);
-            } catch (err) {
-              return centerX;
-            }
-          })
-          .attr('cy', d => {
-            try {
-              return toY(d.y);
-            } catch (err) {
-              return centerY;
-            }
-          });
       } catch (err) {
         console.error('Star Coordinates: Error en recalculateStarPoints', err);
       } finally {
@@ -2722,8 +2773,20 @@
       }
     }
     
-    // Inicializar escalas con los puntos iniciales
+    // Inicializar escalas
     updateScales();
+    
+    // Dibujar círculo de referencia (opcional, para visualizar el área máxima)
+    const referenceCircle = g.append('circle')
+      .attr('cx', centerX)
+      .attr('cy', centerY)
+      .attr('r', maxRadius)
+      .attr('fill', 'none')
+      .attr('stroke', '#e0e0e0')
+      .attr('stroke-width', 1)
+      .attr('stroke-dasharray', '3,3')
+      .style('pointer-events', 'none')
+      .lower();
     
     // Dibujar líneas desde el origen (centro) hasta los nodos
     const anchorLines = g.selectAll('.anchor-line')
@@ -2771,10 +2834,32 @@
               return;
             }
             
-            // Limitar movimiento dentro del área del gráfico (con margen)
-            const padding = 20;
-            d.x = Math.max(padding, Math.min(chartWidth - padding, mx));
-            d.y = Math.max(padding, Math.min(chartHeight - padding, my));
+            // IMPORTANTE: Limitar movimiento dentro de un círculo alrededor del centro
+            // Esto mantiene los nodos dentro del área visible y ayuda a mantener los puntos visibles
+            const dx = mx - centerX;
+            const dy = my - centerY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Si el nodo está fuera del círculo máximo, limitarlo al borde del círculo
+            if (distance > maxRadius) {
+              const angle = Math.atan2(dy, dx);
+              d.x = centerX + maxRadius * Math.cos(angle);
+              d.y = centerY + maxRadius * Math.sin(angle);
+            } else if (distance < 10) {
+              // Si está demasiado cerca del centro, mantenerlo a una distancia mínima
+              const angle = Math.atan2(dy, dx);
+              d.x = centerX + 10 * Math.cos(angle);
+              d.y = centerY + 10 * Math.sin(angle);
+            } else {
+              // Permitir movimiento libre dentro del círculo máximo
+              d.x = mx;
+              d.y = my;
+            }
+            
+            // Asegurar que las coordenadas estén dentro del área del gráfico (como respaldo)
+            const padding = 10;
+            d.x = Math.max(padding, Math.min(chartWidth - padding, d.x));
+            d.y = Math.max(padding, Math.min(chartHeight - padding, d.y));
             
             // Validar nuevas coordenadas
             if (isNaN(d.x) || isNaN(d.y) || !isFinite(d.x) || !isFinite(d.y)) {
@@ -2786,7 +2871,7 @@
               .attr('cx', d.x)
               .attr('cy', d.y);
             
-            // Actualizar línea
+            // Actualizar línea desde el centro hasta el nodo
             const line = g.select(`.anchor-line-${d.index}`);
             if (!line.empty()) {
               line

@@ -1343,7 +1343,12 @@ class MatrixLayout:
                 df[c] = 0.5
         
         k = len(feats)
-        # Inicializar posiciones de nodos en círculo (se moverán libremente en JS)
+        # IMPORTANTE: Ordenar features alfabéticamente para mantener orden consistente
+        # Esto asegura que los nodos siempre tengan el mismo orden
+        sorted_feats = sorted(feats)
+        
+        # Inicializar posiciones de nodos en círculo unitario (normalizado)
+        # Los nodos se moverán en JS, pero las coordenadas iniciales están normalizadas
         anchors = []
         for i in range(k):
             ang = 2*math.pi * i / k - math.pi / 2  # Empezar desde arriba
@@ -1352,25 +1357,43 @@ class MatrixLayout:
         points = []
         for idx, row in df.iterrows():
             try:
-                # Obtener weights normalizados
-                weights = [float(row[c]) if not (isinstance(row[c], float) and math.isnan(row[c])) else 0.5 for c in feats]
+                # Obtener weights normalizados en el orden original de feats
+                weights_original = [float(row[c]) if not (isinstance(row[c], float) and math.isnan(row[c])) else 0.5 for c in feats]
                 
                 # Validar que todos los weights sean válidos
-                weights = [w if not (math.isnan(w) or math.isinf(w)) else 0.5 for w in weights]
+                weights_original = [w if not (math.isnan(w) or math.isinf(w)) else 0.5 for w in weights_original]
                 
-                # Calcular posición ponderada
+                # IMPORTANTE: Reordenar weights al orden alfabético para que coincidan con sorted_feats
+                # Esto asegura que los weights estén en el mismo orden que los nodos en JavaScript
+                weights = [weights_original[feats.index(feat)] for feat in sorted_feats]
+                
+                # Calcular posición ponderada (Star Coordinates)
+                # Los anchors están en orden alfabético (sorted_feats), y ahora weights también
                 s = sum(weights) or 1.0
                 if s == 0:
                     s = 1.0
                 
-                x = sum(w * anchors[i][0] for i, w in enumerate(weights)) / s
-                y = sum(w * anchors[i][1] for i, w in enumerate(weights)) / s
+                # Calcular posición ponderada (weights y anchors están en el mismo orden)
+                x = sum(weights[i] * anchors[i][0] for i in range(len(weights))) / s
+                y = sum(weights[i] * anchors[i][1] for i in range(len(weights))) / s
+                
+                # IMPORTANTE: Normalizar para que los puntos estén dentro de un círculo unitario
+                # Esto asegura que los puntos estén dentro del área visible incluso cuando los nodos se mueven
+                distance = math.sqrt(x * x + y * y)
+                if distance > 1.0:
+                    # Si el punto está fuera del círculo unitario, normalizarlo
+                    x = x / distance
+                    y = y / distance
                 
                 # Validar coordenadas
                 if math.isnan(x) or math.isinf(x):
                     x = 0.0
                 if math.isnan(y) or math.isinf(y):
                     y = 0.0
+                
+                # Asegurar que las coordenadas estén en [-1, 1]
+                x = max(-1.0, min(1.0, x))
+                y = max(-1.0, min(1.0, y))
                 
                 # Manejar categoría con validación
                 category = None
@@ -1398,7 +1421,9 @@ class MatrixLayout:
         # Procesar figsize si está en kwargs
         cls._process_figsize_in_kwargs(kwargs)
         
-        spec = { 'type': 'star_coordinates', 'data': points, 'features': feats, **kwargs }
+        # IMPORTANTE: Pasar features ordenados alfabéticamente para mantener consistencia
+        # El orden de los features determina el orden de los nodos en el gráfico
+        spec = { 'type': 'star_coordinates', 'data': points, 'features': sorted_feats, **kwargs }
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
         cls._map[letter] = spec
