@@ -406,6 +406,12 @@ class ReactiveMatrixLayout:
                 if MatrixLayout._debug:
                     print(f"📦 Variable '{selection_var}' creada para guardar selecciones de bar chart '{letter}'")
             
+            # Flag para prevenir actualizaciones recursivas del bar chart
+            barchart_update_flag = f'_barchart_updating_{letter}'
+            if not hasattr(self, '_barchart_update_flags'):
+                self._barchart_update_flags = {}
+            self._barchart_update_flags[barchart_update_flag] = False
+            
             # Crear handler para eventos de selección del bar chart
             def barchart_handler(payload):
                 """Handler que actualiza el SelectionModel de este bar chart"""
@@ -413,24 +419,47 @@ class ReactiveMatrixLayout:
                 if event_letter != letter:
                     return
                 
+                # CRÍTICO: Prevenir procesamiento si estamos actualizando el bar chart
+                # Verificar flag de actualización del bar chart
+                if self._barchart_update_flags.get(barchart_update_flag, False):
+                    if MatrixLayout._debug:
+                        print(f"⏭️ [ReactiveMatrixLayout] Bar chart '{letter}' está siendo actualizado, ignorando evento")
+                    return
+                
                 items = payload.get('items', [])
                 
                 if MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Evento recibido para bar chart '{letter}': {len(items)} items")
                 
-                # Actualizar el SelectionModel de este bar chart
-                barchart_selection.update(items)
+                # CRÍTICO: Prevenir actualizaciones recursivas
+                # Marcar flag ANTES de actualizar el SelectionModel
+                self._barchart_update_flags[barchart_update_flag] = True
                 
-                # Actualizar también el selection_model principal
-                self.selection_model.update(items)
-                self._selected_data = items
-                
-                # Guardar en variable Python si se especificó
-                if selection_var:
-                    import __main__
-                    setattr(__main__, selection_var, items)
-                    if MatrixLayout._debug:
-                        print(f"💾 Selección guardada en variable '{selection_var}': {len(items)} items")
+                try:
+                    # IMPORTANTE: Actualizar el SelectionModel de este bar chart
+                    # Esto disparará callbacks registrados (como update_pie para el pie chart 'P')
+                    # El callback update_pie NO debe causar que el bar chart se re-renderice
+                    barchart_selection.update(items)
+                    
+                    # Actualizar también el selection_model principal
+                    self.selection_model.update(items)
+                    self._selected_data = items
+                    
+                    # Guardar en variable Python si se especificó
+                    if selection_var:
+                        import __main__
+                        setattr(__main__, selection_var, items)
+                        if MatrixLayout._debug:
+                            print(f"💾 Selección guardada en variable '{selection_var}': {len(items)} items")
+                finally:
+                    # Reset flag después de un delay más largo para evitar bucles
+                    # El delay debe ser lo suficientemente largo para que el pie chart termine de actualizarse
+                    import threading
+                    def reset_flag():
+                        import time
+                        time.sleep(0.8)  # Delay más largo para evitar bucles (debe ser > delay del pie chart)
+                        self._barchart_update_flags[barchart_update_flag] = False
+                    threading.Thread(target=reset_flag, daemon=True).start()
             
             # Registrar handler en el layout principal
             self._layout.on('select', barchart_handler)
@@ -619,33 +648,61 @@ class ReactiveMatrixLayout:
                             }}
                         }}
                         
-                        // Limpiar celda completamente
-                        targetCell.innerHTML = '';
+                        // CRÍTICO: NO limpiar toda la celda si no es necesario
+                        // Solo limpiar si es la primera renderización o si realmente es necesario
+                        const existingSvg = targetCell.querySelector('svg.bar-chart');
+                        const existingBars = targetCell.querySelectorAll('.bar');
                         
-                        // Re-renderizar bar chart con nuevos datos
+                        let svg, g;
+                        if (existingSvg && existingBars.length > 0) {{
+                            // Usar SVG existente y actualizar solo los datos
+                            svg = window.d3.select(existingSvg);
+                            g = svg.select('g.chart-group');
+                            if (g.empty()) {{
+                                // Si no hay grupo, crear uno
+                                g = svg.append('g').attr('class', 'chart-group');
+                            }}
+                        }} else {{
+                            // Solo limpiar si no hay SVG existente
+                            targetCell.innerHTML = '';
+                            
+                            // Crear nuevo SVG
+                            const width = Math.max(targetCell.clientWidth || 400, 200);
+                            const availableHeight = Math.max(targetCell.clientHeight - 30, 320);
+                            const height = Math.min(availableHeight, 350);
+                            
+                            svg = window.d3.select(targetCell)
+                                .append('svg')
+                                .attr('class', 'bar-chart')
+                                .attr('width', width)
+                                .attr('height', height);
+                            
+                            g = svg.append('g')
+                                .attr('class', 'chart-group');
+                        }}
+                        
+                        // Obtener dimensiones actuales
                         const width = Math.max(targetCell.clientWidth || 400, 200);
-                        // Calcular altura disponible: considerar padding del contenedor (30px total) y espacio para ejes
-                        const availableHeight = Math.max(targetCell.clientHeight - 30, 320);  // Altura mínima de 320px
-                        const height = Math.min(availableHeight, 350);  // Altura máxima de 350px para mantener proporción
+                        const availableHeight = Math.max(targetCell.clientHeight - 30, 320);
+                        const height = Math.min(availableHeight, 350);
                         const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
                         const chartWidth = width - margin.left - margin.right;
                         const chartHeight = height - margin.top - margin.bottom;
+                        
+                        // Actualizar dimensiones del SVG
+                        svg.attr('width', width).attr('height', height);
+                        g.attr('transform', `translate(${{margin.left}},${{margin.top}})`);
                         
                         const data = {bar_data_json};
                         const colorMap = {color_map_json};
                         
                         if (data.length === 0) {{
-                            targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
+                            if (existingBars.length === 0) {{
+                                targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
+                            }}
+                            window._bestlib_updating_{letter} = false;
                             return;
                         }}
-                        
-                        const svg = window.d3.select(targetCell)
-                            .append('svg')
-                            .attr('width', width)
-                            .attr('height', height);
-                        
-                        const g = svg.append('g')
-                            .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
                         
                         const x = window.d3.scaleBand()
                             .domain(data.map(d => d.category))
@@ -658,9 +715,16 @@ class ReactiveMatrixLayout:
                             .range([chartHeight, 0]);
                         
                         // Renderizar barras
-                        g.selectAll('.bar')
-                            .data(data)
-                            .enter()
+                        // IMPORTANTE: Preservar los event listeners existentes si es posible
+                        // Si las barras ya existen, usar update pattern en lugar de recrear
+                        const bars = g.selectAll('.bar')
+                            .data(data, d => d.category);  // Usar key function para mantener barras existentes
+                        
+                        // Remover barras que ya no existen
+                        bars.exit().remove();
+                        
+                        // Agregar nuevas barras
+                        const barsEnter = bars.enter()
                             .append('rect')
                             .attr('class', 'bar')
                             .attr('x', d => x(d.category))
@@ -668,15 +732,86 @@ class ReactiveMatrixLayout:
                             .attr('width', x.bandwidth())
                             .attr('height', 0)
                             .attr('fill', d => colorMap[d.category] || d.color || '{default_color}')
-                            .transition()
-                            .duration(500)
-                            .ease(window.d3.easeCubicOut)
-                            .attr('y', d => y(d.value))
-                            .attr('height', d => chartHeight - y(d.value));
+                            .style('cursor', 'pointer')
+                            .on('click', function(event, d) {{
+                                // CRÍTICO: Prevenir eventos durante actualización
+                                // Verificar flag de actualización del bar chart
+                                if (window._bestlib_updating_{letter}) {{
+                                    event.stopPropagation();
+                                    event.preventDefault();
+                                    return false;
+                                }}
+                                
+                                // CRÍTICO: Prevenir eventos si hay una actualización de pie chart en progreso
+                                // Verificar flags de actualización de pie charts (pueden estar en otras letras)
+                                const pieUpdateFlags = Object.keys(window).filter(key => key.startsWith('_bestlib_updating_pie_'));
+                                for (let flag of pieUpdateFlags) {{
+                                    if (window[flag]) {{
+                                        event.stopPropagation();
+                                        event.preventDefault();
+                                        return false;
+                                    }}
+                                }}
+                                
+                                // IMPORTANTE: Detener propagación inmediatamente para evitar bucles
+                                event.stopPropagation();
+                                event.preventDefault();
+                                
+                                // Re-enviar evento con delay para evitar bucles inmediatos
+                                const originalRows = d._original_rows || d._original_row || [d];
+                                const items = Array.isArray(originalRows) ? originalRows : [originalRows];
+                                
+                                const viewLetter = '{letter}';
+                                
+                                // Usar setTimeout para evitar bucles inmediatos
+                                setTimeout(() => {{
+                                    // Verificar nuevamente antes de enviar el evento
+                                    if (window._bestlib_updating_{letter}) {{
+                                        return;
+                                    }}
+                                    
+                                    // Verificar flags de actualización de pie charts
+                                    const pieUpdateFlags = Object.keys(window).filter(key => key.startsWith('_bestlib_updating_pie_'));
+                                    for (let flag of pieUpdateFlags) {{
+                                        if (window[flag]) {{
+                                            return;
+                                        }}
+                                    }}
+                                    
+                                    if (window.sendEvent && typeof window.sendEvent === 'function') {{
+                                        window.sendEvent('{div_id}', 'select', {{
+                                            type: 'select',
+                                            items: items,
+                                            indices: [data.indexOf(d)],
+                                            original_items: [d],
+                                            _original_rows: items,
+                                            __view_letter__: viewLetter,
+                                            __is_primary_view__: true
+                                        }});
+                                    }}
+                                }}, 150);  // Delay más largo para evitar bucles
+                                
+                                return false;
+                            }});
                         
-                        // Renderizar ejes si se requiere
+                        // Actualizar barras existentes y nuevas
+                        barsEnter.merge(bars)
+                            .transition()
+                            .duration(300)  // Transición más rápida para evitar bucles
+                            .ease(window.d3.easeCubicOut)
+                            .attr('x', d => x(d.category))
+                            .attr('width', x.bandwidth())
+                            .attr('y', d => y(d.value))
+                            .attr('height', d => chartHeight - y(d.value))
+                            .attr('fill', d => colorMap[d.category] || d.color || '{default_color}');
+                        
+                        // Renderizar ejes si se requiere (usar update pattern)
                         if ({str(show_axes).lower()}) {{
+                            // Limpiar ejes existentes
+                            g.selectAll('.x-axis, .y-axis').remove();
+                            
                             const xAxis = g.append('g')
+                                .attr('class', 'x-axis')
                                 .attr('transform', `translate(0,${{chartHeight}})`)
                                 .call(window.d3.axisBottom(x));
                             
@@ -691,6 +826,7 @@ class ReactiveMatrixLayout:
                                 .style('stroke-width', '1.5px');
                             
                             const yAxis = g.append('g')
+                                .attr('class', 'y-axis')
                                 .call(window.d3.axisLeft(y).ticks(5));
                             
                             yAxis.selectAll('text')
@@ -704,8 +840,10 @@ class ReactiveMatrixLayout:
                                 .style('stroke-width', '1.5px');
                         }}
                         
-                        // Reset flag al finalizar
-                        window._bestlib_updating_{letter} = false;
+                        // Reset flag al finalizar (con delay para evitar bucles)
+                        setTimeout(() => {{
+                            window._bestlib_updating_{letter} = false;
+                        }}, 300);
                     }}
                     
                     updateBarchart();
@@ -1832,12 +1970,19 @@ class ReactiveMatrixLayout:
                 self._update_flags = {}
             self._update_flags[pie_update_flag] = False
             
+            # Cache para datos previos del pie chart para evitar actualizaciones innecesarias
+            pie_data_cache_key = f'_pie_data_cache_{letter}'
+            if not hasattr(self, '_pie_data_cache'):
+                self._pie_data_cache = {}
+            self._pie_data_cache[pie_data_cache_key] = None
+            
             def update_pie(items, count):
                 """Actualiza el pie chart cuando cambia la selección"""
                 from .matrix import MatrixLayout
                 import json
                 from IPython.display import Javascript
                 import traceback
+                import hashlib
                 
                 # Prevenir actualizaciones recursivas
                 if self._update_flags.get(pie_update_flag, False):
@@ -1932,7 +2077,23 @@ class ReactiveMatrixLayout:
                                 pie_data = [{'category': k, 'value': v} for k, v in counts.items()]
                         
                         if not pie_data:
+                            self._update_flags[pie_update_flag] = False
                             return
+                        
+                        # Verificar si los datos han cambiado (evitar actualizaciones innecesarias)
+                        try:
+                            pie_data_str = json.dumps(pie_data, sort_keys=True)
+                            pie_data_hash = hashlib.md5(pie_data_str.encode()).hexdigest()
+                            if self._pie_data_cache.get(pie_data_cache_key) == pie_data_hash:
+                                if MatrixLayout._debug:
+                                    print(f"⏭️ [ReactiveMatrixLayout] Datos del pie chart '{letter}' no han cambiado, ignorando actualización")
+                                self._update_flags[pie_update_flag] = False
+                                return
+                            
+                            # Actualizar cache
+                            self._pie_data_cache[pie_data_cache_key] = pie_data_hash
+                        except Exception:
+                            pass  # Si hay error con el hash, continuar con la actualización
                         
                         # JavaScript para actualizar el pie chart (sin disparar eventos)
                         div_id = self._layout.div_id
@@ -1945,17 +2106,18 @@ class ReactiveMatrixLayout:
                         (function() {{
                             // Flag para evitar actualizaciones múltiples simultáneas
                             if (window.{update_flag_key}) {{
-                                if (MatrixLayout && MatrixLayout._debug) {{
-                                    console.log('⏭️ Actualización de pie chart {letter} ya en progreso, ignorando...');
-                                }}
+                                console.log('⏭️ Actualización de pie chart {letter} ya en progreso, ignorando...');
                                 return;
                             }}
                             window.{update_flag_key} = true;
                             
-                            function updatePieChart() {{
+                            // CRÍTICO: Usar setTimeout con delay 0 para actualizar de forma asíncrona
+                            // Esto evita que la actualización cause una re-renderización inmediata del layout
+                            // NO usar requestAnimationFrame porque puede causar problemas de sincronización
+                            setTimeout(function() {{
                                 try {{
                                     if (!window.d3) {{
-                                        setTimeout(updatePieChart, 100);
+                                        window.{update_flag_key} = false;
                                         return;
                                     }}
                                     
@@ -1965,17 +2127,24 @@ class ReactiveMatrixLayout:
                                         return;
                                     }}
                                     
+                                    // CRÍTICO: Buscar SOLO la celda del pie chart (letra '{letter}')
+                                    // IMPORTANTE: El pie chart está en una celda diferente al bar chart
+                                    // NO buscar celdas con barras, solo celdas sin barras
                                     const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
                                     let targetCell = null;
                                     
+                                    // Buscar la celda que NO tiene barras (es la del pie chart)
+                                    // El bar chart está en otra celda, así que buscar celdas sin barras
                                     for (let cell of cells) {{
-                                        const svg = cell.querySelector('svg');
-                                        if (svg) {{
+                                        const bars = cell.querySelectorAll('.bar');
+                                        if (bars.length === 0) {{
+                                            // Esta es la celda del pie chart (no tiene barras)
                                             targetCell = cell;
                                             break;
                                         }}
                                     }}
                                     
+                                    // Si no encontramos una celda sin barras, usar la primera celda con la letra
                                     if (!targetCell && cells.length > 0) {{
                                         targetCell = cells[0];
                                     }}
@@ -1985,9 +2154,9 @@ class ReactiveMatrixLayout:
                                         return;
                                     }}
                                     
-                                    // Limpiar solo el contenido del pie chart, no toda la celda
-                                    // Esto evita que se re-rendericen otros gráficos
-                                    targetCell.innerHTML = '';
+                                    // CRÍTICO: NO tocar otras celdas ni limpiar toda la celda
+                                    // Solo actualizar el contenido del pie chart usando D3 update pattern
+                                    // NO usar innerHTML = '' porque causa que el layout se re-renderice
                                     
                                     const width = Math.max(targetCell.clientWidth || 400, 200);
                                     const height = Math.max(targetCell.clientHeight || 400, 200);
@@ -1996,18 +2165,45 @@ class ReactiveMatrixLayout:
                                     const data = {pie_data_json};
                                     
                                     if (data.length === 0) {{
-                                        targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
                                         window.{update_flag_key} = false;
                                         return;
                                     }}
                                     
-                                    const svg = window.d3.select(targetCell)
-                                        .append('svg')
-                                        .attr('width', width)
-                                        .attr('height', height);
+                                    // CRÍTICO: Buscar SVG existente del pie chart (tiene clase 'pie-chart-svg')
+                                    // NO tocar SVGs del bar chart (tienen clase 'bar-chart' o tienen barras)
+                                    let svg = window.d3.select(targetCell).select('svg.pie-chart-svg');
+                                    let g;
                                     
-                                    const g = svg.append('g')
-                                        .attr('transform', `translate(${{width / 2}},${{height / 2}})`);
+                                    if (svg.empty()) {{
+                                        // Crear nuevo SVG si no existe
+                                        // IMPORTANTE: NO limpiar toda la celda, solo agregar el SVG del pie chart
+                                        svg = window.d3.select(targetCell)
+                                            .append('svg')
+                                            .attr('class', 'pie-chart-svg')
+                                            .attr('width', width)
+                                            .attr('height', height)
+                                            .style('position', 'absolute')
+                                            .style('top', '0')
+                                            .style('left', '0')
+                                            .style('z-index', '1')
+                                            .style('pointer-events', 'none');  // No interceptar eventos
+                                        
+                                        g = svg.append('g')
+                                            .attr('class', 'pie-chart-group')
+                                            .attr('transform', `translate(${{width / 2}},${{height / 2}})`);
+                                    }} else {{
+                                        // Usar SVG existente
+                                        svg.attr('width', width).attr('height', height);
+                                        
+                                        g = svg.select('g.pie-chart-group');
+                                        if (g.empty()) {{
+                                            g = svg.append('g')
+                                                .attr('class', 'pie-chart-group')
+                                                .attr('transform', `translate(${{width / 2}},${{height / 2}})`);
+                                        }} else {{
+                                            g.attr('transform', `translate(${{width / 2}},${{height / 2}})`);
+                                        }}
+                                    }}
                                     
                                     const color = window.d3.scaleOrdinal(window.d3.schemeCategory10);
                                     
@@ -2019,44 +2215,78 @@ class ReactiveMatrixLayout:
                                         .innerRadius(0)
                                         .outerRadius(radius);
                                     
-                                    // Limpiar arcs anteriores si existen
-                                    g.selectAll('.arc').remove();
-                                    
+                                    // CRÍTICO: Usar D3 update pattern para actualizar solo los arcs
+                                    // NO limpiar todo el SVG, solo actualizar los datos
                                     const arcs = g.selectAll('.arc')
-                                        .data(pie(data))
-                                        .enter()
-                                        .append('g')
-                                        .attr('class', 'arc');
+                                        .data(pie(data), d => d.data.category);  // Key function para identificar arcs
                                     
-                                    arcs.append('path')
+                                    // Remover arcs que ya no existen
+                                    arcs.exit()
+                                        .transition()
+                                        .duration(150)
+                                        .attr('opacity', 0)
+                                        .remove();
+                                    
+                                    // Agregar nuevos arcs
+                                    const arcsEnter = arcs.enter()
+                                        .append('g')
+                                        .attr('class', 'arc')
+                                        .style('pointer-events', 'none')
+                                        .attr('opacity', 0);
+                                    
+                                    arcsEnter.append('path')
                                         .attr('d', arc)
                                         .attr('fill', (d, i) => color(i))
                                         .attr('stroke', '#fff')
                                         .attr('stroke-width', 2)
-                                        .style('pointer-events', 'none');  // Deshabilitar eventos para evitar bucles
+                                        .style('pointer-events', 'none');
                                     
-                                    arcs.append('text')
+                                    arcsEnter.append('text')
                                         .attr('transform', d => `translate(${{arc.centroid(d)}})`)
                                         .attr('dy', '.35em')
                                         .style('text-anchor', 'middle')
                                         .style('font-size', '12px')
-                                        .style('pointer-events', 'none')  // Deshabilitar eventos
+                                        .style('pointer-events', 'none')
                                         .text(d => d.data.category);
                                     
-                                    // Reset flag después de actualizar
-                                    window.{update_flag_key} = false;
+                                    // Actualizar arcs existentes y nuevos
+                                    const arcsUpdate = arcsEnter.merge(arcs);
+                                    
+                                    arcsUpdate.select('path')
+                                        .transition()
+                                        .duration(200)
+                                        .attr('d', arc)
+                                        .attr('fill', (d, i) => color(i))
+                                        .attr('opacity', 1);
+                                    
+                                    arcsUpdate.select('text')
+                                        .transition()
+                                        .duration(200)
+                                        .attr('transform', d => `translate(${{arc.centroid(d)}})`)
+                                        .attr('opacity', 1);
+                                    
+                                    // Reset flag después de actualizar (con delay más largo)
+                                    setTimeout(() => {{
+                                        window.{update_flag_key} = false;
+                                    }}, 300);
                                 }} catch (error) {{
                                     console.error('Error actualizando pie chart:', error);
                                     window.{update_flag_key} = false;
                                 }}
-                            }}
-                            
-                            updatePieChart();
+                            }}, 0);  // Delay 0 para ejecutar en el siguiente ciclo del event loop
                         }})();
                         """
                         
-                        from IPython.display import display
-                        display(Javascript(js_update), clear=False)
+                        # IMPORTANTE: Ejecutar JavaScript de forma directa sin causar re-renderización
+                        try:
+                            from IPython.display import Javascript, display
+                            # Ejecutar JavaScript directamente
+                            display(Javascript(js_update), clear=False)
+                        except Exception as e:
+                            if MatrixLayout._debug:
+                                print(f"⚠️ Error ejecutando JavaScript del pie chart: {e}")
+                                import traceback
+                                traceback.print_exc()
                     except Exception as e:
                         if MatrixLayout._debug:
                             print(f"⚠️ Error actualizando pie chart con JavaScript: {e}")
