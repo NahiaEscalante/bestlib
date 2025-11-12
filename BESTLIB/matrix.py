@@ -1105,41 +1105,97 @@ class MatrixLayout:
         """
         Crea datos para RadViz simple: anclas uniformes y proyección ponderada.
         Retorna puntos {x,y,category} normalizados en [0,1].
+        
+        Args:
+            letter: Letra del layout ASCII
+            data: DataFrame de pandas
+            features: Lista de columnas a usar como features (opcional, usa todas las numéricas por defecto)
+            class_col: Columna para categorías (colorear puntos)
+            **kwargs: Argumentos adicionales (interactive, axes, etc.)
+        
+        Returns:
+            spec con type='radviz' y datos preparados
         """
         if not (HAS_PANDAS and isinstance(data, pd.DataFrame)):
             raise ValueError("map_radviz requiere DataFrame")
         import math
+        
         df = data.copy()
-        feats = features or df.select_dtypes(include=['number']).columns.tolist()
+        
+        # Determinar features
+        if features is None:
+            feats = df.select_dtypes(include=['number']).columns.tolist()
+        else:
+            # Validar que las features existan en el DataFrame
+            feats = [f for f in features if f in df.columns]
+        
         if len(feats) < 2:
-            raise ValueError("Se requieren al menos 2 features para RadViz")
-        # normalizar 0-1
+            raise ValueError(f"Se requieren al menos 2 features para RadViz. Features disponibles: {list(df.columns)}")
+        
+        # Normalizar features a 0-1 y manejar valores NaN
         for c in feats:
             col = df[c].astype(float)
+            # Reemplazar NaN con 0.5 (valor medio)
+            col = col.fillna(0.5)
             mn, mx = col.min(), col.max()
             if mx > mn:
                 df[c] = (col - mn) / (mx - mn)
             else:
+                # Si todos los valores son iguales, usar 0.5
                 df[c] = 0.5
+        
         k = len(feats)
         anchors = []
         for i in range(k):
-            ang = 2*math.pi * i / k
+            ang = 2*math.pi * i / k - math.pi / 2  # Empezar desde arriba
             anchors.append((math.cos(ang), math.sin(ang)))
+        
         points = []
-        for _, row in df.iterrows():
-            weights = [row[c] for c in feats]
-            s = sum(weights) or 1.0
-            x = sum(w * anchors[i][0] for i, w in enumerate(weights)) / s
-            y = sum(w * anchors[i][1] for i, w in enumerate(weights)) / s
-            # Guardar valores normalizados de features para recalcular cuando se muevan los anchors
-            point_data = {
-                'x': float(x), 
-                'y': float(y), 
-                'category': str(row[class_col]) if class_col and class_col in df.columns else None,
-                '_weights': [float(w) for w in weights]  # Valores normalizados de cada feature
-            }
-            points.append(point_data)
+        for idx, row in df.iterrows():
+            try:
+                # Obtener weights normalizados
+                weights = [float(row[c]) if not (isinstance(row[c], float) and math.isnan(row[c])) else 0.5 for c in feats]
+                
+                # Validar que todos los weights sean válidos
+                weights = [w if not (math.isnan(w) or math.isinf(w)) else 0.5 for w in weights]
+                
+                # Calcular posición ponderada
+                s = sum(weights) or 1.0
+                if s == 0:
+                    s = 1.0
+                
+                x = sum(w * anchors[i][0] for i, w in enumerate(weights)) / s
+                y = sum(w * anchors[i][1] for i, w in enumerate(weights)) / s
+                
+                # Validar coordenadas
+                if math.isnan(x) or math.isinf(x):
+                    x = 0.0
+                if math.isnan(y) or math.isinf(y):
+                    y = 0.0
+                
+                # Guardar valores normalizados de features para recalcular cuando se muevan los anchors
+                # Manejar categoría con validación
+                category = None
+                if class_col and class_col in df.columns:
+                    cat_val = row[class_col]
+                    if cat_val is not None and not (isinstance(cat_val, float) and math.isnan(cat_val)):
+                        category = str(cat_val)
+                
+                point_data = {
+                    'x': float(x), 
+                    'y': float(y), 
+                    'category': category,
+                    '_weights': [float(w) for w in weights]  # Valores normalizados de cada feature
+                }
+                points.append(point_data)
+            except Exception as e:
+                # Si hay error procesando una fila, saltarla
+                if cls._debug:
+                    print(f"⚠️ [map_radviz] Error procesando fila {idx}: {e}")
+                continue
+        
+        if len(points) == 0:
+            raise ValueError("No se pudieron procesar puntos válidos para RadViz. Verifica que los datos tengan valores numéricos válidos.")
         
         # Procesar figsize si está en kwargs
         cls._process_figsize_in_kwargs(kwargs)
@@ -1155,44 +1211,97 @@ class MatrixLayout:
         """
         Crea datos para Star Coordinates: similar a RadViz pero los nodos pueden moverse libremente.
         Retorna puntos {x,y,category} con valores normalizados de features guardados.
+        
+        Args:
+            letter: Letra del layout ASCII
+            data: DataFrame de pandas
+            features: Lista de columnas a usar como features (opcional, usa todas las numéricas por defecto)
+            class_col: Columna para categorías (colorear puntos)
+            **kwargs: Argumentos adicionales (interactive, axes, etc.)
+        
+        Returns:
+            spec con type='star_coordinates' y datos preparados
         """
         if not (HAS_PANDAS and isinstance(data, pd.DataFrame)):
             raise ValueError("map_star_coordinates requiere DataFrame")
         import math
-        df = data.copy()
-        feats = features or df.select_dtypes(include=['number']).columns.tolist()
-        if len(feats) < 2:
-            raise ValueError("Se requieren al menos 2 features para Star Coordinates")
         
-        # Normalizar features a 0-1
+        df = data.copy()
+        
+        # Determinar features
+        if features is None:
+            feats = df.select_dtypes(include=['number']).columns.tolist()
+        else:
+            # Validar que las features existan en el DataFrame
+            feats = [f for f in features if f in df.columns]
+        
+        if len(feats) < 2:
+            raise ValueError(f"Se requieren al menos 2 features para Star Coordinates. Features disponibles: {list(df.columns)}")
+        
+        # Normalizar features a 0-1 y manejar valores NaN
         for c in feats:
             col = df[c].astype(float)
+            # Reemplazar NaN con 0.5 (valor medio)
+            col = col.fillna(0.5)
             mn, mx = col.min(), col.max()
             if mx > mn:
                 df[c] = (col - mn) / (mx - mn)
             else:
+                # Si todos los valores son iguales, usar 0.5
                 df[c] = 0.5
         
         k = len(feats)
         # Inicializar posiciones de nodos en círculo (se moverán libremente en JS)
         anchors = []
         for i in range(k):
-            ang = 2*math.pi * i / k
+            ang = 2*math.pi * i / k - math.pi / 2  # Empezar desde arriba
             anchors.append((math.cos(ang), math.sin(ang)))
         
         points = []
-        for _, row in df.iterrows():
-            weights = [row[c] for c in feats]
-            s = sum(weights) or 1.0
-            x = sum(w * anchors[i][0] for i, w in enumerate(weights)) / s
-            y = sum(w * anchors[i][1] for i, w in enumerate(weights)) / s
-            point_data = {
-                'x': float(x),
-                'y': float(y),
-                'category': str(row[class_col]) if class_col and class_col in df.columns else None,
-                '_weights': [float(w) for w in weights]  # Valores normalizados para recalcular
-            }
-            points.append(point_data)
+        for idx, row in df.iterrows():
+            try:
+                # Obtener weights normalizados
+                weights = [float(row[c]) if not (isinstance(row[c], float) and math.isnan(row[c])) else 0.5 for c in feats]
+                
+                # Validar que todos los weights sean válidos
+                weights = [w if not (math.isnan(w) or math.isinf(w)) else 0.5 for w in weights]
+                
+                # Calcular posición ponderada
+                s = sum(weights) or 1.0
+                if s == 0:
+                    s = 1.0
+                
+                x = sum(w * anchors[i][0] for i, w in enumerate(weights)) / s
+                y = sum(w * anchors[i][1] for i, w in enumerate(weights)) / s
+                
+                # Validar coordenadas
+                if math.isnan(x) or math.isinf(x):
+                    x = 0.0
+                if math.isnan(y) or math.isinf(y):
+                    y = 0.0
+                
+                # Manejar categoría con validación
+                category = None
+                if class_col and class_col in df.columns:
+                    cat_val = row[class_col]
+                    if cat_val is not None and not (isinstance(cat_val, float) and math.isnan(cat_val)):
+                        category = str(cat_val)
+                
+                point_data = {
+                    'x': float(x),
+                    'y': float(y),
+                    'category': category,
+                    '_weights': [float(w) for w in weights]  # Valores normalizados para recalcular
+                }
+                points.append(point_data)
+            except Exception as e:
+                # Si hay error procesando una fila, saltarla
+                if cls._debug:
+                    print(f"⚠️ [map_star_coordinates] Error procesando fila {idx}: {e}")
+                continue
+        
+        if len(points) == 0:
+            raise ValueError("No se pudieron procesar puntos válidos para Star Coordinates. Verifica que los datos tengan valores numéricos válidos.")
         
         # Procesar figsize si está en kwargs
         cls._process_figsize_in_kwargs(kwargs)
@@ -1213,7 +1322,7 @@ class MatrixLayout:
             data: DataFrame de pandas
             dimensions: Lista de columnas a usar como ejes (opcional, usa todas las numéricas por defecto)
             category_col: Columna para categorías (colorear líneas)
-            **kwargs: Argumentos adicionales
+            **kwargs: Argumentos adicionales (interactive, axes, etc.)
         
         Returns:
             spec con type='parallel_coordinates' y datos preparados
@@ -1221,29 +1330,66 @@ class MatrixLayout:
         if not (HAS_PANDAS and isinstance(data, pd.DataFrame)):
             raise ValueError("map_parallel_coordinates requiere DataFrame")
         
+        import math
+        
         # Determinar dimensiones
         if dimensions is None:
             dims = data.select_dtypes(include=['number']).columns.tolist()
         else:
+            # Validar que las dimensiones existan en el DataFrame
             dims = [d for d in dimensions if d in data.columns]
         
         if len(dims) < 2:
-            raise ValueError("Se requieren al menos 2 dimensiones numéricas para Parallel Coordinates")
+            raise ValueError(f"Se requieren al menos 2 dimensiones numéricas para Parallel Coordinates. Dimensiones disponibles: {list(data.select_dtypes(include=['number']).columns.tolist())}")
+        
+        # Validar que haya al menos una dimensión con valores válidos
+        valid_dims = []
+        for dim in dims:
+            col = data[dim].astype(float)
+            if col.notna().sum() > 0:  # Si hay al menos un valor válido
+                valid_dims.append(dim)
+        
+        if len(valid_dims) < 2:
+            raise ValueError(f"Se requieren al menos 2 dimensiones con valores válidos para Parallel Coordinates. Dimensiones válidas: {valid_dims}")
+        
+        dims = valid_dims  # Usar solo dimensiones válidas
         
         # Preparar datos: cada fila es un punto con valores para cada dimensión
-        import math
         points = []
-        for _, row in data.iterrows():
-            point = {}
-            for dim in dims:
-                val = row[dim]
-                if val is not None and not (isinstance(val, float) and math.isnan(val)):
-                    point[dim] = float(val)
-                else:
-                    point[dim] = None
-            if category_col and category_col in data.columns:
-                point['category'] = str(row[category_col])
-            points.append(point)
+        for idx, row in data.iterrows():
+            try:
+                point = {}
+                has_valid_value = False
+                
+                for dim in dims:
+                    val = row[dim]
+                    # Manejar valores NaN e infinitos
+                    if val is not None and not (isinstance(val, float) and (math.isnan(val) or math.isinf(val))):
+                        try:
+                            point[dim] = float(val)
+                            if not (math.isnan(point[dim]) or math.isinf(point[dim])):
+                                has_valid_value = True
+                        except (ValueError, TypeError):
+                            point[dim] = None
+                    else:
+                        point[dim] = None
+                
+                # Solo agregar punto si tiene al menos un valor válido
+                if has_valid_value:
+                    # Manejar categoría con validación
+                    if category_col and category_col in data.columns:
+                        cat_val = row[category_col]
+                        if cat_val is not None and not (isinstance(cat_val, float) and math.isnan(cat_val)):
+                            point['category'] = str(cat_val)
+                    points.append(point)
+            except Exception as e:
+                # Si hay error procesando una fila, saltarla
+                if cls._debug:
+                    print(f"⚠️ [map_parallel_coordinates] Error procesando fila {idx}: {e}")
+                continue
+        
+        if len(points) == 0:
+            raise ValueError("No se pudieron procesar puntos válidos para Parallel Coordinates. Verifica que los datos tengan valores numéricos válidos.")
         
         # Procesar figsize si está en kwargs
         cls._process_figsize_in_kwargs(kwargs)

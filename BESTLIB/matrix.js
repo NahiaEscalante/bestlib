@@ -1985,23 +1985,29 @@
       return;
     }
     
-    // Validar que los puntos tengan coordenadas válidas
+    // Validar que los puntos tengan coordenadas válidas y _weights
     const validPoints = points.filter(p => {
       if (!p) return false;
-      if (p.x == null || isNaN(p.x)) return false;
-      if (p.y == null || isNaN(p.y)) return false;
+      // Verificar que tenga _weights para poder recalcular
+      if (!p._weights || !Array.isArray(p._weights) || p._weights.length !== features.length) {
+        return false;
+      }
+      // Verificar que las coordenadas iniciales sean válidas
+      if (p.x == null || isNaN(p.x) || p.y == null || isNaN(p.y)) {
+        return false;
+      }
       return true;
     });
     
     if (validPoints.length === 0) {
       const debugInfo = points.length > 0 
-        ? `Se encontraron ${points.length} puntos pero ninguno tiene coordenadas válidas`
+        ? `Se encontraron ${points.length} puntos pero ninguno tiene _weights válidos o coordenadas válidas`
         : 'No se encontraron puntos en los datos';
       const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
         '<strong>Error en RadViz:</strong><br/>' +
         '<small>' + debugInfo + '</small><br/>' +
         '<small>Features: ' + (features.length > 0 ? features.join(', ') : 'ninguna') + '</small><br/>' +
-        '<small>Verifica que los datos tengan la estructura correcta: {x: number, y: number, category: string}</small>' +
+        '<small>Verifica que los datos tengan _weights con ' + features.length + ' valores normalizados</small>' +
         '</div>';
       container.innerHTML = errorMsg;
       console.error('RadViz: No hay puntos válidos', { points: points.slice(0, 3), spec });
@@ -2043,6 +2049,12 @@
     const centerY = margin.top + chartHeight / 2;
     const radius = Math.min(chartWidth, chartHeight) / 2 - 40;
     
+    // Asegurar que el radio sea válido
+    if (radius <= 0) {
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #d32f2f;">Error: Dimensiones del gráfico muy pequeñas</div>';
+      return;
+    }
+    
     const g = svg.append('g')
       .attr('transform', `translate(${centerX},${centerY})`);
 
@@ -2066,17 +2078,8 @@
       };
     });
     
-    // Escala para los puntos (normalizados en rango dinámico) - definir antes de recalculateRadVizPoints
-    const xExtent = d3.extent(validPoints, d => d.x);
-    const yExtent = d3.extent(validPoints, d => d.y);
-    
-    // Calcular el rango máximo para normalizar
-    const maxExtent = Math.max(
-      Math.abs(xExtent[0] || 0),
-      Math.abs(xExtent[1] || 0),
-      Math.abs(yExtent[0] || 0),
-      Math.abs(yExtent[1] || 0)
-    ) || 1;
+    // Escala para los puntos - usar dominio dinámico basado en el radio
+    const maxExtent = radius * 0.9; // Margen de seguridad
     
     // Escalar para que los puntos estén dentro del círculo
     const toX = d3.scaleLinear()
@@ -2087,41 +2090,79 @@
       .domain([-maxExtent, maxExtent])
       .range([-radius * 0.85, radius * 0.85]);
     
+    // Flag para evitar actualizaciones múltiples simultáneas
+    let isUpdating = false;
+    
     // Función para recalcular posiciones de puntos cuando se mueven los anchors
     function recalculateRadVizPoints() {
-      // Recalcular todos los puntos
-      g.selectAll('.rvpt').each(function(d) {
-        // Si el punto tiene _weights (valores normalizados de features), recalcular
-        if (d._weights && Array.isArray(d._weights) && d._weights.length === anchorPos.length) {
-          // Calcular nueva posición usando los nuevos anchors
-          const weights = d._weights;
-          const s = d3.sum(weights) || 1.0;
-          let newX = d3.sum(weights.map((w, i) => w * anchorPos[i].x)) / s;
-          let newY = d3.sum(weights.map((w, i) => w * anchorPos[i].y)) / s;
-          
-          // Normalizar para asegurar que el punto esté dentro del círculo
-          const distance = Math.sqrt(newX * newX + newY * newY);
-          const maxDistance = radius * 0.85; // Margen de seguridad
-          
-          if (distance > maxDistance) {
-            // Escalar hacia el centro para mantener dentro del círculo
-            const scale = maxDistance / distance;
-            newX = newX * scale;
-            newY = newY * scale;
+      if (isUpdating) return; // Evitar actualizaciones múltiples
+      isUpdating = true;
+      
+      try {
+        // Recalcular todos los puntos
+        g.selectAll('.rvpt').each(function(d) {
+          try {
+            // Verificar que el punto tenga _weights válidos
+            if (!d._weights || !Array.isArray(d._weights) || d._weights.length !== anchorPos.length) {
+              console.warn('RadViz: Punto sin _weights válidos', d);
+              return;
+            }
+            
+            // Calcular nueva posición usando los nuevos anchors
+            const weights = d._weights;
+            const s = d3.sum(weights) || 1.0;
+            
+            // Calcular posición ponderada
+            let newX = 0;
+            let newY = 0;
+            for (let i = 0; i < weights.length; i++) {
+              if (i < anchorPos.length && !isNaN(weights[i]) && isFinite(weights[i])) {
+                newX += weights[i] * anchorPos[i].x;
+                newY += weights[i] * anchorPos[i].y;
+              }
+            }
+            newX = newX / s;
+            newY = newY / s;
+            
+            // Validar que las nuevas coordenadas sean válidas
+            if (isNaN(newX) || !isFinite(newX) || isNaN(newY) || !isFinite(newY)) {
+              console.warn('RadViz: Coordenadas inválidas después del cálculo', { newX, newY, weights });
+              return;
+            }
+            
+            // Normalizar para asegurar que el punto esté dentro del círculo
+            const distance = Math.sqrt(newX * newX + newY * newY);
+            const maxDistance = radius * 0.85; // Margen de seguridad
+            
+            if (distance > maxDistance && distance > 0) {
+              // Escalar hacia el centro para mantener dentro del círculo
+              const scale = maxDistance / distance;
+              newX = newX * scale;
+              newY = newY * scale;
+            }
+            
+            // Actualizar posición del punto en los datos
+            d.x = newX;
+            d.y = newY;
+            
+            // Actualizar visualmente con transición suave (solo si el elemento existe)
+            const element = d3.select(this);
+            if (!element.empty()) {
+              element
+                .transition()
+                .duration(200)
+                .attr('cx', toX(newX))
+                .attr('cy', toY(newY));
+            }
+          } catch (err) {
+            console.error('RadViz: Error recalculando punto', err, d);
           }
-          
-          // Actualizar posición del punto en los datos
-          d.x = newX;
-          d.y = newY;
-          
-          // Actualizar visualmente con transición suave
-          d3.select(this)
-            .transition()
-            .duration(300)
-            .attr('cx', toX(newX))
-            .attr('cy', toY(newY));
-        }
-      });
+        });
+      } catch (err) {
+        console.error('RadViz: Error en recalculateRadVizPoints', err);
+      } finally {
+        isUpdating = false;
+      }
     }
     
     // Dibujar líneas desde el centro hasta los anchors
@@ -2144,7 +2185,7 @@
       .data(anchorPos)
       .enter()
       .append('circle')
-      .attr('class', 'anchor')
+      .attr('class', (d, i) => `anchor anchor-${i}`)
       .attr('r', 6)
       .attr('cx', d => d.x)
       .attr('cy', d => d.y)
@@ -2152,45 +2193,72 @@
       .attr('stroke', '#fff')
       .attr('stroke-width', 2)
       .style('cursor', 'move')
+      .style('pointer-events', 'all')
       .call(d3.drag()
         .on('start', function(event, d) {
+          event.sourceEvent.stopPropagation(); // Evitar conflictos con otros eventos
           d3.select(this).attr('fill', '#ff6b35').attr('r', 8);
         })
         .on('drag', function(event, d) {
-          // Calcular nuevo ángulo basado en posición del mouse relativa al centro
-          const [mx, my] = d3.pointer(event, g.node());
-          const angle = Math.atan2(my, mx);
+          event.sourceEvent.stopPropagation();
           
-          // Actualizar posición del anchor (mantener en el círculo)
-          d.angle = angle;
-          d.x = radius * Math.cos(angle);
-          d.y = radius * Math.sin(angle);
-          
-          // Actualizar círculo
-          d3.select(this)
-            .attr('cx', d.x)
-            .attr('cy', d.y);
-          
-          // Actualizar línea correspondiente
-          const line = g.select(`.anchor-line-${d.index}`);
-          if (!line.empty()) {
-            line
-              .attr('x2', d.x)
-              .attr('y2', d.y);
+          try {
+            // Calcular nuevo ángulo basado en posición del mouse relativa al centro
+            const [mx, my] = d3.pointer(event, g.node());
+            
+            // Validar coordenadas del mouse
+            if (isNaN(mx) || isNaN(my) || !isFinite(mx) || !isFinite(my)) {
+              return;
+            }
+            
+            // Calcular ángulo
+            const angle = Math.atan2(my, mx);
+            
+            // Validar ángulo
+            if (isNaN(angle) || !isFinite(angle)) {
+              return;
+            }
+            
+            // Actualizar posición del anchor (mantener en el círculo)
+            d.angle = angle;
+            d.x = radius * Math.cos(angle);
+            d.y = radius * Math.sin(angle);
+            
+            // Validar nuevas coordenadas
+            if (isNaN(d.x) || isNaN(d.y) || !isFinite(d.x) || !isFinite(d.y)) {
+              return;
+            }
+            
+            // Actualizar círculo
+            d3.select(this)
+              .attr('cx', d.x)
+              .attr('cy', d.y);
+            
+            // Actualizar línea correspondiente
+            const line = g.select(`.anchor-line-${d.index}`);
+            if (!line.empty()) {
+              line
+                .attr('x2', d.x)
+                .attr('y2', d.y);
+            }
+            
+            // Actualizar etiqueta
+            const label = g.select(`.alabel-${d.index}`);
+            if (!label.empty()) {
+              const labelRadius = radius * 1.15;
+              label
+                .attr('x', labelRadius * Math.cos(angle))
+                .attr('y', labelRadius * Math.sin(angle));
+            }
+            
+            // Recalcular posiciones de todos los puntos basado en los nuevos anchors
+            recalculateRadVizPoints();
+          } catch (err) {
+            console.error('RadViz: Error en drag', err);
           }
-          
-          // Actualizar etiqueta
-          const label = g.select(`.alabel-${d.index}`);
-          if (!label.empty()) {
-            label
-              .attr('x', d.x * 1.15)
-              .attr('y', d.y * 1.15);
-          }
-          
-          // Recalcular posiciones de todos los puntos basado en los nuevos anchors
-          recalculateRadVizPoints();
         })
         .on('end', function(event, d) {
+          event.sourceEvent.stopPropagation();
           d3.select(this).attr('fill', '#555').attr('r', 6);
         })
       );
@@ -2216,30 +2284,194 @@
     const categories = [...new Set(validPoints.map(p => p.category).filter(c => c != null && c !== ''))];
     const color = d3.scaleOrdinal(d3.schemeCategory10).domain(categories.length > 0 ? categories : ['default']);
 
-    // Dibujar puntos
-    g.selectAll('.rvpt')
+    // Dibujar puntos (después de inicializar todo)
+    const pointElements = g.selectAll('.rvpt')
       .data(validPoints)
       .enter()
       .append('circle')
       .attr('class', 'rvpt')
-      .attr('cx', d => toX(d.x))
-      .attr('cy', d => toY(d.y))
+      .attr('cx', d => {
+        try {
+          return toX(d.x);
+        } catch (err) {
+          console.error('RadViz: Error calculando cx', err, d);
+          return 0;
+        }
+      })
+      .attr('cy', d => {
+        try {
+          return toY(d.y);
+        } catch (err) {
+          console.error('RadViz: Error calculando cy', err, d);
+          return 0;
+        }
+      })
       .attr('r', 3)
       .attr('fill', d => d.category && categories.includes(d.category) ? color(d.category) : '#4a90e2')
       .attr('opacity', 0.6)
       .attr('stroke', d => d.category && categories.includes(d.category) ? color(d.category) : '#4a90e2')
       .attr('stroke-width', 1)
       .style('cursor', 'pointer')
+      .style('pointer-events', 'all')
       .on('mouseenter', function(event, d) {
+        event.stopPropagation();
         d3.select(this)
           .attr('r', 5)
           .attr('opacity', 1);
       })
-      .on('mouseleave', function() {
+      .on('mouseleave', function(event) {
+        event.stopPropagation();
         d3.select(this)
           .attr('r', 3)
           .attr('opacity', 0.6);
       });
+    
+    // Si el spec tiene interactive=true, agregar brush selection
+    if (spec.interactive) {
+      // Crear brush para selección (en coordenadas del grupo g, que tiene el centro en 0,0)
+      const brushGroup = g.append('g')
+        .attr('class', 'brush-layer')
+        .style('pointer-events', 'all');
+      
+      const brush = d3.brush()
+        .extent([[-radius * 0.9, -radius * 0.9], [radius * 0.9, radius * 0.9]])
+        .on('start', function(event) {
+          // Durante el brush, desactivar eventos de puntos temporalmente
+          g.selectAll('.rvpt')
+            .style('pointer-events', 'none');
+        })
+        .on('brush', function(event) {
+          if (!event.selection) {
+            // Si no hay selección, mostrar todos los puntos normalmente
+            g.selectAll('.rvpt')
+              .attr('opacity', 0.6)
+              .attr('r', 3);
+            return;
+          }
+          
+          // Obtener selección (en coordenadas del grupo g)
+          const [[x0, y0], [x1, y1]] = event.selection;
+          
+          // Resaltar puntos dentro de la selección durante el brush
+          g.selectAll('.rvpt').each(function(d) {
+            try {
+              // Obtener coordenadas transformadas del punto
+              const px = toX(d.x);
+              const py = toY(d.y);
+              
+              // Verificar si el punto está dentro de la selección
+              const isInBrush = px >= Math.min(x0, x1) && px <= Math.max(x0, x1) &&
+                                py >= Math.min(y0, y1) && py <= Math.max(y0, y1);
+              
+              const dot = d3.select(this);
+              if (isInBrush) {
+                // Resaltar puntos dentro del brush
+                dot
+                  .attr('r', 5)
+                  .attr('opacity', 1);
+              } else {
+                // Atenuar puntos fuera del brush
+                dot
+                  .attr('r', 3)
+                  .attr('opacity', 0.2);
+              }
+            } catch (err) {
+              // Ignorar errores
+            }
+          });
+        })
+        .on('end', function(event) {
+          // Restaurar eventos de puntos
+          g.selectAll('.rvpt')
+            .style('pointer-events', 'all');
+          
+          if (!event.selection) {
+            // Si no hay selección, restaurar visualización y enviar todos los puntos
+            g.selectAll('.rvpt')
+              .attr('opacity', 0.6)
+              .attr('r', 3);
+            
+            const allItems = validPoints.map((p, i) => {
+              const item = {
+                ...p,
+                index: i
+              };
+              // Preservar _original_row si existe
+              if (p._original_row) {
+                item._original_row = p._original_row;
+              }
+              return item;
+            });
+            sendEvent(divId, 'select', {
+              type: 'select',
+              items: allItems,
+              count: allItems.length
+            });
+            return;
+          }
+          
+          // Obtener selección (en coordenadas del grupo g)
+          const [[x0, y0], [x1, y1]] = event.selection;
+          
+          // Filtrar puntos dentro de la selección
+          const selected = validPoints.filter((p, i) => {
+            try {
+              // Obtener coordenadas transformadas del punto
+              const px = toX(p.x);
+              const py = toY(p.y);
+              
+              // Validar coordenadas
+              if (isNaN(px) || isNaN(py) || !isFinite(px) || !isFinite(py)) {
+                return false;
+              }
+              
+              // Verificar si el punto está dentro de la selección
+              return px >= Math.min(x0, x1) && px <= Math.max(x0, x1) &&
+                     py >= Math.min(y0, y1) && py <= Math.max(y0, y1);
+            } catch (err) {
+              console.warn('RadViz: Error verificando selección para punto', p, err);
+              return false;
+            }
+          }).map((p, i) => {
+            // Agregar datos originales si están disponibles
+            const item = {
+              ...p,
+              index: validPoints.indexOf(p)
+            };
+            // Preservar _original_row si existe
+            if (p._original_row) {
+              item._original_row = p._original_row;
+            }
+            return item;
+          });
+          
+          // Restaurar visualización de puntos
+          g.selectAll('.rvpt')
+            .attr('opacity', 0.6)
+            .attr('r', 3);
+          
+          // Resaltar puntos seleccionados
+          g.selectAll('.rvpt').filter((d, i) => selected.some(s => s.index === i))
+            .attr('r', 5)
+            .attr('opacity', 1)
+            .attr('stroke-width', 2);
+          
+          // Enviar evento de selección
+          sendEvent(divId, 'select', {
+            type: 'select',
+            items: selected,
+            count: selected.length
+          });
+        });
+      
+      // Agregar brush al grupo (después de dibujar puntos)
+      brushGroup.call(brush);
+      
+      // Asegurar que el overlay del brush capture eventos
+      brushGroup.selectAll('.overlay')
+        .style('pointer-events', 'all')
+        .style('cursor', 'crosshair');
+    }
   }
   
   /**
@@ -2247,6 +2479,9 @@
    * Similar a RadViz pero los nodos pueden moverse libremente por toda el área
    */
   function renderStarCoordinatesD3(container, spec, d3, divId) {
+    // Limpiar contenedor
+    container.innerHTML = '';
+    
     const points = spec.data || [];
     const features = spec.features || [];
     
@@ -2271,17 +2506,24 @@
       return;
     }
     
-    // Filtrar puntos válidos
-    const validPoints = points.filter(p => 
-      p != null && 
-      typeof p.x === 'number' && !isNaN(p.x) && 
-      typeof p.y === 'number' && !isNaN(p.y)
-    );
+    // Validar que los puntos tengan coordenadas válidas y _weights
+    const validPoints = points.filter(p => {
+      if (!p) return false;
+      // Verificar que tenga _weights para poder recalcular
+      if (!p._weights || !Array.isArray(p._weights) || p._weights.length !== features.length) {
+        return false;
+      }
+      // Verificar que las coordenadas iniciales sean válidas
+      if (p.x == null || isNaN(p.x) || p.y == null || isNaN(p.y)) {
+        return false;
+      }
+      return true;
+    });
     
     if (validPoints.length === 0) {
       const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
         '<strong>Error: No hay puntos válidos para Star Coordinates</strong><br/>' +
-        '<small>Los puntos deben tener coordenadas x e y válidas</small>' +
+        '<small>Los puntos deben tener _weights con ' + features.length + ' valores normalizados y coordenadas válidas</small>' +
         '</div>';
       container.innerHTML = errorMsg;
       console.error('Star Coordinates: No hay puntos válidos', { points: points.slice(0, 3), spec });
@@ -2311,6 +2553,12 @@
       chartHeight = height - margin.top - margin.bottom;
     }
     
+    // Verificar dimensiones válidas
+    if (chartWidth <= 0 || chartHeight <= 0) {
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #d32f2f;">Error: Dimensiones del gráfico muy pequeñas</div>';
+      return;
+    }
+    
     const svg = d3.select(container).append('svg')
       .attr('width', width)
       .attr('height', height)
@@ -2319,20 +2567,24 @@
     const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
     
+    // Calcular centro del área del gráfico
+    const centerX = chartWidth / 2;
+    const centerY = chartHeight / 2;
+    const initialRadius = Math.min(chartWidth, chartHeight) / 2 - 40;
+    
     // Inicializar posiciones de nodos (features) distribuidas uniformemente en el área
     // Por defecto, los colocamos en un círculo, pero pueden moverse libremente
-    const initialRadius = Math.min(chartWidth, chartHeight) / 2 - 20;
     const anchorPos = features.map((f, i) => {
       const ang = 2 * Math.PI * i / features.length - Math.PI / 2;
       return {
-        x: chartWidth / 2 + initialRadius * Math.cos(ang),
-        y: chartHeight / 2 + initialRadius * Math.sin(ang),
+        x: centerX + initialRadius * Math.cos(ang),
+        y: centerY + initialRadius * Math.sin(ang),
         name: String(f),
         index: i
       };
     });
     
-    // Escalas para proyectar puntos (normalizados) - se actualizarán dinámicamente
+    // Escalas para proyectar puntos - usar dominio dinámico
     let toX = d3.scaleLinear().range([0, chartWidth]);
     let toY = d3.scaleLinear().range([chartHeight, 0]);
     
@@ -2342,54 +2594,115 @@
       const allY = [];
       
       g.selectAll('.scpt').each(function(d) {
-        if (d.x != null && d.y != null && !isNaN(d.x) && !isNaN(d.y)) {
+        if (d.x != null && d.y != null && !isNaN(d.x) && !isNaN(d.y) && isFinite(d.x) && isFinite(d.y)) {
           allX.push(d.x);
           allY.push(d.y);
         }
       });
       
-      if (allX.length === 0) return;
+      if (allX.length === 0) {
+        // Usar dominio por defecto si no hay puntos
+        toX.domain([0, chartWidth]);
+        toY.domain([0, chartHeight]);
+        return;
+      }
       
       const xExtent = d3.extent(allX);
       const yExtent = d3.extent(allY);
-      const maxExtent = Math.max(
-        Math.abs(xExtent[0] || 0),
-        Math.abs(xExtent[1] || 0),
-        Math.abs(yExtent[0] || 0),
-        Math.abs(yExtent[1] || 0)
-      ) || 1;
       
-      // Actualizar dominios con un pequeño margen
-      const margin = maxExtent * 0.1;
-      toX.domain([-maxExtent - margin, maxExtent + margin]);
-      toY.domain([-maxExtent - margin, maxExtent + margin]);
+      // Calcular margen dinámico
+      const xRange = xExtent[1] - xExtent[0];
+      const yRange = yExtent[1] - yExtent[0];
+      const xMargin = xRange * 0.1 || chartWidth * 0.1;
+      const yMargin = yRange * 0.1 || chartHeight * 0.1;
+      
+      // Actualizar dominios con margen
+      toX.domain([xExtent[0] - xMargin, xExtent[1] + xMargin]);
+      toY.domain([yExtent[0] - yMargin, yExtent[1] + yMargin]);
     }
+    
+    // Flag para evitar actualizaciones múltiples simultáneas
+    let isUpdating = false;
     
     // Función para recalcular posiciones de puntos cuando se mueven los nodos
     function recalculateStarPoints() {
-      g.selectAll('.scpt').each(function(d) {
-        if (d._weights && Array.isArray(d._weights) && d._weights.length === anchorPos.length) {
-          const weights = d._weights;
-          const s = d3.sum(weights) || 1.0;
-          
-          // Proyección: suma ponderada de posiciones de nodos
-          const newX = d3.sum(weights.map((w, i) => w * anchorPos[i].x)) / s;
-          const newY = d3.sum(weights.map((w, i) => w * anchorPos[i].y)) / s;
-          
-          d.x = newX;
-          d.y = newY;
-        }
-      });
+      if (isUpdating) return; // Evitar actualizaciones múltiples
+      isUpdating = true;
       
-      // Actualizar escalas después de recalcular
-      updateScales();
-      
-      // Actualizar visualmente todos los puntos
-      g.selectAll('.scpt')
-        .transition()
-        .duration(200)
-        .attr('cx', d => toX(d.x))
-        .attr('cy', d => toY(d.y));
+      try {
+        g.selectAll('.scpt').each(function(d) {
+          try {
+            // Verificar que el punto tenga _weights válidos
+            if (!d._weights || !Array.isArray(d._weights) || d._weights.length !== anchorPos.length) {
+              console.warn('Star Coordinates: Punto sin _weights válidos', d);
+              return;
+            }
+            
+            const weights = d._weights;
+            const s = d3.sum(weights) || 1.0;
+            
+            // Calcular posición ponderada
+            let newX = 0;
+            let newY = 0;
+            for (let i = 0; i < weights.length; i++) {
+              if (i < anchorPos.length && !isNaN(weights[i]) && isFinite(weights[i])) {
+                newX += weights[i] * anchorPos[i].x;
+                newY += weights[i] * anchorPos[i].y;
+              }
+            }
+            newX = newX / s;
+            newY = newY / s;
+            
+            // Validar que las nuevas coordenadas sean válidas
+            if (isNaN(newX) || !isFinite(newX) || isNaN(newY) || !isFinite(newY)) {
+              console.warn('Star Coordinates: Coordenadas inválidas después del cálculo', { newX, newY, weights });
+              return;
+            }
+            
+            // Actualizar posición del punto en los datos
+            d.x = newX;
+            d.y = newY;
+            
+            // Actualizar visualmente (solo si el elemento existe)
+            const element = d3.select(this);
+            if (!element.empty()) {
+              element
+                .transition()
+                .duration(200)
+                .attr('cx', toX(newX))
+                .attr('cy', toY(newY));
+            }
+          } catch (err) {
+            console.error('Star Coordinates: Error recalculando punto', err, d);
+          }
+        });
+        
+        // Actualizar escalas después de recalcular
+        updateScales();
+        
+        // Actualizar visualmente todos los puntos con las nuevas escalas
+        g.selectAll('.scpt')
+          .transition()
+          .duration(200)
+          .attr('cx', d => {
+            try {
+              return toX(d.x);
+            } catch (err) {
+              return centerX;
+            }
+          })
+          .attr('cy', d => {
+            try {
+              return toY(d.y);
+            } catch (err) {
+              return centerY;
+            }
+          });
+      } catch (err) {
+        console.error('Star Coordinates: Error en recalculateStarPoints', err);
+      } finally {
+        isUpdating = false;
+      }
     }
     
     // Inicializar escalas con los puntos iniciales
@@ -2401,8 +2714,8 @@
       .enter()
       .append('line')
       .attr('class', (d, i) => `anchor-line anchor-line-${i}`)
-      .attr('x1', chartWidth / 2)
-      .attr('y1', chartHeight / 2)
+      .attr('x1', centerX)
+      .attr('y1', centerY)
       .attr('x2', d => d.x)
       .attr('y2', d => d.y)
       .attr('stroke', '#ddd')
@@ -2415,7 +2728,7 @@
       .data(anchorPos)
       .enter()
       .append('circle')
-      .attr('class', 'anchor')
+      .attr('class', (d, i) => `anchor anchor-${i}`)
       .attr('r', 8)
       .attr('cx', d => d.x)
       .attr('cy', d => d.y)
@@ -2423,44 +2736,63 @@
       .attr('stroke', '#fff')
       .attr('stroke-width', 2)
       .style('cursor', 'move')
+      .style('pointer-events', 'all')
       .call(d3.drag()
         .on('start', function(event, d) {
+          event.sourceEvent.stopPropagation();
           d3.select(this).attr('fill', '#ff6b35').attr('r', 10);
         })
         .on('drag', function(event, d) {
-          // Obtener posición del mouse relativa al grupo g
-          const [mx, my] = d3.pointer(event, g.node());
+          event.sourceEvent.stopPropagation();
           
-          // Limitar movimiento dentro del área del gráfico (con margen)
-          const padding = 10;
-          d.x = Math.max(padding, Math.min(chartWidth - padding, mx));
-          d.y = Math.max(padding, Math.min(chartHeight - padding, my));
-          
-          // Actualizar círculo
-          d3.select(this)
-            .attr('cx', d.x)
-            .attr('cy', d.y);
-          
-          // Actualizar línea
-          const line = g.select(`.anchor-line-${d.index}`);
-          if (!line.empty()) {
-            line
-              .attr('x2', d.x)
-              .attr('y2', d.y);
+          try {
+            // Obtener posición del mouse relativa al grupo g
+            const [mx, my] = d3.pointer(event, g.node());
+            
+            // Validar coordenadas del mouse
+            if (isNaN(mx) || isNaN(my) || !isFinite(mx) || !isFinite(my)) {
+              return;
+            }
+            
+            // Limitar movimiento dentro del área del gráfico (con margen)
+            const padding = 20;
+            d.x = Math.max(padding, Math.min(chartWidth - padding, mx));
+            d.y = Math.max(padding, Math.min(chartHeight - padding, my));
+            
+            // Validar nuevas coordenadas
+            if (isNaN(d.x) || isNaN(d.y) || !isFinite(d.x) || !isFinite(d.y)) {
+              return;
+            }
+            
+            // Actualizar círculo
+            d3.select(this)
+              .attr('cx', d.x)
+              .attr('cy', d.y);
+            
+            // Actualizar línea
+            const line = g.select(`.anchor-line-${d.index}`);
+            if (!line.empty()) {
+              line
+                .attr('x2', d.x)
+                .attr('y2', d.y);
+            }
+            
+            // Actualizar etiqueta
+            const label = g.select(`.alabel-${d.index}`);
+            if (!label.empty()) {
+              label
+                .attr('x', d.x)
+                .attr('y', d.y - 15);
+            }
+            
+            // Recalcular posiciones de todos los puntos
+            recalculateStarPoints();
+          } catch (err) {
+            console.error('Star Coordinates: Error en drag', err);
           }
-          
-          // Actualizar etiqueta
-          const label = g.select(`.alabel-${d.index}`);
-          if (!label.empty()) {
-            label
-              .attr('x', d.x)
-              .attr('y', d.y - 15);
-          }
-          
-          // Recalcular posiciones de todos los puntos
-          recalculateStarPoints();
         })
         .on('end', function(event, d) {
+          event.sourceEvent.stopPropagation();
           d3.select(this).attr('fill', '#555').attr('r', 8);
         })
       );
@@ -2492,12 +2824,22 @@
       .append('circle')
       .attr('class', 'scpt')
       .attr('cx', d => {
-        if (d.x == null || isNaN(d.x)) return chartWidth / 2;
-        return toX(d.x);
+        try {
+          if (d.x == null || isNaN(d.x) || !isFinite(d.x)) return centerX;
+          return toX(d.x);
+        } catch (err) {
+          console.error('Star Coordinates: Error calculando cx', err, d);
+          return centerX;
+        }
       })
       .attr('cy', d => {
-        if (d.y == null || isNaN(d.y)) return chartHeight / 2;
-        return toY(d.y);
+        try {
+          if (d.y == null || isNaN(d.y) || !isFinite(d.y)) return centerY;
+          return toY(d.y);
+        } catch (err) {
+          console.error('Star Coordinates: Error calculando cy', err, d);
+          return centerY;
+        }
       })
       .attr('r', 3)
       .attr('fill', d => d.category && categories.includes(d.category) ? color(d.category) : '#4a90e2')
@@ -2505,16 +2847,171 @@
       .attr('stroke', d => d.category && categories.includes(d.category) ? color(d.category) : '#4a90e2')
       .attr('stroke-width', 1)
       .style('cursor', 'pointer')
+      .style('pointer-events', 'all')
       .on('mouseenter', function(event, d) {
+        event.stopPropagation();
         d3.select(this)
           .attr('r', 5)
           .attr('opacity', 1);
       })
-      .on('mouseleave', function() {
+      .on('mouseleave', function(event) {
+        event.stopPropagation();
         d3.select(this)
           .attr('r', 3)
           .attr('opacity', 0.6);
       });
+    
+    // Si el spec tiene interactive=true, agregar brush selection
+    if (spec.interactive) {
+      // Crear brush para selección (en coordenadas del grupo g)
+      const brushGroup = g.append('g')
+        .attr('class', 'brush-layer')
+        .style('pointer-events', 'all');
+      
+      const brush = d3.brush()
+        .extent([[0, 0], [chartWidth, chartHeight]])
+        .on('start', function(event) {
+          // Durante el brush, desactivar eventos de puntos temporalmente
+          g.selectAll('.scpt')
+            .style('pointer-events', 'none');
+        })
+        .on('brush', function(event) {
+          if (!event.selection) {
+            // Si no hay selección, mostrar todos los puntos normalmente
+            g.selectAll('.scpt')
+              .attr('opacity', 0.6)
+              .attr('r', 3);
+            return;
+          }
+          
+          // Obtener selección
+          const [[x0, y0], [x1, y1]] = event.selection;
+          
+          // Resaltar puntos dentro de la selección durante el brush
+          g.selectAll('.scpt').each(function(d) {
+            try {
+              // Obtener coordenadas transformadas del punto
+              const px = toX(d.x);
+              const py = toY(d.y);
+              
+              // Validar coordenadas
+              if (isNaN(px) || isNaN(py) || !isFinite(px) || !isFinite(py)) {
+                return;
+              }
+              
+              // Verificar si el punto está dentro de la selección
+              const isInBrush = px >= Math.min(x0, x1) && px <= Math.max(x0, x1) &&
+                                py >= Math.min(y0, y1) && py <= Math.max(y0, y1);
+              
+              const dot = d3.select(this);
+              if (isInBrush) {
+                // Resaltar puntos dentro del brush
+                dot
+                  .attr('r', 5)
+                  .attr('opacity', 1);
+              } else {
+                // Atenuar puntos fuera del brush
+                dot
+                  .attr('r', 3)
+                  .attr('opacity', 0.2);
+              }
+            } catch (err) {
+              // Ignorar errores
+            }
+          });
+        })
+        .on('end', function(event) {
+          // Restaurar eventos de puntos
+          g.selectAll('.scpt')
+            .style('pointer-events', 'all');
+          
+          if (!event.selection) {
+            // Si no hay selección, restaurar visualización y enviar todos los puntos
+            g.selectAll('.scpt')
+              .attr('opacity', 0.6)
+              .attr('r', 3);
+            
+            const allItems = validPoints.map((p, i) => {
+              const item = {
+                ...p,
+                index: i
+              };
+              // Preservar _original_row si existe
+              if (p._original_row) {
+                item._original_row = p._original_row;
+              }
+              return item;
+            });
+            sendEvent(divId, 'select', {
+              type: 'select',
+              items: allItems,
+              count: allItems.length
+            });
+            return;
+          }
+          
+          // Obtener selección
+          const [[x0, y0], [x1, y1]] = event.selection;
+          
+          // Filtrar puntos dentro de la selección
+          const selected = validPoints.filter((p, i) => {
+            try {
+              // Obtener coordenadas transformadas del punto
+              const px = toX(p.x);
+              const py = toY(p.y);
+              
+              // Validar coordenadas
+              if (isNaN(px) || isNaN(py) || !isFinite(px) || !isFinite(py)) {
+                return false;
+              }
+              
+              // Verificar si el punto está dentro de la selección
+              return px >= Math.min(x0, x1) && px <= Math.max(x0, x1) &&
+                     py >= Math.min(y0, y1) && py <= Math.max(y0, y1);
+            } catch (err) {
+              console.warn('Star Coordinates: Error verificando selección para punto', p, err);
+              return false;
+            }
+          }).map((p, i) => {
+            // Agregar datos originales si están disponibles
+            const item = {
+              ...p,
+              index: validPoints.indexOf(p)
+            };
+            // Preservar _original_row si existe
+            if (p._original_row) {
+              item._original_row = p._original_row;
+            }
+            return item;
+          });
+          
+          // Restaurar visualización de puntos
+          g.selectAll('.scpt')
+            .attr('opacity', 0.6)
+            .attr('r', 3);
+          
+          // Resaltar puntos seleccionados
+          g.selectAll('.scpt').filter((d, i) => selected.some(s => s.index === i))
+            .attr('r', 5)
+            .attr('opacity', 1)
+            .attr('stroke-width', 2);
+          
+          // Enviar evento de selección
+          sendEvent(divId, 'select', {
+            type: 'select',
+            items: selected,
+            count: selected.length
+          });
+        });
+      
+      // Agregar brush al grupo (después de dibujar puntos)
+      brushGroup.call(brush);
+      
+      // Asegurar que el overlay del brush capture eventos
+      brushGroup.selectAll('.overlay')
+        .style('pointer-events', 'all')
+        .style('cursor', 'crosshair');
+    }
   }
   
   /**
@@ -2522,6 +3019,9 @@
    * Ejes paralelos que pueden moverse y reordenarse
    */
   function renderParallelCoordinatesD3(container, spec, d3, divId) {
+    // Limpiar contenedor
+    container.innerHTML = '';
+    
     const data = spec.data || [];
     const dimensions = spec.dimensions || [];
     
@@ -2543,6 +3043,26 @@
         '</div>';
       container.innerHTML = errorMsg;
       console.error('Parallel Coordinates: Dimensiones insuficientes', { dimensions });
+      return;
+    }
+    
+    // Validar que los datos tengan al menos una dimensión válida
+    const validData = data.filter(d => {
+      if (!d) return false;
+      // Verificar que al menos una dimensión tenga valor válido
+      return dimensions.some(dim => {
+        const val = d[dim];
+        return val != null && !isNaN(val) && isFinite(val);
+      });
+    });
+    
+    if (validData.length === 0) {
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error: No hay datos válidos para Parallel Coordinates</strong><br/>' +
+        '<small>Los datos deben tener valores válidos para al menos una dimensión</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('Parallel Coordinates: No hay datos válidos', { data: data.slice(0, 3), spec });
       return;
     }
     
@@ -2569,6 +3089,12 @@
       chartHeight = height - margin.top - margin.bottom;
     }
     
+    // Verificar dimensiones válidas
+    if (chartWidth <= 0 || chartHeight <= 0) {
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #d32f2f;">Error: Dimensiones del gráfico muy pequeñas</div>';
+      return;
+    }
+    
     const svg = d3.select(container).append('svg')
       .attr('width', width)
       .attr('height', height)
@@ -2582,29 +3108,55 @@
     const axisPositions = [];
     
     dimensions.forEach((dim, i) => {
-      // Calcular dominio de valores para esta dimensión
-      const values = data.map(d => {
-        const val = d[dim];
-        return (val != null && !isNaN(val)) ? parseFloat(val) : null;
-      }).filter(v => v != null);
-      
-      if (values.length === 0) {
+      try {
+        // Calcular dominio de valores para esta dimensión
+        const values = validData.map(d => {
+          const val = d[dim];
+          if (val == null || isNaN(val) || !isFinite(val)) return null;
+          return parseFloat(val);
+        }).filter(v => v != null && isFinite(v));
+        
+        if (values.length === 0) {
+          // Si no hay valores válidos, usar dominio por defecto
+          scales[dim] = d3.scaleLinear().domain([0, 1]).range([chartHeight, 0]);
+        } else {
+          const minVal = d3.min(values);
+          const maxVal = d3.max(values);
+          
+          // Validar que min y max sean válidos
+          if (isNaN(minVal) || isNaN(maxVal) || !isFinite(minVal) || !isFinite(maxVal)) {
+            scales[dim] = d3.scaleLinear().domain([0, 1]).range([chartHeight, 0]);
+          } else {
+            // Si min === max, agregar un pequeño margen
+            if (minVal === maxVal) {
+              scales[dim] = d3.scaleLinear()
+                .domain([minVal - 1, maxVal + 1])
+                .range([chartHeight, 0]);
+            } else {
+              scales[dim] = d3.scaleLinear()
+                .domain([minVal, maxVal])
+                .range([chartHeight, 0])
+                .nice();
+            }
+          }
+        }
+        
+        // Posición inicial del eje (distribuidos uniformemente)
+        axisPositions.push({
+          name: dim,
+          x: dimensions.length > 1 ? (chartWidth / (dimensions.length - 1)) * i : chartWidth / 2,
+          index: i
+        });
+      } catch (err) {
+        console.error('Parallel Coordinates: Error calculando escala para dimensión', dim, err);
+        // Usar escala por defecto en caso de error
         scales[dim] = d3.scaleLinear().domain([0, 1]).range([chartHeight, 0]);
-      } else {
-        const minVal = d3.min(values);
-        const maxVal = d3.max(values);
-        scales[dim] = d3.scaleLinear()
-          .domain([minVal, maxVal])
-          .range([chartHeight, 0])
-          .nice();
+        axisPositions.push({
+          name: dim,
+          x: dimensions.length > 1 ? (chartWidth / (dimensions.length - 1)) * i : chartWidth / 2,
+          index: i
+        });
       }
-      
-      // Posición inicial del eje (distribuidos uniformemente)
-      axisPositions.push({
-        name: dim,
-        x: (chartWidth / (dimensions.length - 1)) * i,
-        index: i
-      });
     });
     
     // Crear tooltip una sola vez (fuera de drawDataLines)
@@ -2622,98 +3174,172 @@
         .style('display', 'none')
         .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)');
     
+    // Flag para evitar redibujados múltiples simultáneos
+    let isRedrawing = false;
+    
     // Función para dibujar líneas de datos
     function drawDataLines() {
-      // Limpiar líneas anteriores
-      g.selectAll('.pcline').remove();
+      if (isRedrawing) return; // Evitar redibujados múltiples
+      isRedrawing = true;
       
-      // Obtener categorías para colorear
-      const categoryCol = spec.category_col || null;
-      const categories = categoryCol ? [...new Set(data.map(d => d[categoryCol]).filter(c => c != null))] : [];
-      const color = categories.length > 0 
-        ? d3.scaleOrdinal(d3.schemeCategory10).domain(categories)
-        : () => '#4a90e2';
-      
-      // Función para generar puntos de la línea para un dato
-      function generateLinePoints(d) {
-        return dimensions.map((dim, i) => {
-          const axis = axisPositions[i];
-          const scale = scales[dim];
-          const val = d[dim];
-          const y = (val != null && !isNaN(val)) ? scale(parseFloat(val)) : chartHeight / 2;
-          return [axis ? axis.x : 0, y];
-        });
-      }
-      
-      // Dibujar líneas
-      g.selectAll('.pcline')
-        .data(data)
-        .enter()
-        .append('path')
-        .attr('class', 'pcline')
-        .attr('d', d => {
-          const points = generateLinePoints(d);
-          return d3.line()
-            .x(d => d[0])
-            .y(d => d[1])
-            .curve(d3.curveMonotoneX)(points);
-        })
-        .attr('fill', 'none')
-        .attr('stroke', d => categoryCol && d[categoryCol] && categories.includes(d[categoryCol]) 
-          ? color(d[categoryCol]) 
-          : '#4a90e2')
-        .attr('stroke-width', 1.5)
-        .attr('opacity', 0.6)
-        .style('cursor', 'pointer')
-        .on('mouseenter', function(event, d) {
-          d3.select(this)
-            .attr('stroke-width', 3)
-            .attr('opacity', 1);
-          
-          // Mostrar tooltip con información de la línea
-          const mouseX = event.pageX || event.clientX || 0;
-          const mouseY = event.pageY || event.clientY || 0;
-          
-          let tooltipContent = '<strong>Datos:</strong><br/>';
-          dimensions.forEach(dim => {
-            const val = d[dim];
-            if (val != null && !isNaN(val)) {
-              tooltipContent += `${dim}: ${parseFloat(val).toFixed(2)}<br/>`;
+      try {
+        // Limpiar líneas anteriores
+        g.selectAll('.pcline').remove();
+        
+        // Obtener categorías para colorear
+        const categoryCol = spec.category_col || null;
+        const categories = categoryCol ? [...new Set(validData.map(d => d[categoryCol]).filter(c => c != null && c !== ''))] : [];
+        const color = categories.length > 0 
+          ? d3.scaleOrdinal(d3.schemeCategory10).domain(categories)
+          : () => '#4a90e2';
+        
+        // Función para generar puntos de la línea para un dato
+        function generateLinePoints(d) {
+          const points = [];
+          for (let i = 0; i < dimensions.length; i++) {
+            try {
+              const dim = dimensions[i];
+              const axis = axisPositions[i];
+              const scale = scales[dim];
+              
+              if (!axis || !scale) {
+                // Si no hay eje o escala válida, usar posición por defecto
+                points.push([i * (chartWidth / Math.max(1, dimensions.length - 1)), chartHeight / 2]);
+                continue;
+              }
+              
+              const val = d[dim];
+              let y;
+              
+              if (val == null || isNaN(val) || !isFinite(val)) {
+                // Si el valor no es válido, usar posición media
+                y = chartHeight / 2;
+              } else {
+                try {
+                  y = scale(parseFloat(val));
+                  // Validar que y sea válido
+                  if (isNaN(y) || !isFinite(y)) {
+                    y = chartHeight / 2;
+                  }
+                } catch (err) {
+                  console.warn('Parallel Coordinates: Error calculando y para', dim, val, err);
+                  y = chartHeight / 2;
+                }
+              }
+              
+              points.push([axis.x, y]);
+            } catch (err) {
+              console.error('Parallel Coordinates: Error generando punto', err, d, dimensions[i]);
+              // Usar posición por defecto en caso de error
+              points.push([i * (chartWidth / Math.max(1, dimensions.length - 1)), chartHeight / 2]);
             }
-          });
-          if (categoryCol && d[categoryCol]) {
-            tooltipContent += `<br/><strong>Categoría:</strong> ${d[categoryCol]}`;
           }
-          
-          tooltip
-            .style('left', (mouseX + 10) + 'px')
-            .style('top', (mouseY - 10) + 'px')
-            .style('display', 'block')
-            .html(tooltipContent)
-            .transition()
-            .duration(200)
-            .style('opacity', 1);
-        })
-        .on('mousemove', function(event) {
-          const mouseX = event.pageX || event.clientX || 0;
-          const mouseY = event.pageY || event.clientY || 0;
-          tooltip
-            .style('left', (mouseX + 10) + 'px')
-            .style('top', (mouseY - 10) + 'px');
-        })
-        .on('mouseleave', function() {
-          d3.select(this)
-            .attr('stroke-width', 1.5)
-            .attr('opacity', 0.6);
-          
-          tooltip
-            .transition()
-            .duration(200)
-            .style('opacity', 0)
-            .on('end', function() {
-              tooltip.style('display', 'none');
+          return points;
+        }
+        
+        // Ordenar axisPositions por x para asegurar orden correcto
+        const sortedAxisPositions = [...axisPositions].sort((a, b) => a.x - b.x);
+        
+        // Dibujar líneas
+        const lineGenerator = d3.line()
+          .x(d => d[0])
+          .y(d => d[1])
+          .curve(d3.curveMonotoneX)
+          .defined(d => d != null && !isNaN(d[0]) && !isNaN(d[1]) && isFinite(d[0]) && isFinite(d[1]));
+        
+        g.selectAll('.pcline')
+          .data(validData)
+          .enter()
+          .append('path')
+          .attr('class', 'pcline')
+          .attr('d', d => {
+            try {
+              const points = generateLinePoints(d);
+              if (points.length < 2) {
+                return ''; // No dibujar si no hay suficientes puntos
+              }
+              return lineGenerator(points);
+            } catch (err) {
+              console.error('Parallel Coordinates: Error generando línea', err, d);
+              return '';
+            }
+          })
+          .attr('fill', 'none')
+          .attr('stroke', d => {
+            try {
+              if (categoryCol && d[categoryCol] && categories.includes(d[categoryCol])) {
+                return color(d[categoryCol]);
+              }
+              return '#4a90e2';
+            } catch (err) {
+              return '#4a90e2';
+            }
+          })
+          .attr('stroke-width', 1.5)
+          .attr('opacity', 0.6)
+          .style('cursor', 'pointer')
+          .style('pointer-events', 'all')
+          .on('mouseenter', function(event, d) {
+            event.stopPropagation();
+            d3.select(this)
+              .attr('stroke-width', 3)
+              .attr('opacity', 1);
+            
+            // Mostrar tooltip con información de la línea
+            const mouseX = event.pageX || event.clientX || 0;
+            const mouseY = event.pageY || event.clientY || 0;
+            
+            let tooltipContent = '<strong>Datos:</strong><br/>';
+            dimensions.forEach(dim => {
+              try {
+                const val = d[dim];
+                if (val != null && !isNaN(val) && isFinite(val)) {
+                  tooltipContent += `${dim}: ${parseFloat(val).toFixed(2)}<br/>`;
+                }
+              } catch (err) {
+                // Ignorar errores al mostrar valores
+              }
             });
-        });
+            if (categoryCol && d[categoryCol]) {
+              tooltipContent += `<br/><strong>Categoría:</strong> ${d[categoryCol]}`;
+            }
+            
+            tooltip
+              .style('left', (mouseX + 10) + 'px')
+              .style('top', (mouseY - 10) + 'px')
+              .style('display', 'block')
+              .html(tooltipContent)
+              .transition()
+              .duration(200)
+              .style('opacity', 1);
+          })
+          .on('mousemove', function(event) {
+            event.stopPropagation();
+            const mouseX = event.pageX || event.clientX || 0;
+            const mouseY = event.pageY || event.clientY || 0;
+            tooltip
+              .style('left', (mouseX + 10) + 'px')
+              .style('top', (mouseY - 10) + 'px');
+          })
+          .on('mouseleave', function(event) {
+            event.stopPropagation();
+            d3.select(this)
+              .attr('stroke-width', 1.5)
+              .attr('opacity', 0.6);
+            
+            tooltip
+              .transition()
+              .duration(200)
+              .style('opacity', 0)
+              .on('end', function() {
+                tooltip.style('display', 'none');
+              });
+          });
+      } catch (err) {
+        console.error('Parallel Coordinates: Error en drawDataLines', err);
+      } finally {
+        isRedrawing = false;
+      }
     }
     
     // Dibujar ejes (arrastrables y reordenables)
@@ -2721,59 +3347,101 @@
       .data(axisPositions)
       .enter()
       .append('g')
-      .attr('class', 'axis-group')
+      .attr('class', (d, i) => `axis-group axis-group-${i}`)
       .attr('transform', d => `translate(${d.x}, 0)`)
+      .style('cursor', 'move')
+      .style('pointer-events', 'all')
       .call(d3.drag()
         .on('start', function(event, d) {
-          d3.select(this).select('.axis-line').attr('stroke', '#ff6b35').attr('stroke-width', 3);
+          event.sourceEvent.stopPropagation();
+          try {
+            d3.select(this).select('.axis-line').attr('stroke', '#ff6b35').attr('stroke-width', 3);
+          } catch (err) {
+            console.error('Parallel Coordinates: Error en start drag', err);
+          }
         })
         .on('drag', function(event, d) {
-          const [mx] = d3.pointer(event, g.node());
-          // Limitar movimiento horizontal dentro del área
-          const padding = 20;
-          let newX = Math.max(padding, Math.min(chartWidth - padding, mx));
+          event.sourceEvent.stopPropagation();
           
-          // Snap a posiciones de otros ejes o posiciones uniformes
-          const snapThreshold = 15; // Distancia para hacer snap
-          const uniformSpacing = chartWidth / (dimensions.length - 1);
-          
-          // Buscar si hay otro eje cerca para hacer snap
-          let snapped = false;
-          for (let otherAxis of axisPositions) {
-            if (otherAxis !== d && Math.abs(newX - otherAxis.x) < snapThreshold) {
-              newX = otherAxis.x;
-              snapped = true;
-              break;
+          try {
+            const [mx] = d3.pointer(event, g.node());
+            
+            // Validar coordenadas del mouse
+            if (isNaN(mx) || !isFinite(mx)) {
+              return;
             }
-          }
-          
-          // Si no hay snap a otro eje, intentar snap a posición uniforme
-          if (!snapped) {
-            for (let i = 0; i < dimensions.length; i++) {
-              const uniformX = (chartWidth / (dimensions.length - 1)) * i;
-              if (Math.abs(newX - uniformX) < snapThreshold) {
-                newX = uniformX;
+            
+            // Limitar movimiento horizontal dentro del área
+            const padding = 20;
+            let newX = Math.max(padding, Math.min(chartWidth - padding, mx));
+            
+            // Validar nueva posición
+            if (isNaN(newX) || !isFinite(newX)) {
+              return;
+            }
+            
+            // Snap a posiciones de otros ejes o posiciones uniformes (opcional)
+            const snapThreshold = 15; // Distancia para hacer snap
+            const uniformSpacing = chartWidth / Math.max(1, dimensions.length - 1);
+            
+            // Buscar si hay otro eje cerca para hacer snap
+            let snapped = false;
+            for (let otherAxis of axisPositions) {
+              if (otherAxis !== d && Math.abs(newX - otherAxis.x) < snapThreshold) {
+                newX = otherAxis.x;
+                snapped = true;
                 break;
               }
             }
+            
+            // Si no hay snap a otro eje, intentar snap a posición uniforme (opcional)
+            if (!snapped && snapThreshold > 0) {
+              for (let i = 0; i < dimensions.length; i++) {
+                const uniformX = (chartWidth / Math.max(1, dimensions.length - 1)) * i;
+                if (Math.abs(newX - uniformX) < snapThreshold) {
+                  newX = uniformX;
+                  break;
+                }
+              }
+            }
+            
+            // Actualizar posición del eje
+            d.x = newX;
+            
+            // Validar nueva posición antes de actualizar
+            if (isNaN(d.x) || !isFinite(d.x)) {
+              return;
+            }
+            
+            // Actualizar posición del grupo
+            d3.select(this).attr('transform', `translate(${d.x}, 0)`);
+            
+            // Reordenar ejes si se cruzan (opcional - puede desactivarse para movimiento libre)
+            axisPositions.sort((a, b) => a.x - b.x);
+            axisPositions.forEach((ax, idx) => {
+              ax.index = idx;
+            });
+            
+            // Redibujar líneas (solo si no está redibujando ya)
+            if (!isRedrawing) {
+              drawDataLines();
+            }
+          } catch (err) {
+            console.error('Parallel Coordinates: Error en drag', err);
           }
-          
-          d.x = newX;
-          
-          // Actualizar posición del grupo
-          d3.select(this).attr('transform', `translate(${d.x}, 0)`);
-          
-          // Reordenar ejes si se cruzan
-          axisPositions.sort((a, b) => a.x - b.x);
-          axisPositions.forEach((ax, idx) => {
-            ax.index = idx;
-          });
-          
-          // Redibujar líneas
-          drawDataLines();
         })
         .on('end', function(event, d) {
-          d3.select(this).select('.axis-line').attr('stroke', '#333').attr('stroke-width', 2);
+          event.sourceEvent.stopPropagation();
+          try {
+            d3.select(this).select('.axis-line').attr('stroke', '#333').attr('stroke-width', 2);
+            
+            // Asegurar que las líneas se redibujen al finalizar el drag
+            if (!isRedrawing) {
+              drawDataLines();
+            }
+          } catch (err) {
+            console.error('Parallel Coordinates: Error en end drag', err);
+          }
         })
       );
     
@@ -2786,54 +3454,258 @@
       .attr('y2', chartHeight)
       .attr('stroke', '#333')
       .attr('stroke-width', 2)
-      .style('cursor', 'move');
+      .style('cursor', 'move')
+      .style('pointer-events', 'all');
     
     // Etiquetas y ticks del eje
     axisGroups.each(function(d) {
-      const axisG = d3.select(this);
-      const dim = d.name;
-      const scale = scales[dim];
-      
-      // Ticks del eje Y (vertical) con números visibles
-      const axis = d3.axisLeft(scale)
-        .ticks(5)
-        .tickFormat(d3.format('.2f'));
-      
-      const axisTicks = axisG.append('g')
-        .attr('class', 'axis-ticks');
-      
-      axisTicks.call(axis);
-      
-      // Asegurar que los números sean visibles
-      axisTicks.selectAll('text')
-        .style('font-size', '10px')
-        .style('fill', '#333')
-        .style('font-weight', 'normal');
-      
-      axisTicks.selectAll('line, path')
-        .style('stroke', '#666')
-        .style('stroke-width', 1);
-      
-      // Etiqueta del eje
-      axisG.append('text')
-        .attr('class', 'axis-label')
-        .attr('x', 0)
-        .attr('y', -10)
-        .attr('text-anchor', 'middle')
-        .attr('dominant-baseline', 'middle')
-        .style('font-size', '12px')
-        .style('font-weight', 'bold')
-        .style('fill', '#333')
-        .style('pointer-events', 'none')
-        .text(dim);
+      try {
+        const axisG = d3.select(this);
+        const dim = d.name;
+        const scale = scales[dim];
+        
+        if (!scale) {
+          console.warn('Parallel Coordinates: No hay escala para dimensión', dim);
+          return;
+        }
+        
+        // Ticks del eje Y (vertical) con números visibles
+        const axis = d3.axisLeft(scale)
+          .ticks(5)
+          .tickFormat(d3.format('.2f'));
+        
+        const axisTicks = axisG.append('g')
+          .attr('class', 'axis-ticks');
+        
+        try {
+          axisTicks.call(axis);
+        } catch (err) {
+          console.error('Parallel Coordinates: Error dibujando ticks para', dim, err);
+        }
+        
+        // Asegurar que los números sean visibles
+        axisTicks.selectAll('text')
+          .style('font-size', '10px')
+          .style('fill', '#333')
+          .style('font-weight', 'normal')
+          .style('pointer-events', 'none');
+        
+        axisTicks.selectAll('line, path')
+          .style('stroke', '#666')
+          .style('stroke-width', 1)
+          .style('pointer-events', 'none');
+        
+        // Etiqueta del eje
+        axisG.append('text')
+          .attr('class', 'axis-label')
+          .attr('x', 0)
+          .attr('y', -10)
+          .attr('text-anchor', 'middle')
+          .attr('dominant-baseline', 'middle')
+          .style('font-size', '12px')
+          .style('font-weight', 'bold')
+          .style('fill', '#333')
+          .style('pointer-events', 'none')
+          .text(dim);
+      } catch (err) {
+        console.error('Parallel Coordinates: Error dibujando eje', d.name, err);
+      }
     });
     
     // Dibujar líneas de datos iniciales
     drawDataLines();
     
+    // Si el spec tiene interactive=true, agregar brush selection en el área del gráfico
+    if (spec.interactive) {
+      // Crear brush para selección rectangular (puede seleccionar líneas que pasan por un rango)
+      // Nota: Para Parallel Coordinates, la selección es más compleja porque las líneas cruzan múltiples ejes
+      // Por ahora, permitimos selección rectangular que selecciona líneas que pasan por esa área
+      const brushGroup = g.append('g')
+        .attr('class', 'brush-layer')
+        .style('pointer-events', 'all');
+      
+      const brush = d3.brush()
+        .extent([[0, 0], [chartWidth, chartHeight]])
+        .on('start', function(event) {
+          // Durante el brush, desactivar eventos de líneas temporalmente
+          g.selectAll('.pcline')
+            .style('pointer-events', 'none');
+        })
+        .on('brush', function(event) {
+          if (!event.selection) {
+            // Si no hay selección, mostrar todas las líneas normalmente
+            g.selectAll('.pcline')
+              .attr('opacity', 0.6)
+              .attr('stroke-width', 1.5);
+            return;
+          }
+          
+          // Obtener selección
+          const [[x0, y0], [x1, y1]] = event.selection;
+          
+          // Resaltar líneas que pasan por la selección durante el brush
+          g.selectAll('.pcline').each(function(d) {
+            try {
+              // Verificar si algún punto de la línea está dentro de la selección
+              let isInBrush = false;
+              for (let j = 0; j < dimensions.length; j++) {
+                try {
+                  const dim = dimensions[j];
+                  const axis = axisPositions[j];
+                  const scale = scales[dim];
+                  
+                  if (!axis || !scale) continue;
+                  
+                  const val = d[dim];
+                  if (val == null || isNaN(val) || !isFinite(val)) continue;
+                  
+                  const y = scale(parseFloat(val));
+                  if (isNaN(y) || !isFinite(y)) continue;
+                  
+                  // Verificar si el punto está dentro de la selección
+                  if (axis.x >= Math.min(x0, x1) && axis.x <= Math.max(x0, x1) &&
+                      y >= Math.min(y0, y1) && y <= Math.max(y0, y1)) {
+                    isInBrush = true;
+                    break;
+                  }
+                } catch (err) {
+                  // Ignorar errores en puntos individuales
+                  continue;
+                }
+              }
+              
+              const line = d3.select(this);
+              if (isInBrush) {
+                // Resaltar líneas dentro del brush
+                line
+                  .attr('stroke-width', 3)
+                  .attr('opacity', 1);
+              } else {
+                // Atenuar líneas fuera del brush
+                line
+                  .attr('stroke-width', 1.5)
+                  .attr('opacity', 0.15);
+              }
+            } catch (err) {
+              // Ignorar errores
+            }
+          });
+        })
+        .on('end', function(event) {
+          // Restaurar eventos de líneas
+          g.selectAll('.pcline')
+            .style('pointer-events', 'all');
+          
+          if (!event.selection) {
+            // Si no hay selección, restaurar visualización y enviar todos los datos
+            g.selectAll('.pcline')
+              .attr('opacity', 0.6)
+              .attr('stroke-width', 1.5);
+            
+            const allItems = validData.map((d, i) => {
+              const item = {
+                ...d,
+                index: i
+              };
+              // Preservar _original_row si existe
+              if (d._original_row) {
+                item._original_row = d._original_row;
+              }
+              return item;
+            });
+            sendEvent(divId, 'select', {
+              type: 'select',
+              items: allItems,
+              count: allItems.length
+            });
+            return;
+          }
+          
+          // Obtener selección
+          const [[x0, y0], [x1, y1]] = event.selection;
+          
+          // Filtrar líneas que pasan por la selección
+          // Una línea se considera seleccionada si al menos un punto está dentro de la selección
+          const selected = validData.filter((d, i) => {
+            try {
+              // Generar puntos de la línea y verificar si alguno está en la selección
+              for (let j = 0; j < dimensions.length; j++) {
+                try {
+                  const dim = dimensions[j];
+                  const axis = axisPositions[j];
+                  const scale = scales[dim];
+                  
+                  if (!axis || !scale) continue;
+                  
+                  const val = d[dim];
+                  if (val == null || isNaN(val) || !isFinite(val)) continue;
+                  
+                  const y = scale(parseFloat(val));
+                  if (isNaN(y) || !isFinite(y)) continue;
+                  
+                  // Verificar si el punto está dentro de la selección
+                  if (axis.x >= Math.min(x0, x1) && axis.x <= Math.max(x0, x1) &&
+                      y >= Math.min(y0, y1) && y <= Math.max(y0, y1)) {
+                    return true; // Al menos un punto está dentro de la selección
+                  }
+                } catch (err) {
+                  // Ignorar errores en puntos individuales
+                  continue;
+                }
+              }
+              return false;
+            } catch (err) {
+              console.warn('Parallel Coordinates: Error verificando selección para línea', d, err);
+              return false;
+            }
+          }).map((d, i) => {
+            // Agregar datos originales si están disponibles
+            const item = {
+              ...d,
+              index: validData.indexOf(d)
+            };
+            // Preservar _original_row si existe
+            if (d._original_row) {
+              item._original_row = d._original_row;
+            }
+            return item;
+          });
+          
+          // Restaurar visualización de líneas
+          g.selectAll('.pcline')
+            .attr('opacity', 0.6)
+            .attr('stroke-width', 1.5);
+          
+          // Resaltar líneas seleccionadas
+          const selectedIndices = new Set(selected.map(s => s.index));
+          g.selectAll('.pcline').filter((d, i) => selectedIndices.has(i))
+            .attr('stroke-width', 3)
+            .attr('opacity', 1);
+          
+          // Enviar evento de selección
+          sendEvent(divId, 'select', {
+            type: 'select',
+            items: selected,
+            count: selected.length
+          });
+        });
+      
+      // Agregar brush al grupo (después de dibujar todo)
+      brushGroup.call(brush);
+      
+      // Asegurar que el overlay del brush capture eventos
+      brushGroup.selectAll('.overlay')
+        .style('pointer-events', 'all')
+        .style('cursor', 'crosshair');
+    }
+    
     // Renderizar etiquetas de ejes si están especificadas
     if (spec.xLabel || spec.yLabel) {
-      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+      try {
+        renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+      } catch (err) {
+        console.error('Parallel Coordinates: Error renderizando etiquetas de ejes', err);
+      }
     }
   }
   
