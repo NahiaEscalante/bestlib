@@ -2821,10 +2821,25 @@
     // Inicializar escalas
     updateScales();
     
-    // IMPORTANTE: No dibujar círculo de referencia ni líneas desde el centro
-    // porque los nodos pueden moverse libremente por toda el área del gráfico
+    // IMPORTANTE: Los nodos pueden moverse libremente por toda el área del gráfico
     // Esta es la ventaja principal de Star Coordinates sobre RadViz
-    // Los nodos no están anclados a ningún punto fijo
+    // Sin embargo, dibujamos líneas desde el centro para tener un punto de referencia visual
+    
+    // Dibujar líneas desde el centro del gráfico hasta los nodos (para referencia visual)
+    const anchorLines = g.selectAll('.anchor-line')
+      .data(anchorPos)
+      .enter()
+      .append('line')
+      .attr('class', (d, i) => `anchor-line anchor-line-${i}`)
+      .attr('x1', centerX)
+      .attr('y1', centerY)
+      .attr('x2', d => d.x)
+      .attr('y2', d => d.y)
+      .attr('stroke', '#ddd')
+      .attr('stroke-width', 1)
+      .attr('stroke-dasharray', '2,2')
+      .style('pointer-events', 'none')
+      .lower();
     
     // Dibujar nodos (arrastrables libremente por toda el área)
     const anchorCircles = g.selectAll('.anchor')
@@ -2876,8 +2891,13 @@
               .attr('cx', d.x)
               .attr('cy', d.y);
             
-            // IMPORTANTE: No actualizar líneas porque no las dibujamos
-            // Los nodos pueden moverse libremente sin restricciones
+            // Actualizar línea desde el centro hasta el nodo (para referencia visual)
+            const line = g.select(`.anchor-line-${d.index}`);
+            if (!line.empty()) {
+              line
+                .attr('x2', d.x)
+                .attr('y2', d.y);
+            }
             
             // Actualizar etiqueta
             const label = g.select(`.alabel-${d.index}`);
