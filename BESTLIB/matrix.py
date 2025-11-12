@@ -1397,65 +1397,17 @@ class MatrixLayout:
             <div id="{self.div_id}" class="matrix-layout"></div>
             """
             
-            # Usar la función ensureD3 del JS (ya está implementada en matrix.js)
+            # El código JS ya incluye ensureD3, solo necesitamos ejecutar el render
+            # La función render() en matrix.js ya maneja la carga de D3 automáticamente
             js_content = f"""
             (function() {{
-                // La función ensureD3 ya está definida en matrix.js
-                // Solo necesitamos esperar a que se cargue y luego renderizar
-                if (typeof ensureD3 === 'function') {{
-                    ensureD3().then(d3 => {{
-                        const mapping = {data['mapping_js']};
-                        const container = document.getElementById("{self.div_id}");
-                        if (container) {{
-                            container.__mapping__ = mapping;
-                        }}
-                        render("{self.div_id}", `{data['escaped_layout']}`, mapping);
-                    }}).catch(e => {{
-                        const errorDiv = document.getElementById("{self.div_id}");
-                        if (errorDiv) {{
-                            errorDiv.innerHTML = '<div style="color: #e74c3c; padding: 20px; border: 2px solid #e74c3c; border-radius: 5px;">' +
-                                '<strong>❌ Error:</strong> ' + e.message + '</div>';
-                        }}
-                        console.error('Error cargando D3.js:', e);
-                    }});
-                }} else {{
-                    // Fallback: esperar a que se cargue el JS y luego intentar de nuevo
-                    setTimeout(() => {{
-                        if (typeof ensureD3 === 'function') {{
-                            ensureD3().then(d3 => {{
-                                const mapping = {data['mapping_js']};
-                                const container = document.getElementById("{self.div_id}");
-                                if (container) {{
-                                    container.__mapping__ = mapping;
-                                }}
-                                render("{self.div_id}", `{data['escaped_layout']}`, mapping);
-                            }}).catch(e => {{
-                                const errorDiv = document.getElementById("{self.div_id}");
-                                if (errorDiv) {{
-                                    errorDiv.innerHTML = '<div style="color: #e74c3c; padding: 20px; border: 2px solid #e74c3c; border-radius: 5px;">' +
-                                        '<strong>❌ Error:</strong> ' + e.message + '</div>';
-                                }}
-                                console.error('Error cargando D3.js:', e);
-                            }});
-                        }} else {{
-                            // Último fallback: intentar renderizar directamente (D3 puede estar ya cargado)
-                            const mapping = {data['mapping_js']};
-                            const container = document.getElementById("{self.div_id}");
-                            if (container) {{
-                                container.__mapping__ = mapping;
-                            }}
-                            if (window.d3) {{
-                                render("{self.div_id}", `{data['escaped_layout']}`, mapping);
-                            }} else {{
-                                const errorDiv = document.getElementById("{self.div_id}");
-                                if (errorDiv) {{
-                                    errorDiv.innerHTML = '<div style="color: #e74c3c; padding: 20px; border: 2px solid #e74c3c; border-radius: 5px;">' +
-                                        '<strong>❌ Error:</strong> D3.js no está disponible. Por favor, recarga la página.</div>';
-                                }}
-                            }}
-                        }}
-                    }}, 100);
+                {data['js_code']}
+                const mapping = {data['mapping_js']};
+                const container = document.getElementById("{self.div_id}");
+                if (container) {{
+                    container.__mapping__ = mapping;
                 }}
+                render("{self.div_id}", `{data['escaped_layout']}`, mapping);
             }})();
             """
             
