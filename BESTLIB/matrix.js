@@ -219,6 +219,12 @@
     
     container.style.display = "grid";
     
+    // Configuración dinámica de gap (definir ANTES de usarlo)
+    const gap = mapping.__gap__ !== undefined ? mapping.__gap__ : 12;
+    
+    // Configuración dinámica de cell padding (definir ANTES de usarlo)
+    const cellPadding = mapping.__cell_padding__ !== undefined ? mapping.__cell_padding__ : 15;
+    
     // Configuración dinámica de columnas
     if (mapping.__col_widths__ && Array.isArray(mapping.__col_widths__) && mapping.__col_widths__.length === C) {
       // Convertir ratios a fr si es necesario
@@ -274,17 +280,13 @@
       container.style.gridTemplateRows = `repeat(${R}, minmax(${minRowHeight}px, auto))`;
     }
     
-    // Configuración dinámica de gap
-    const gap = mapping.__gap__ !== undefined ? mapping.__gap__ : 12;
+    // Aplicar gap al contenedor
     container.style.gap = `${gap}px`;
     
     // Configuración dinámica de max-width
     if (mapping.__max_width__ !== undefined) {
       container.style.maxWidth = `${mapping.__max_width__}px`;
     }
-    
-    // Configuración dinámica de cell padding (aplicar a cada celda después)
-    const cellPadding = mapping.__cell_padding__ !== undefined ? mapping.__cell_padding__ : 15;
 
     const safeHtml = mapping.__safe_html__ !== false;
     const divIdFromMapping = mapping.__div_id__ || divId;
@@ -410,10 +412,8 @@
           }
         }
         
-        // Aplicar padding personalizado si existe
-        if (mapping.__cell_padding__ !== undefined) {
-          cell.style.padding = `${mapping.__cell_padding__}px`;
-        }
+        // Aplicar padding personalizado si existe (usar la variable definida arriba)
+        cell.style.padding = `${cellPadding}px`;
 
         if (isD3Spec(spec) || isSimpleViz(spec)) {
           // Guardar referencia al mapping en el contenedor para acceso desde funciones de renderizado
