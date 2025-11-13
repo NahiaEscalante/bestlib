@@ -254,18 +254,32 @@ class ReactiveMatrixLayout:
         selected_rows = selection.get_items()  # Lista de diccionarios con todas las columnas
     """
     
-    def __init__(self, ascii_layout=None, selection_model=None):
+    def __init__(self, ascii_layout=None, selection_model=None, figsize=None, row_heights=None, col_widths=None, gap=None, cell_padding=None, max_width=None):
         """
         Crea un MatrixLayout con soporte reactivo y LinkedViews integrado.
         
         Args:
             ascii_layout: Layout ASCII (opcional)
             selection_model: Instancia de SelectionModel para reactividad
+            figsize: Tamaño global de gráficos (width, height) en pulgadas o píxeles
+            row_heights: Lista de alturas por fila (px o fr)
+            col_widths: Lista de anchos por columna (px, fr, o ratios)
+            gap: Espaciado entre celdas en píxeles (default: 12px)
+            cell_padding: Padding de celdas en píxeles (default: 15px)
+            max_width: Ancho máximo del layout en píxeles (default: 1200px)
         """
         from .matrix import MatrixLayout
         
-        # Crear instancia base de MatrixLayout
-        self._layout = MatrixLayout(ascii_layout)
+        # Crear instancia base de MatrixLayout con parámetros de layout
+        self._layout = MatrixLayout(
+            ascii_layout, 
+            figsize=figsize,
+            row_heights=row_heights,
+            col_widths=col_widths,
+            gap=gap,
+            cell_padding=cell_padding,
+            max_width=max_width
+        )
         
         # Modelo reactivo
         self.selection_model = selection_model or SelectionModel()
