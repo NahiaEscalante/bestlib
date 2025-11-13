@@ -72,8 +72,8 @@
   transition: all 0.3s ease;  /* Transición suave para todos los cambios */
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); /* Sombra sutil para profundidad */
   box-sizing: border-box; /* Asegurar que border se incluya en dimensiones */
-  /* Asegurar que el contenido se ajuste correctamente */
-  padding: 8px; /* Padding interno para evitar que gráficos toquen los bordes */
+  /* 🔒 MEJORA ESTÉTICA: Padding mínimo para que gráficos ocupen casi todo el espacio */
+  padding: 4px; /* Padding reducido para maximizar espacio del gráfico */
 }
 
 /* Indicadores visuales MEJORADOS para gráficos enlazados */
@@ -160,14 +160,10 @@
 
 /* Clase para mantener aspect ratio consistente en gráficos */
 .matrix-cell svg {
+  width: 100% !important;
+  height: 100% !important;
   max-width: 100% !important;
   max-height: 100% !important;
-  width: 100% !important;
-  height: auto;
-  /* Mantener aspect ratio aproximado */
-  aspect-ratio: var(--chart-aspect-ratio);
-  min-width: var(--chart-min-width);
-  min-height: var(--chart-min-height);
   /* Mejorar calidad visual */
   shape-rendering: geometricPrecision;
   text-rendering: optimizeLegibility;
@@ -176,7 +172,9 @@
   display: block; /* Evitar espacios en blanco */
   /* Asegurar que el SVG respete los límites del contenedor */
   box-sizing: border-box;
-  object-fit: contain; /* Asegurar que el contenido se ajuste sin distorsión */
+  /* Centrar el contenido del SVG */
+  margin: 0;
+  padding: 0;
 }
 
 /* Mejoras para dashboards grandes (3x3, 4x4) */

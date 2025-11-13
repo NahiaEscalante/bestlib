@@ -1036,24 +1036,15 @@
       }
     }
     
-    // 🔒 MEJORA ESTÉTICA: Usar valores por defecto basados en el contenedor con validación
-    // Considerar padding del contenedor para evitar que gráficos se salgan
-    const containerStyle = window.getComputedStyle(container);
-    const paddingLeft = parseInt(containerStyle.paddingLeft) || 0;
-    const paddingRight = parseInt(containerStyle.paddingRight) || 0;
-    const paddingTop = parseInt(containerStyle.paddingTop) || 0;
-    const paddingBottom = parseInt(containerStyle.paddingBottom) || 0;
-    const borderLeft = parseInt(containerStyle.borderLeftWidth) || 0;
-    const borderRight = parseInt(containerStyle.borderRightWidth) || 0;
-    const borderTop = parseInt(containerStyle.borderTopWidth) || 0;
-    const borderBottom = parseInt(containerStyle.borderBottomWidth) || 0;
+    // 🔒 MEJORA ESTÉTICA: Usar TODO el espacio disponible del contenedor
+    // Obtener dimensiones reales del contenedor (sin descontar padding, ya que el SVG debe ocupar todo)
+    const containerRect = container.getBoundingClientRect();
+    const containerWidth = containerRect.width || container.clientWidth || defaultWidth;
+    const containerHeight = containerRect.height || container.clientHeight || defaultHeight;
     
-    // Calcular dimensiones disponibles (descontando padding y borders)
-    const availableWidth = (container.clientWidth || defaultWidth) - paddingLeft - paddingRight - borderLeft - borderRight;
-    const availableHeight = (container.clientHeight || defaultHeight) - paddingTop - paddingBottom - borderTop - borderBottom;
-    
-    let width = Math.max(availableWidth, 100);
-    let height = Math.max(availableHeight, 100);
+    // Usar el 100% del espacio disponible (el SVG ocupará todo el contenedor)
+    let width = Math.max(containerWidth, 100);
+    let height = Math.max(containerHeight, 100);
     
     // Validar dimensiones del contenedor
     if (width <= 0 || !isFinite(width)) {
@@ -1175,25 +1166,10 @@
     // IMPORTANTE: NO aplicar límite si no hay max_width explícito
     // Esto evita que dashboards 2x2 sin límite se vean afectados
     
-    // Asegurar dimensiones mínimas
-    width = Math.max(width, 100);
-    height = Math.max(height, 100);
-    
-    // 🔒 MEJORA ESTÉTICA: Ajustar dimensiones para evitar cortes
-    // En dashboards grandes, asegurar que los gráficos tengan suficiente espacio
-    // pero no reducir demasiado las dimensiones (causa gráficos muy pequeños)
-    const totalCells = (mapping && mapping.__row_count__ && mapping.__col_count__) 
-      ? mapping.__row_count__ * mapping.__col_count__ 
-      : 9; // Asumir dashboard grande si no hay info
-    
-    // Para dashboards grandes, usar dimensiones más conservadoras
-    if (totalCells >= 9) {
-      // En dashboards grandes, asegurar mínimo pero no reducir tanto
-      const minWidth = 180;
-      const minHeight = 140;
-      width = Math.max(width, minWidth);
-      height = Math.max(height, minHeight);
-    }
+    // 🔒 MEJORA ESTÉTICA: Asegurar dimensiones mínimas razonables para el viewBox
+    // El SVG ocupará 100% del contenedor, pero el viewBox necesita dimensiones válidas
+    width = Math.max(width, 200); // Mínimo razonable para viewBox
+    height = Math.max(height, 150); // Mínimo razonable para viewBox
     
     return { width, height };
   }
@@ -1309,11 +1285,14 @@
       }
     }
 
+    // 🔒 MEJORA ESTÉTICA: SVG debe ocupar 100% del contenedor
     const svg = d3.select(container).append('svg')
-      .attr('width', width)
-      .attr('height', height)
-      .style('overflow', 'visible')  // CRÍTICO: Permitir que el contenido se muestre fuera del área del SVG
-      .style('display', 'block'); // Evitar espacios en blanco
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
+      .style('overflow', 'visible')
+      .style('display', 'block');
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const x = d3.scaleBand().domain(xLabels).range([0, chartWidth]).padding(0.05);
@@ -1624,9 +1603,12 @@
     const x = d3.scaleLinear().domain(xExtent).nice().range([0, chartWidth]);
     const y = d3.scaleLinear().domain(yExtent).nice().range([chartHeight, 0]);
 
+    // 🔒 MEJORA ESTÉTICA: SVG debe ocupar 100% del contenedor
     const svg = d3.select(container).append('svg')
-      .attr('width', width)
-      .attr('height', height)
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
       .style('overflow', 'visible')
       .style('display', 'block'); // Evitar espacios en blanco
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
@@ -1945,9 +1927,12 @@
     
     const color = d3.scaleOrdinal(d3.schemeCategory10).domain(data.map(d => d.category));
 
+    // 🔒 MEJORA ESTÉTICA: SVG debe ocupar 100% del contenedor
     const svg = d3.select(container).append('svg')
-      .attr('width', width)
-      .attr('height', height)
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
       .style('overflow', 'visible');
     
     // Grupo principal para el pie chart (centrado a la izquierda)
@@ -2206,9 +2191,12 @@
       }
     }
 
+    // 🔒 MEJORA ESTÉTICA: SVG debe ocupar 100% del contenedor
     const svg = d3.select(container).append('svg')
-      .attr('width', width)
-      .attr('height', height)
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
       .style('overflow', 'visible')
       .style('display', 'block'); // Evitar espacios en blanco
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
@@ -2524,9 +2512,12 @@
       chartHeight = height - margin.top - margin.bottom;
     }
 
+    // 🔒 MEJORA ESTÉTICA: SVG debe ocupar 100% del contenedor
     const svg = d3.select(container).append('svg')
-      .attr('width', width)
-      .attr('height', height)
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
       .style('overflow', 'visible');
     
     // Calcular centro del gráfico
@@ -3052,9 +3043,12 @@
       return;
     }
     
+    // 🔒 MEJORA ESTÉTICA: SVG debe ocupar 100% del contenedor
     const svg = d3.select(container).append('svg')
-      .attr('width', width)
-      .attr('height', height)
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
       .style('overflow', 'visible');
     
     const g = svg.append('g')
@@ -3706,9 +3700,12 @@
       return;
     }
     
+    // 🔒 MEJORA ESTÉTICA: SVG debe ocupar 100% del contenedor
     const svg = d3.select(container).append('svg')
-      .attr('width', width)
-      .attr('height', height)
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
       .style('overflow', 'visible');
     
     const g = svg.append('g')
