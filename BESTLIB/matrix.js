@@ -400,6 +400,7 @@
             cell.classList.add('linked-primary');
             cell.setAttribute('title', `Gráfico principal (genera selecciones)`);
             cell.setAttribute('data-is-primary', 'true');
+            cell.setAttribute('data-primary-letter', letter);
           }
           
           // Si está enlazado a otro gráfico (linked_to), agregar clase linked-secondary
@@ -409,6 +410,7 @@
             cell.setAttribute('title', `Enlazado a gráfico '${linkedTo}'`);
             // Agregar atributo data para referencia
             cell.setAttribute('data-linked-to', linkedTo);
+            cell.setAttribute('data-linked-from', letter);
           }
         }
         
@@ -476,6 +478,134 @@
 
         container.appendChild(cell);
       }
+    }
+    
+    // 🔒 MEJORA ESTÉTICA: Dibujar líneas conectivas entre gráficos enlazados
+    // Esperar a que todas las celdas estén renderizadas antes de dibujar líneas
+    setTimeout(() => {
+      drawLinkConnectors(container, divId, mapping);
+    }, 150);
+  }
+  
+  /**
+   * Dibuja líneas conectivas entre gráficos enlazados para hacer claro el enlace
+   */
+  function drawLinkConnectors(container, divId, mapping) {
+    // Limpiar líneas conectivas anteriores si existen
+    const existingOverlay = container.querySelector('.link-connectors-overlay');
+    if (existingOverlay) {
+      existingOverlay.remove();
+    }
+    
+    // Crear SVG overlay para líneas conectivas
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.style.position = 'absolute';
+    svg.style.top = '0';
+    svg.style.left = '0';
+    svg.style.width = '100%';
+    svg.style.height = '100%';
+    svg.style.pointerEvents = 'none';
+    svg.style.zIndex = '1';
+    svg.setAttribute('class', 'link-connectors-overlay');
+    
+    // Obtener todas las celdas enlazadas
+    const primaryCells = container.querySelectorAll('.matrix-cell[data-is-primary="true"]');
+    const secondaryCells = container.querySelectorAll('.matrix-cell[data-linked-to]');
+    
+    if (primaryCells.length === 0 || secondaryCells.length === 0) {
+      return; // No hay enlaces para dibujar
+    }
+    
+    // Para cada celda secundaria, dibujar línea a su celda principal
+    secondaryCells.forEach(secondaryCell => {
+      const linkedToLetter = secondaryCell.getAttribute('data-linked-to');
+      const primaryCell = Array.from(primaryCells).find(cell => 
+        cell.getAttribute('data-primary-letter') === linkedToLetter
+      );
+      
+      if (primaryCell) {
+        // Obtener posiciones de ambas celdas
+        const primaryRect = primaryCell.getBoundingClientRect();
+        const secondaryRect = secondaryCell.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        
+        // Calcular posiciones relativas al contenedor (considerando padding)
+        const primaryX = primaryRect.left + primaryRect.width / 2 - containerRect.left;
+        const primaryY = primaryRect.top + primaryRect.height / 2 - containerRect.top;
+        const secondaryX = secondaryRect.left + secondaryRect.width / 2 - containerRect.left;
+        const secondaryY = secondaryRect.top + secondaryRect.height / 2 - containerRect.top;
+        
+        // Crear línea conectora
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', primaryX);
+        line.setAttribute('y1', primaryY);
+        line.setAttribute('x2', secondaryX);
+        line.setAttribute('y2', secondaryY);
+        line.setAttribute('class', 'link-connector');
+        line.setAttribute('stroke', '#2563eb');
+        line.setAttribute('stroke-width', '3');
+        line.setAttribute('stroke-dasharray', '8,4');
+        line.setAttribute('opacity', '0.7');
+        line.setAttribute('marker-end', 'url(#arrowhead)');
+        
+        svg.appendChild(line);
+        
+        // Agregar etiqueta en el punto medio
+        const midX = (primaryX + secondaryX) / 2;
+        const midY = (primaryY + secondaryY) / 2;
+        
+        const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        
+        labelText.setAttribute('x', midX);
+        labelText.setAttribute('y', midY);
+        labelText.setAttribute('text-anchor', 'middle');
+        labelText.setAttribute('class', 'link-label');
+        labelText.setAttribute('fill', '#2563eb');
+        labelText.setAttribute('font-size', '11px');
+        labelText.setAttribute('font-weight', 'bold');
+        labelText.setAttribute('opacity', '1');
+        labelText.textContent = `→ ${linkedToLetter}`;
+        
+        // Calcular tamaño del texto para el fondo
+        const textLength = labelText.textContent.length;
+        const bgWidth = textLength * 7 + 8;
+        const bgHeight = 16;
+        
+        labelBg.setAttribute('x', midX - bgWidth / 2);
+        labelBg.setAttribute('y', midY - bgHeight / 2);
+        labelBg.setAttribute('width', bgWidth);
+        labelBg.setAttribute('height', bgHeight);
+        labelBg.setAttribute('fill', 'white');
+        labelBg.setAttribute('opacity', '0.95');
+        labelBg.setAttribute('rx', '4');
+        labelBg.setAttribute('stroke', '#2563eb');
+        labelBg.setAttribute('stroke-width', '1.5');
+        
+        svg.insertBefore(labelBg, labelText);
+        svg.appendChild(labelText);
+      }
+    });
+    
+    // Agregar definición de flecha para las líneas
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    marker.setAttribute('id', 'arrowhead');
+    marker.setAttribute('markerWidth', '10');
+    marker.setAttribute('markerHeight', '10');
+    marker.setAttribute('refX', '9');
+    marker.setAttribute('refY', '3');
+    marker.setAttribute('orient', 'auto');
+    const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    polygon.setAttribute('points', '0 0, 10 3, 0 6');
+    polygon.setAttribute('fill', '#2563eb');
+    marker.appendChild(polygon);
+    defs.appendChild(marker);
+    svg.insertBefore(defs, svg.firstChild);
+    
+    // Agregar SVG al contenedor si hay líneas
+    if (svg.children.length > 1) { // Más que solo defs
+      container.appendChild(svg);
     }
   }
   

@@ -4,21 +4,23 @@
   --matrix-max-width: 1200px;
   --matrix-cell-padding: 15px;
   --matrix-cell-min-height: 350px;
-  --matrix-cell-border-radius: 6px;
-  --matrix-cell-border-color: #ddd;
-  --matrix-cell-background: white;
-  --matrix-cell-inner-background: #f8f9fa;
-  --matrix-cell-inner-border-color: #bbb;
-  --matrix-font-family: sans-serif;
+  --matrix-cell-border-radius: 8px;
+  --matrix-cell-border-color: #e0e0e0;
+  --matrix-cell-background: #ffffff;
+  --matrix-cell-inner-background: #fafafa;
+  --matrix-cell-inner-border-color: #e0e0e0;
+  --matrix-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --matrix-font-size: 14px;
   
-  /* Variables para indicadores de enlace */
-  --link-primary-color: #3498db;
-  --link-secondary-color: #e74c3c;
-  --link-border-width: 3px;
+  /* Variables para indicadores de enlace - MÁS VISIBLES */
+  --link-primary-color: #2563eb;
+  --link-secondary-color: #dc2626;
+  --link-border-width: 4px;
   --link-border-style: solid;
-  --link-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
-  --link-hover-shadow: 0 4px 12px rgba(52, 152, 219, 0.5);
+  --link-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+  --link-hover-shadow: 0 6px 16px rgba(37, 99, 235, 0.6);
+  --link-connector-color: #2563eb;
+  --link-connector-width: 3px;
   
   /* Aspect ratio por defecto para gráficos */
   --chart-aspect-ratio: 1.3; /* width/height */
@@ -32,6 +34,8 @@
   width: 100%;
   max-width: var(--matrix-max-width);
   margin: 0 auto;
+  position: relative; /* Para líneas conectivas */
+  padding: 4px; /* Espacio para líneas conectivas */
 }
 
 .matrix-layout > div {
@@ -48,7 +52,7 @@
 }
 
 .matrix-cell {
-  border: 1px solid var(--matrix-cell-inner-border-color);
+  border: 2px solid var(--matrix-cell-inner-border-color);
   background: var(--matrix-cell-inner-background);
   display: flex;
   justify-content: center;
@@ -56,79 +60,125 @@
   font-family: var(--matrix-font-family);
   font-size: var(--matrix-font-size);
   border-radius: var(--matrix-cell-border-radius);
-  overflow: visible;  /* Asegurar que el contenido no se corte */
+  overflow: visible;  /* Asegurar que el contenido no se corte - IMPORTANTE para líneas conectivas */
   min-height: 320px;  /* Aumentado para acomodar gráficos completos con ejes */
   width: 100%;  /* Asegurar que ocupe todo el ancho disponible */
   height: 100%;  /* Asegurar que ocupe toda la altura disponible */
   position: relative;  /* Para posicionar indicadores de enlace */
-  transition: box-shadow 0.3s ease, border-color 0.3s ease;  /* Transición suave */
+  transition: all 0.3s ease;  /* Transición suave para todos los cambios */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); /* Sombra sutil para profundidad */
 }
 
-/* Indicadores visuales para gráficos enlazados */
+/* Indicadores visuales MEJORADOS para gráficos enlazados */
 .matrix-cell.linked-primary {
-  border: var(--link-border-width) var(--link-border-style) var(--link-primary-color);
-  box-shadow: var(--link-shadow);
+  border: var(--link-border-width) var(--link-border-style) var(--link-primary-color) !important;
+  box-shadow: var(--link-shadow), inset 0 0 0 1px rgba(37, 99, 235, 0.1);
+  background: linear-gradient(to bottom, rgba(37, 99, 235, 0.03), var(--matrix-cell-inner-background));
 }
 
 .matrix-cell.linked-primary::before {
-  content: '🔗';
+  content: 'LINKED';
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 6px;
+  right: 6px;
   background: var(--link-primary-color);
   color: white;
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  z-index: 10;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  z-index: 100;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.5);
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .matrix-cell.linked-secondary {
-  border: var(--link-border-width) var(--link-border-style) var(--link-secondary-color);
-  box-shadow: var(--link-shadow);
+  border: var(--link-border-width) var(--link-border-style) var(--link-secondary-color) !important;
+  box-shadow: var(--link-shadow), inset 0 0 0 1px rgba(220, 38, 38, 0.1);
+  background: linear-gradient(to bottom, rgba(220, 38, 38, 0.03), var(--matrix-cell-inner-background));
 }
 
 .matrix-cell.linked-secondary::after {
-  content: '←';
+  content: 'ENLACADO';
   position: absolute;
-  top: 8px;
-  left: 8px;
+  top: 6px;
+  left: 6px;
   background: var(--link-secondary-color);
   color: white;
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  font-weight: bold;
-  z-index: 10;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  z-index: 100;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.5);
+  text-transform: uppercase;
+  white-space: nowrap;
   animation: pulse-link 2s ease-in-out infinite;
 }
 
-/* Animación para indicador de enlace */
+/* Animación mejorada para indicador de enlace */
 @keyframes pulse-link {
   0%, 100% {
     opacity: 1;
     transform: scale(1);
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.5);
   }
   50% {
-    opacity: 0.7;
-    transform: scale(0.95);
+    opacity: 0.85;
+    transform: scale(1.02);
+    box-shadow: 0 3px 10px rgba(220, 38, 38, 0.7);
   }
 }
 
-/* Efecto hover para gráficos enlazados */
-.matrix-cell.linked-primary:hover,
+/* Efecto hover mejorado para gráficos enlazados */
+.matrix-cell.linked-primary:hover {
+  box-shadow: var(--link-hover-shadow), inset 0 0 0 1px rgba(37, 99, 235, 0.2);
+  transform: translateY(-1px);
+}
+
 .matrix-cell.linked-secondary:hover {
-  box-shadow: var(--link-hover-shadow);
+  box-shadow: var(--link-hover-shadow), inset 0 0 0 1px rgba(220, 38, 38, 0.2);
+  transform: translateY(-1px);
+}
+
+/* Línea conectiva entre gráficos enlazados */
+.link-connector {
+  position: absolute;
+  z-index: 50;
+  pointer-events: none;
+  stroke: var(--link-connector-color);
+  stroke-width: var(--link-connector-width);
+  stroke-dasharray: 5, 5;
+  fill: none;
+  animation: dash-animation 2s linear infinite;
+  filter: drop-shadow(0 2px 4px rgba(37, 99, 235, 0.3));
+}
+
+@keyframes dash-animation {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 20;
+  }
+}
+
+/* Etiqueta en línea conectiva */
+.link-label {
+  position: absolute;
+  background: var(--link-primary-color);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  z-index: 51;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 /* Clase para mantener aspect ratio consistente en gráficos */
@@ -139,6 +189,9 @@
   aspect-ratio: var(--chart-aspect-ratio);
   min-width: var(--chart-min-width);
   min-height: var(--chart-min-height);
+  /* Mejorar calidad visual */
+  shape-rendering: geometricPrecision;
+  text-rendering: optimizeLegibility;
 }
 
 /* Mejoras para dashboards grandes (3x3, 4x4) */
@@ -146,13 +199,38 @@
   /* Cuando hay 9 o más celdas, optimizar tamaños */
   --matrix-cell-min-height: 280px;
   --matrix-cell-padding: 12px;
-  /* Reducir tamaño de indicadores para dashboards grandes */
+  --matrix-gap: 10px;
+  /* Mejor espaciado para dashboards grandes */
+}
+
+.matrix-layout:has(> div:nth-child(9)) > div {
+  /* Mejor aspecto visual para dashboards grandes */
+  border: 1.5px solid var(--matrix-cell-border-color);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell {
+  /* Mejor contraste en celdas grandes */
+  border: 2px solid var(--matrix-cell-inner-border-color);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .matrix-layout:has(> div:nth-child(12)) {
   /* Cuando hay 12 o más celdas, reducir aún más */
   --matrix-cell-min-height: 240px;
   --matrix-cell-padding: 10px;
+  --matrix-gap: 8px;
+}
+
+.matrix-layout:has(> div:nth-child(12)) > div {
+  /* Optimización adicional para dashboards muy grandes */
+  border: 1px solid var(--matrix-cell-border-color);
+}
+
+.matrix-layout:has(> div:nth-child(12)) .matrix-cell {
+  border: 1.5px solid var(--matrix-cell-inner-border-color);
+  background: #ffffff;
 }
 
 /* Asegurar que los indicadores de enlace sean visibles */
@@ -162,19 +240,17 @@
   user-select: none;
 }
 
-/* Ajustar tamaño de indicadores en dashboards grandes */
+/* Ajustar tamaño de indicadores en dashboards grandes - mantener legibilidad */
 .matrix-layout:has(> div:nth-child(9)) .matrix-cell.linked-primary::before,
 .matrix-layout:has(> div:nth-child(9)) .matrix-cell.linked-secondary::after {
-  width: 24px;
-  height: 24px;
-  font-size: 12px;
+  padding: 3px 6px;
+  font-size: 9px;
 }
 
 .matrix-layout:has(> div:nth-child(12)) .matrix-cell.linked-primary::before,
 .matrix-layout:has(> div:nth-child(12)) .matrix-cell.linked-secondary::after {
-  width: 20px;
-  height: 20px;
-  font-size: 10px;
+  padding: 2px 5px;
+  font-size: 8px;
 }
 
 /* Contenedor de gráfico con aspect ratio controlado */
@@ -191,6 +267,18 @@
   width: 100%;
   height: auto;
   max-height: 100%;
+}
+
+/* Mejorar legibilidad en dashboards grandes */
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell svg {
+  /* Asegurar que los gráficos se vean bien en dashboards grandes */
+  min-width: 200px;
+  min-height: 150px;
+}
+
+.matrix-layout:has(> div:nth-child(12)) .matrix-cell svg {
+  min-width: 180px;
+  min-height: 130px;
 }
 
 /* Media queries para responsividad */
@@ -213,3 +301,4 @@
     --matrix-cell-min-height: 250px;
   }
 }
+
