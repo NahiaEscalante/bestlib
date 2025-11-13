@@ -744,6 +744,23 @@
       height = defaultHeight;
     }
     
+    // CRÍTICO: Limitar el ancho máximo para prevenir expansión excesiva
+    // Si el contenedor padre tiene max-width, respetar ese límite
+    if (mapping && mapping.__max_width__) {
+      const maxWidth = parseInt(mapping.__max_width__);
+      if (!isNaN(maxWidth) && isFinite(maxWidth) && maxWidth > 0) {
+        // Calcular ancho máximo por celda (max_width / num_columnas - padding)
+        // Asumimos un grid típico de 3 columnas para dashboards
+        const estimatedMaxCellWidth = (maxWidth / 3) - 40; // 40px para gap y padding
+        width = Math.min(width, estimatedMaxCellWidth);
+      }
+    }
+    
+    // Si el ancho es excesivamente grande, limitarlo a un máximo razonable
+    // Esto previene expansión infinita en contenedores muy anchos
+    const absoluteMaxWidth = 600; // Máximo absoluto para un gráfico individual
+    width = Math.min(width, absoluteMaxWidth);
+    
     // Asegurar dimensiones mínimas
     width = Math.max(width, 100);
     height = Math.max(height, 100);
