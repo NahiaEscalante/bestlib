@@ -398,19 +398,31 @@
           
           if (isPrimary) {
             cell.classList.add('linked-primary');
-            cell.setAttribute('title', `Gráfico principal (genera selecciones)`);
+            cell.setAttribute('title', `Gráfico principal '${letter}' (genera selecciones)`);
             cell.setAttribute('data-is-primary', 'true');
             cell.setAttribute('data-primary-letter', letter);
+            // Agregar etiqueta visual con la letra del gráfico
+            const label = document.createElement('div');
+            label.className = 'link-primary-label';
+            label.textContent = `${letter} (LINKED)`;
+            label.style.cssText = 'position: absolute; top: 6px; right: 6px; background: #2563eb; color: white; border-radius: 6px; padding: 4px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; z-index: 100; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.5); text-transform: uppercase; white-space: nowrap; pointer-events: none;';
+            cell.appendChild(label);
           }
           
           // Si está enlazado a otro gráfico (linked_to), agregar clase linked-secondary
           if (spec.__linked_to__) {
             cell.classList.add('linked-secondary');
             const linkedTo = spec.__linked_to__;
-            cell.setAttribute('title', `Enlazado a gráfico '${linkedTo}'`);
+            cell.setAttribute('title', `Gráfico '${letter}' enlazado a '${linkedTo}'`);
             // Agregar atributo data para referencia
             cell.setAttribute('data-linked-to', linkedTo);
             cell.setAttribute('data-linked-from', letter);
+            // Agregar etiqueta visual con ambas letras
+            const label = document.createElement('div');
+            label.className = 'link-secondary-label';
+            label.textContent = `${letter} ← ${linkedTo}`;
+            label.style.cssText = 'position: absolute; top: 6px; left: 6px; background: #dc2626; color: white; border-radius: 6px; padding: 4px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; z-index: 100; box-shadow: 0 2px 6px rgba(220, 38, 38, 0.5); text-transform: uppercase; white-space: nowrap; pointer-events: none; animation: pulse-link 2s ease-in-out infinite;';
+            cell.appendChild(label);
           }
         }
         
@@ -489,6 +501,7 @@
   
   /**
    * Dibuja líneas conectivas entre gráficos enlazados para hacer claro el enlace
+   * MEJORADO: Muestra claramente qué gráfico está enlazado con cuál
    */
   function drawLinkConnectors(container, divId, mapping) {
     // Limpiar líneas conectivas anteriores si existen
@@ -496,6 +509,24 @@
     if (existingOverlay) {
       existingOverlay.remove();
     }
+    
+    // Obtener todas las celdas enlazadas
+    const primaryCells = container.querySelectorAll('.matrix-cell[data-is-primary="true"]');
+    const secondaryCells = container.querySelectorAll('.matrix-cell[data-linked-to]');
+    
+    if (primaryCells.length === 0 || secondaryCells.length === 0) {
+      return; // No hay enlaces para dibujar
+    }
+    
+    // Colores diferentes para cada par de enlaces (para distinguir múltiples enlaces)
+    const linkColors = [
+      '#2563eb', // Azul
+      '#dc2626', // Rojo
+      '#16a34a', // Verde
+      '#ca8a04', // Amarillo
+      '#9333ea', // Púrpura
+      '#ea580c', // Naranja
+    ];
     
     // Crear SVG overlay para líneas conectivas
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -506,24 +537,39 @@
     svg.style.height = '100%';
     svg.style.pointerEvents = 'none';
     svg.style.zIndex = '1';
+    svg.style.overflow = 'visible';
     svg.setAttribute('class', 'link-connectors-overlay');
     
-    // Obtener todas las celdas enlazadas
-    const primaryCells = container.querySelectorAll('.matrix-cell[data-is-primary="true"]');
-    const secondaryCells = container.querySelectorAll('.matrix-cell[data-linked-to]');
-    
-    if (primaryCells.length === 0 || secondaryCells.length === 0) {
-      return; // No hay enlaces para dibujar
-    }
+    // Crear definiciones de flechas para cada color
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     
     // Para cada celda secundaria, dibujar línea a su celda principal
-    secondaryCells.forEach(secondaryCell => {
+    secondaryCells.forEach((secondaryCell, index) => {
       const linkedToLetter = secondaryCell.getAttribute('data-linked-to');
+      const linkedFromLetter = secondaryCell.getAttribute('data-linked-from') || secondaryCell.getAttribute('data-letter');
       const primaryCell = Array.from(primaryCells).find(cell => 
         cell.getAttribute('data-primary-letter') === linkedToLetter
       );
       
       if (primaryCell) {
+        // Usar color diferente para cada enlace (cíclico)
+        const linkColor = linkColors[index % linkColors.length];
+        const markerId = `arrowhead-${index}`;
+        
+        // Crear marcador de flecha para este color
+        const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+        marker.setAttribute('id', markerId);
+        marker.setAttribute('markerWidth', '10');
+        marker.setAttribute('markerHeight', '10');
+        marker.setAttribute('refX', '9');
+        marker.setAttribute('refY', '3');
+        marker.setAttribute('orient', 'auto');
+        const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        polygon.setAttribute('points', '0 0, 10 3, 0 6');
+        polygon.setAttribute('fill', linkColor);
+        marker.appendChild(polygon);
+        defs.appendChild(marker);
+        
         // Obtener posiciones de ambas celdas
         const primaryRect = primaryCell.getBoundingClientRect();
         const secondaryRect = secondaryCell.getBoundingClientRect();
@@ -542,66 +588,62 @@
         line.setAttribute('x2', secondaryX);
         line.setAttribute('y2', secondaryY);
         line.setAttribute('class', 'link-connector');
-        line.setAttribute('stroke', '#2563eb');
-        line.setAttribute('stroke-width', '3');
-        line.setAttribute('stroke-dasharray', '8,4');
-        line.setAttribute('opacity', '0.7');
-        line.setAttribute('marker-end', 'url(#arrowhead)');
+        line.setAttribute('stroke', linkColor);
+        line.setAttribute('stroke-width', '4');
+        line.setAttribute('stroke-dasharray', '10,5');
+        line.setAttribute('opacity', '0.8');
+        line.setAttribute('marker-end', `url(#${markerId})`);
+        line.setAttribute('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))');
         
         svg.appendChild(line);
         
-        // Agregar etiqueta en el punto medio
+        // Agregar etiqueta CLARA en el punto medio mostrando AMBAS letras
         const midX = (primaryX + secondaryX) / 2;
         const midY = (primaryY + secondaryY) / 2;
+        
+        // Calcular ángulo de la línea para rotar la etiqueta
+        const angle = Math.atan2(secondaryY - primaryY, secondaryX - primaryX) * 180 / Math.PI;
         
         const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         
+        // Etiqueta que muestra AMBAS letras: "A → X"
+        const labelTextContent = `${linkedToLetter} → ${linkedFromLetter}`;
         labelText.setAttribute('x', midX);
         labelText.setAttribute('y', midY);
         labelText.setAttribute('text-anchor', 'middle');
         labelText.setAttribute('class', 'link-label');
-        labelText.setAttribute('fill', '#2563eb');
-        labelText.setAttribute('font-size', '11px');
+        labelText.setAttribute('fill', linkColor);
+        labelText.setAttribute('font-size', '12px');
         labelText.setAttribute('font-weight', 'bold');
         labelText.setAttribute('opacity', '1');
-        labelText.textContent = `→ ${linkedToLetter}`;
+        labelText.textContent = labelTextContent;
         
         // Calcular tamaño del texto para el fondo
-        const textLength = labelText.textContent.length;
-        const bgWidth = textLength * 7 + 8;
-        const bgHeight = 16;
+        const textLength = labelTextContent.length;
+        const bgWidth = textLength * 8 + 12;
+        const bgHeight = 18;
         
         labelBg.setAttribute('x', midX - bgWidth / 2);
         labelBg.setAttribute('y', midY - bgHeight / 2);
         labelBg.setAttribute('width', bgWidth);
         labelBg.setAttribute('height', bgHeight);
         labelBg.setAttribute('fill', 'white');
-        labelBg.setAttribute('opacity', '0.95');
-        labelBg.setAttribute('rx', '4');
-        labelBg.setAttribute('stroke', '#2563eb');
-        labelBg.setAttribute('stroke-width', '1.5');
+        labelBg.setAttribute('opacity', '0.98');
+        labelBg.setAttribute('rx', '6');
+        labelBg.setAttribute('stroke', linkColor);
+        labelBg.setAttribute('stroke-width', '2');
+        labelBg.setAttribute('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))');
         
         svg.insertBefore(labelBg, labelText);
         svg.appendChild(labelText);
       }
     });
     
-    // Agregar definición de flecha para las líneas
-    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-    marker.setAttribute('id', 'arrowhead');
-    marker.setAttribute('markerWidth', '10');
-    marker.setAttribute('markerHeight', '10');
-    marker.setAttribute('refX', '9');
-    marker.setAttribute('refY', '3');
-    marker.setAttribute('orient', 'auto');
-    const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    polygon.setAttribute('points', '0 0, 10 3, 0 6');
-    polygon.setAttribute('fill', '#2563eb');
-    marker.appendChild(polygon);
-    defs.appendChild(marker);
-    svg.insertBefore(defs, svg.firstChild);
+    // Agregar defs al inicio del SVG
+    if (defs.children.length > 0) {
+      svg.insertBefore(defs, svg.firstChild);
+    }
     
     // Agregar SVG al contenedor si hay líneas
     if (svg.children.length > 1) { // Más que solo defs
@@ -1078,11 +1120,23 @@
     width = Math.max(width, 100);
     height = Math.max(height, 100);
     
-    // Ajustar altura disponible considerando padding
-    const availableHeight = Math.max(height - 30, defaultHeight - 30);
-    const finalHeight = Math.min(availableHeight, defaultHeight);
+    // 🔒 MEJORA ESTÉTICA: Ajustar dimensiones para evitar cortes
+    // En dashboards grandes, asegurar que los gráficos tengan suficiente espacio
+    // pero no reducir demasiado las dimensiones (causa gráficos muy pequeños)
+    const totalCells = (mapping && mapping.__row_count__ && mapping.__col_count__) 
+      ? mapping.__row_count__ * mapping.__col_count__ 
+      : 9; // Asumir dashboard grande si no hay info
     
-    return { width, height: finalHeight };
+    // Para dashboards grandes, usar dimensiones más conservadoras
+    if (totalCells >= 9) {
+      // En dashboards grandes, asegurar mínimo pero no reducir tanto
+      const minWidth = 180;
+      const minHeight = 140;
+      width = Math.max(width, minWidth);
+      height = Math.max(height, minHeight);
+    }
+    
+    return { width, height };
   }
   
   /**
@@ -1199,7 +1253,8 @@
     const svg = d3.select(container).append('svg')
       .attr('width', width)
       .attr('height', height)
-      .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
+      .style('overflow', 'visible')  // CRÍTICO: Permitir que el contenido se muestre fuera del área del SVG
+      .style('display', 'block'); // Evitar espacios en blanco
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const x = d3.scaleBand().domain(xLabels).range([0, chartWidth]).padding(0.05);
@@ -1513,7 +1568,8 @@
     const svg = d3.select(container).append('svg')
       .attr('width', width)
       .attr('height', height)
-      .style('overflow', 'visible');
+      .style('overflow', 'visible')
+      .style('display', 'block'); // Evitar espacios en blanco
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const color = d3.scaleOrdinal(d3.schemeCategory10).domain(seriesNames);
@@ -2079,7 +2135,8 @@
     const svg = d3.select(container).append('svg')
       .attr('width', width)
       .attr('height', height)
-      .style('overflow', 'visible');
+      .style('overflow', 'visible')
+      .style('display', 'block'); // Evitar espacios en blanco
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const categories = validViolins.map(v => String(v.category || 'Unknown'));
