@@ -360,6 +360,22 @@
         cell.style.gridRow = `${r + 1} / span ${height}`;
         cell.style.gridColumn = `${c + 1} / span ${width}`;
         
+        // Agregar clases CSS para indicadores de enlace visual
+        if (spec && typeof spec === 'object') {
+          // Si es un gráfico principal (genera selecciones), agregar clase linked-primary
+          if (spec.__scatter_letter__ && spec.__scatter_letter__ === letter) {
+            cell.classList.add('linked-primary');
+            cell.setAttribute('title', `Gráfico principal (genera selecciones)`);
+          }
+          // Si está enlazado a otro gráfico (linked_to), agregar clase linked-secondary
+          if (spec.__linked_to__) {
+            cell.classList.add('linked-secondary');
+            cell.setAttribute('title', `Enlazado a gráfico '${spec.__linked_to__}'`);
+            // Agregar atributo data para referencia
+            cell.setAttribute('data-linked-to', spec.__linked_to__);
+          }
+        }
+        
         // Aplicar padding personalizado si existe
         if (mapping.__cell_padding__ !== undefined) {
           cell.style.padding = `${mapping.__cell_padding__}px`;
@@ -701,6 +717,9 @@
    * Incluye validación para asegurar dimensiones válidas
    */
   function getChartDimensions(container, spec, defaultWidth, defaultHeight) {
+    // Aspect ratio por defecto (width/height) para mantener proporciones consistentes
+    const DEFAULT_ASPECT_RATIO = 1.3; // Ancho 30% más grande que alto
+    
     // Validar que el contenedor exista
     if (!container) {
       console.warn('[BESTLIB] Contenedor no encontrado, usando dimensiones por defecto');
@@ -709,12 +728,25 @@
     
     // Si hay figsize en el spec, validarlo y usarlo
     if (spec.figsize && Array.isArray(spec.figsize) && spec.figsize.length === 2) {
-      const width = Math.max(parseInt(spec.figsize[0]) || defaultWidth, 100);
-      const height = Math.max(parseInt(spec.figsize[1]) || defaultHeight, 100);
+      let width = Math.max(parseInt(spec.figsize[0]) || defaultWidth, 100);
+      let height = Math.max(parseInt(spec.figsize[1]) || defaultHeight, 100);
       if (isNaN(width) || isNaN(height) || !isFinite(width) || !isFinite(height)) {
         console.warn('[BESTLIB] Dimensiones inválidas en figsize, usando valores por defecto');
-        return { width: defaultWidth, height: defaultHeight };
+        width = defaultWidth;
+        height = defaultHeight;
       }
+      
+      // Ajustar para mantener aspect ratio si es necesario
+      const aspectRatio = spec.aspectRatio !== undefined ? parseFloat(spec.aspectRatio) : DEFAULT_ASPECT_RATIO;
+      if (aspectRatio > 0) {
+        // Ajustar altura para mantener aspect ratio
+        const idealHeight = width / aspectRatio;
+        if (Math.abs(idealHeight - height) / height > 0.2) {
+          // Si la diferencia es mayor al 20%, ajustar
+          height = idealHeight;
+        }
+      }
+      
       return { width, height };
     }
     
@@ -766,6 +798,30 @@
     if (height <= 0 || !isFinite(height)) {
       console.warn('[BESTLIB] Altura del contenedor inválida:', height, 'usando valor por defecto');
       height = defaultHeight;
+    }
+    
+    // 🔒 MEJORA ESTÉTICA: Mantener aspect ratio consistente
+    // Calcular aspect ratio basado en el tamaño del contenedor o usar el del spec
+    let aspectRatio = DEFAULT_ASPECT_RATIO;
+    if (spec.aspectRatio !== undefined) {
+      aspectRatio = parseFloat(spec.aspectRatio);
+    } else if (mapping && mapping.__aspect_ratio__) {
+      aspectRatio = parseFloat(mapping.__aspect_ratio__);
+    }
+    
+    // Ajustar dimensiones para mantener aspect ratio, pero respetar los límites del contenedor
+    if (aspectRatio > 0 && isFinite(aspectRatio)) {
+      const containerAspectRatio = width / height;
+      
+      // Si el contenedor es mucho más ancho o más alto, ajustar para mantener proporciones
+      if (containerAspectRatio > aspectRatio * 1.2) {
+        // Contenedor demasiado ancho: ajustar ancho basado en altura
+        width = height * aspectRatio;
+      } else if (containerAspectRatio < aspectRatio * 0.8) {
+        // Contenedor demasiado alto: ajustar altura basado en ancho
+        height = width / aspectRatio;
+      }
+      // Si está dentro de un rango razonable (20%), mantener dimensiones del contenedor
     }
     
     // 🔒 CRÍTICO: Si hay max-width CSS, usarlo como límite ABSOLUTO del contenedor

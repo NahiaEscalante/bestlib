@@ -11,6 +11,19 @@
   --matrix-cell-inner-border-color: #bbb;
   --matrix-font-family: sans-serif;
   --matrix-font-size: 14px;
+  
+  /* Variables para indicadores de enlace */
+  --link-primary-color: #3498db;
+  --link-secondary-color: #e74c3c;
+  --link-border-width: 3px;
+  --link-border-style: solid;
+  --link-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+  --link-hover-shadow: 0 4px 12px rgba(52, 152, 219, 0.5);
+  
+  /* Aspect ratio por defecto para gráficos */
+  --chart-aspect-ratio: 1.3; /* width/height */
+  --chart-min-width: 250px;
+  --chart-min-height: 200px;
 }
 
 .matrix-layout {
@@ -47,6 +60,114 @@
   min-height: 320px;  /* Aumentado para acomodar gráficos completos con ejes */
   width: 100%;  /* Asegurar que ocupe todo el ancho disponible */
   height: 100%;  /* Asegurar que ocupe toda la altura disponible */
+  position: relative;  /* Para posicionar indicadores de enlace */
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;  /* Transición suave */
+}
+
+/* Indicadores visuales para gráficos enlazados */
+.matrix-cell.linked-primary {
+  border: var(--link-border-width) var(--link-border-style) var(--link-primary-color);
+  box-shadow: var(--link-shadow);
+}
+
+.matrix-cell.linked-primary::before {
+  content: '🔗';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--link-primary-color);
+  color: white;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.matrix-cell.linked-secondary {
+  border: var(--link-border-width) var(--link-border-style) var(--link-secondary-color);
+  box-shadow: var(--link-shadow);
+}
+
+.matrix-cell.linked-secondary::after {
+  content: '←';
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: var(--link-secondary-color);
+  color: white;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  animation: pulse-link 2s ease-in-out infinite;
+}
+
+/* Animación para indicador de enlace */
+@keyframes pulse-link {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(0.95);
+  }
+}
+
+/* Efecto hover para gráficos enlazados */
+.matrix-cell.linked-primary:hover,
+.matrix-cell.linked-secondary:hover {
+  box-shadow: var(--link-hover-shadow);
+}
+
+/* Clase para mantener aspect ratio consistente en gráficos */
+.matrix-cell svg {
+  max-width: 100%;
+  height: auto;
+  /* Mantener aspect ratio aproximado */
+  aspect-ratio: var(--chart-aspect-ratio);
+  min-width: var(--chart-min-width);
+  min-height: var(--chart-min-height);
+}
+
+/* Mejoras para dashboards grandes (3x3, 4x4) */
+.matrix-layout:has(> div:nth-child(9)) {
+  /* Cuando hay 9 o más celdas, optimizar tamaños */
+  --matrix-cell-min-height: 280px;
+  --matrix-cell-padding: 12px;
+}
+
+.matrix-layout:has(> div:nth-child(12)) {
+  /* Cuando hay 12 o más celdas, reducir aún más */
+  --matrix-cell-min-height: 240px;
+  --matrix-cell-padding: 10px;
+}
+
+/* Contenedor de gráfico con aspect ratio controlado */
+.chart-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.chart-container svg {
+  width: 100%;
+  height: auto;
+  max-height: 100%;
 }
 
 /* Media queries para responsividad */

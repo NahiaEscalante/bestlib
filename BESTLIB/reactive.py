@@ -595,6 +595,9 @@ class ReactiveMatrixLayout:
             
             # Guardar el enlace
             self._barchart_to_scatter[letter] = primary_letter
+            
+            # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
+            kwargs['__linked_to__'] = primary_letter
         
         # Crear bar chart inicial con todos los datos
         MatrixLayout.map_barchart(
@@ -604,6 +607,11 @@ class ReactiveMatrixLayout:
             value_col=value_col,
             **kwargs
         )
+        
+        # Asegurar que __linked_to__ esté en el spec guardado (por si map_barchart no lo copió)
+        if not is_primary and linked_to:
+            if letter in MatrixLayout._map:
+                MatrixLayout._map[letter]['__linked_to__'] = linked_to
         
         # Registrar vista para sistema de enlace
         view_id = f"barchart_{letter}"
@@ -1283,6 +1291,9 @@ class ReactiveMatrixLayout:
                 # Si linked_to está especificado pero no existe, lanzar error
                 raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
             
+            # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
+            kwargs['__linked_to__'] = primary_letter
+            
             # Guardar parámetros
             hist_params = {
                 'letter': letter,
@@ -1606,6 +1617,11 @@ class ReactiveMatrixLayout:
         
         # Crear histograma inicial con todos los datos
         MatrixLayout.map_histogram(letter, self._data, value_col=column, bins=bins, **kwargs)
+        
+        # Asegurar que __linked_to__ esté en el spec guardado (por si map_histogram no lo copió)
+        if not is_primary and linked_to:
+            if letter in MatrixLayout._map:
+                MatrixLayout._map[letter]['__linked_to__'] = linked_to
         
         return self
     
@@ -2314,6 +2330,11 @@ class ReactiveMatrixLayout:
         # Crear pie chart inicial con todos los datos
         MatrixLayout.map_pie(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
         
+        # Asegurar que __linked_to__ esté en el spec guardado (por si map_pie no lo copió)
+        if not is_primary and linked_to:
+            if letter in MatrixLayout._map:
+                MatrixLayout._map[letter]['__linked_to__'] = linked_to
+        
         # Si es vista enlazada, configurar callback
         if not is_primary:
             # CRÍTICO: Si linked_to es None, NO enlazar automáticamente (gráfico estático)
@@ -2331,6 +2352,9 @@ class ReactiveMatrixLayout:
             else:
                 # Si linked_to está especificado pero no existe, lanzar error
                 raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
+            
+            # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
+            kwargs['__linked_to__'] = primary_letter
             
             # Flag para evitar actualizaciones recursivas del pie chart
             pie_update_flag = f'_pie_updating_{letter}'
