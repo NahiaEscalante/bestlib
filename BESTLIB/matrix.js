@@ -5504,4 +5504,5 @@
 
   // Exponer funciones globalmente
   global.render = render;
+  global.getChartDimensions = getChartDimensions; // Exponer para uso en updates de gráficos enlazados
 })(window);

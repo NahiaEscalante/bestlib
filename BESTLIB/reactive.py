@@ -747,6 +747,13 @@ class ReactiveMatrixLayout:
                             }}
                         }}
                         
+                        // CRÍTICO: Calcular dimensiones una sola vez de manera consistente
+                        const dims = window.getChartDimensions ? 
+                            window.getChartDimensions(targetCell, {{ type: 'barchart' }}, 400, 350) :
+                            {{ width: Math.max(targetCell.clientWidth || 400, 200), height: 350 }};
+                        const width = dims.width;
+                        const height = dims.height;
+                        
                         // CRÍTICO: NO limpiar toda la celda si no es necesario
                         // Solo limpiar si es la primera renderización o si realmente es necesario
                         const existingSvg = targetCell.querySelector('svg.bar-chart');
@@ -764,11 +771,6 @@ class ReactiveMatrixLayout:
                         }} else {{
                             // Solo limpiar si no hay SVG existente
                         targetCell.innerHTML = '';
-                        
-                            // Crear nuevo SVG
-                        const width = Math.max(targetCell.clientWidth || 400, 200);
-                            const availableHeight = Math.max(targetCell.clientHeight - 30, 320);
-                            const height = Math.min(availableHeight, 350);
                             
                             svg = window.d3.select(targetCell)
                                 .append('svg')
@@ -779,11 +781,6 @@ class ReactiveMatrixLayout:
                             g = svg.append('g')
                                 .attr('class', 'chart-group');
                         }}
-                        
-                        // Obtener dimensiones actuales
-                        const width = Math.max(targetCell.clientWidth || 400, 200);
-                        const availableHeight = Math.max(targetCell.clientHeight - 30, 320);
-                        const height = Math.min(availableHeight, 350);
                         const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
                         const chartWidth = width - margin.left - margin.right;
                         const chartHeight = height - margin.top - margin.bottom;
@@ -1491,9 +1488,12 @@ class ReactiveMatrixLayout:
                         
                         targetCell.innerHTML = '';
                         
-                        const width = Math.max(targetCell.clientWidth || 400, 200);
-                        const availableHeight = Math.max(targetCell.clientHeight - 30, 320);
-                        const height = Math.min(availableHeight, 350);
+                        // CRÍTICO: Usar getChartDimensions() para calcular dimensiones de manera consistente
+                        const dims = window.getChartDimensions ? 
+                            window.getChartDimensions(targetCell, {{ type: 'histogram' }}, 400, 350) :
+                            {{ width: Math.max(targetCell.clientWidth || 400, 200), height: 350 }};
+                        const width = dims.width;
+                        const height = dims.height;
                         const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
                         const chartWidth = width - margin.left - margin.right;
                         const chartHeight = height - margin.top - margin.bottom;
@@ -1860,9 +1860,13 @@ class ReactiveMatrixLayout:
                         
                         // NO reconectar el ResizeObserver aquí - se reconectará después de renderizar si es necesario
                         
-                        const width = Math.max(targetCell.clientWidth || 400, 200);
-                        const availableHeight = Math.max(targetCell.clientHeight - 30, 320);
-                        const height = Math.min(availableHeight, 350);
+                        // CRÍTICO: Usar getChartDimensions() para calcular dimensiones de manera consistente
+                        // Esto asegura que respeta max_width y usa la misma lógica que el render inicial
+                        const dims = window.getChartDimensions ? 
+                            window.getChartDimensions(targetCell, {{ type: 'boxplot' }}, 400, 350) :
+                            {{ width: Math.max(targetCell.clientWidth || 400, 200), height: 350 }};
+                        const width = dims.width;
+                        const height = dims.height;
                         const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
                         const chartWidth = width - margin.left - margin.right;
                         const chartHeight = height - margin.top - margin.bottom;
@@ -2577,8 +2581,12 @@ class ReactiveMatrixLayout:
                                     // Solo actualizar el contenido del pie chart usando D3 update pattern
                                     // NO usar innerHTML = '' porque causa que el layout se re-renderice
                                     
-                                    const width = Math.max(targetCell.clientWidth || 400, 200);
-                                    const height = Math.max(targetCell.clientHeight || 400, 200);
+                                    // CRÍTICO: Usar getChartDimensions() para calcular dimensiones de manera consistente
+                                    const dims = window.getChartDimensions ? 
+                                        window.getChartDimensions(targetCell, {{ type: 'pie' }}, 400, 400) :
+                                        {{ width: Math.max(targetCell.clientWidth || 400, 200), height: Math.max(targetCell.clientHeight || 400, 200) }};
+                                    const width = dims.width;
+                                    const height = dims.height;
                                     const radius = Math.min(width, height) / 2 - 20;
                                     
                                     const data = {pie_data_json};
