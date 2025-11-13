@@ -461,8 +461,9 @@
         if (element._lastWidth && element._lastHeight) {
           const widthDiff = Math.abs(width - element._lastWidth);
           const heightDiff = Math.abs(height - element._lastHeight);
-          // Solo re-renderizar si el cambio es significativo (más de 10px)
-          if (widthDiff > 10 || heightDiff > 10) {
+          // Solo re-renderizar si el cambio es significativo (más de 30px)
+          // Aumentado de 10px a 30px para evitar re-renders innecesarios por cambios mínimos
+          if (widthDiff > 30 || heightDiff > 30) {
             callback();
           }
         } else {
@@ -749,17 +750,32 @@
     if (mapping && mapping.__max_width__) {
       const maxWidth = parseInt(mapping.__max_width__);
       if (!isNaN(maxWidth) && isFinite(maxWidth) && maxWidth > 0) {
-        // Calcular ancho máximo por celda (max_width / num_columnas - padding)
-        // Asumimos un grid típico de 3 columnas para dashboards
-        const estimatedMaxCellWidth = (maxWidth / 3) - 40; // 40px para gap y padding
+        // Calcular número de columnas del grid dinámicamente
+        let numColumns = 3; // Valor por defecto
+        
+        // Intentar obtener el número de columnas del grid
+        if (parentContainer && parentContainer.style && parentContainer.style.gridTemplateColumns) {
+          const gridCols = parentContainer.style.gridTemplateColumns;
+          // Contar cuántas columnas hay (contar "fr" o espacios)
+          const matches = gridCols.match(/1fr|auto|minmax/g);
+          if (matches && matches.length > 0) {
+            numColumns = matches.length;
+          }
+        }
+        
+        // Calcular ancho máximo por celda (max_width / num_columnas - padding/gap)
+        const estimatedMaxCellWidth = (maxWidth / numColumns) - 40; // 40px para gap y padding
         width = Math.min(width, estimatedMaxCellWidth);
       }
     }
     
     // Si el ancho es excesivamente grande, limitarlo a un máximo razonable
     // Esto previene expansión infinita en contenedores muy anchos
-    const absoluteMaxWidth = 600; // Máximo absoluto para un gráfico individual
-    width = Math.min(width, absoluteMaxWidth);
+    // IMPORTANTE: Este límite solo aplica si el ancho calculado es excesivo
+    const absoluteMaxWidth = 800; // Aumentado de 600 a 800 para dar más espacio
+    if (width > absoluteMaxWidth) {
+      width = absoluteMaxWidth;
+    }
     
     // Asegurar dimensiones mínimas
     width = Math.max(width, 100);
