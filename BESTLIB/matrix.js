@@ -388,10 +388,20 @@
                   clearTimeout(cell._resizeTimeout);
                 }
                 cell._resizeTimeout = setTimeout(() => {
+                  // CRÍTICO: NO re-renderizar si hay un brush activo (prevenir pérdida de selección)
+                  const existingSvg = cell.querySelector('svg');
+                  if (existingSvg) {
+                    const activeBrush = existingSvg.querySelector('.brush .selection');
+                    if (activeBrush && activeBrush.getAttribute('width') !== '0' && activeBrush.getAttribute('height') !== '0') {
+                      // Hay un brush activo con selección, NO re-renderizar
+                      console.log('[BESTLIB] ResizeObserver: Brush activo detectado, previniendo re-render');
+                      return;
+                    }
+                  }
+                  
                   // Verificar que D3 todavía esté disponible
                   if (global.d3 && cell._chartSpec) {
                     // Limpiar SVG anterior
-                    const existingSvg = cell.querySelector('svg');
                     if (existingSvg) {
                       existingSvg.remove();
                     }
@@ -761,6 +771,7 @@
     
     // 🔒 CRÍTICO: Si hay max-width CSS, usarlo como límite ABSOLUTO del contenedor
     // Esto debe aplicarse ANTES de cualquier otro cálculo
+    // IMPORTANTE: Solo aplicar cuando hay max_width EXPLÍCITO (no afectar dashboards sin límite)
     let containerMaxWidth = cssMaxWidth;
     if (!containerMaxWidth && mapping && mapping.__max_width__) {
       containerMaxWidth = parseInt(mapping.__max_width__);
@@ -795,14 +806,13 @@
       // 🔒 APLICAR EL LÍMITE ESTRICTAMENTE
       width = Math.min(width, estimatedMaxCellWidth);
       
-      console.log(`[BESTLIB] Límite max_width aplicado: cssMaxWidth=${cssMaxWidth}, containerMaxWidth=${containerMaxWidth}, numColumns=${numColumns}, maxCellWidth=${estimatedMaxCellWidth.toFixed(0)}, containerClientWidth=${container.clientWidth}, finalWidth=${width.toFixed(0)}`);
-    } else {
-      // Si NO hay max_width definido, aplicar un límite razonable por defecto
-      const absoluteMaxWidth = 800;
-      if (width > absoluteMaxWidth) {
-        width = absoluteMaxWidth;
+      // Log solo cuando sea necesario (evitar spam en dashboards sin max_width)
+      if (window._bestlib_debug) {
+        console.log(`[BESTLIB] max_width=${containerMaxWidth}, columns=${numColumns}, maxCellWidth=${estimatedMaxCellWidth.toFixed(0)}, finalWidth=${width.toFixed(0)}`);
       }
     }
+    // IMPORTANTE: NO aplicar límite si no hay max_width explícito
+    // Esto evita que dashboards 2x2 sin límite se vean afectados
     
     // Asegurar dimensiones mínimas
     width = Math.max(width, 100);
