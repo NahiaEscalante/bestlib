@@ -865,8 +865,13 @@
   /**
    * Calcula márgenes dinámicamente según tamaño de etiquetas de ejes
    */
-  function calculateAxisMargins(spec, defaultMargin) {
+  function calculateAxisMargins(spec, defaultMargin, containerWidth, containerHeight) {
     const margin = { ...defaultMargin };
+    
+    // 🔒 MEJORA ESTÉTICA: Ajustar márgenes según el tamaño del contenedor
+    // En dashboards grandes (contenedores pequeños), usar márgenes más conservadores
+    const isSmallContainer = containerWidth && containerWidth < 350;
+    const marginMultiplier = isSmallContainer ? 1.2 : 1.0; // Aumentar márgenes en contenedores pequeños
     
     // Calcular espacio necesario para etiqueta X
     if (spec.xLabel) {
@@ -877,9 +882,33 @@
         const rotationRad = Math.abs(xLabelRotation) * Math.PI / 180;
         const labelHeight = xLabelFontSize * 1.2; // Aproximación de altura de texto
         const rotatedHeight = Math.abs(Math.sin(rotationRad) * (spec.xLabel.length * xLabelFontSize * 0.6)) + labelHeight;
-        margin.bottom = Math.max(margin.bottom, rotatedHeight + 20);
+        margin.bottom = Math.max(margin.bottom, (rotatedHeight + 25) * marginMultiplier);
       } else {
-        margin.bottom = Math.max(margin.bottom, xLabelFontSize + 25);
+        margin.bottom = Math.max(margin.bottom, (xLabelFontSize + 30) * marginMultiplier);
+      }
+    }
+    
+    // 🔒 MEJORA ESTÉTICA: Asegurar espacio suficiente para etiquetas del eje X
+    // Considerar el número de ticks y su longitud
+    if (spec.xTicks && Array.isArray(spec.xTicks)) {
+      const maxTickLength = Math.max(...spec.xTicks.map(t => String(t).length), 0);
+      const tickFontSize = spec.xTickFontSize || 11;
+      // Si hay muchos ticks o son largos, necesitar más espacio
+      if (spec.xTicks.length > 5 || maxTickLength > 6) {
+        // Rotación automática para etiquetas largas o muchas etiquetas
+        const needsRotation = spec.xTicks.length > 8 || maxTickLength > 8;
+        if (needsRotation && !spec.xLabelRotation) {
+          // Marcar para rotación automática (45 grados)
+          spec._autoRotateXTicks = true;
+          const rotationRad = 45 * Math.PI / 180;
+          const tickHeight = tickFontSize * 1.2;
+          const rotatedHeight = Math.abs(Math.sin(rotationRad) * (maxTickLength * tickFontSize * 0.6)) + tickHeight;
+          margin.bottom = Math.max(margin.bottom, (rotatedHeight + 30) * marginMultiplier);
+        } else {
+          margin.bottom = Math.max(margin.bottom, (tickFontSize + 35) * marginMultiplier);
+        }
+      } else {
+        margin.bottom = Math.max(margin.bottom, (tickFontSize + 25) * marginMultiplier);
       }
     }
     
@@ -900,9 +929,9 @@
         // Cuando se rota -90°, el texto vertical necesita espacio horizontal = altura del texto
         // El centro del texto está en margin.left/2, pero el texto se extiende textHeight/2 en cada dirección
         const textHeight = spec.yLabel.length * yLabelFontSize * 0.7; // Altura aproximada del texto
-        // Necesitamos espacio para: eje Y (40px) + etiqueta Y rotada (textHeight/2) + padding (20px)
+        // Necesitamos espacio para: eje Y (50px) + etiqueta Y rotada (textHeight/2) + padding (25px)
         // El margen izquierdo debe ser al menos: eje Y + mitad del texto rotado + padding
-        const minLeftMargin = 40 + (textHeight / 2) + 20; // Espacio para eje + texto + padding
+        const minLeftMargin = (50 + (textHeight / 2) + 25) * marginMultiplier; // Espacio para eje + texto + padding
         margin.left = Math.max(margin.left, minLeftMargin);
       } else {
         // Texto rotado en otro ángulo: calcular ancho proyectado
@@ -911,9 +940,24 @@
         const labelHeight = yLabelFontSize * 1.2;
         // Calcular el ancho proyectado considerando tanto el ancho como la altura
         const projectedWidth = Math.abs(Math.cos(rotationRad) * labelWidth) + Math.abs(Math.sin(rotationRad) * labelHeight);
-        margin.left = Math.max(margin.left, 40 + (projectedWidth / 2) + 20); // Eje Y + texto + padding
+        margin.left = Math.max(margin.left, (50 + (projectedWidth / 2) + 25) * marginMultiplier); // Eje Y + texto + padding
       }
     }
+    
+    // 🔒 MEJORA ESTÉTICA: Asegurar espacio suficiente para etiquetas del eje Y
+    if (spec.yTicks && Array.isArray(spec.yTicks)) {
+      const maxTickLength = Math.max(...spec.yTicks.map(t => String(t).length), 0);
+      const tickFontSize = spec.yTickFontSize || 11;
+      // Espacio para ticks del eje Y: ancho del tick más largo + padding
+      const tickSpace = (maxTickLength * tickFontSize * 0.6 + 15) * marginMultiplier;
+      margin.left = Math.max(margin.left, tickSpace);
+    }
+    
+    // 🔒 MEJORA ESTÉTICA: Márgenes mínimos mejorados para dashboards grandes
+    margin.top = Math.max(margin.top, 25 * marginMultiplier);
+    margin.right = Math.max(margin.right, 20 * marginMultiplier);
+    margin.bottom = Math.max(margin.bottom, 40 * marginMultiplier);
+    margin.left = Math.max(margin.left, 55 * marginMultiplier);
     
     return margin;
   }
@@ -992,9 +1036,24 @@
       }
     }
     
-    // Usar valores por defecto basados en el contenedor con validación
-    let width = container.clientWidth || defaultWidth;
-    let height = container.clientHeight || defaultHeight;
+    // 🔒 MEJORA ESTÉTICA: Usar valores por defecto basados en el contenedor con validación
+    // Considerar padding del contenedor para evitar que gráficos se salgan
+    const containerStyle = window.getComputedStyle(container);
+    const paddingLeft = parseInt(containerStyle.paddingLeft) || 0;
+    const paddingRight = parseInt(containerStyle.paddingRight) || 0;
+    const paddingTop = parseInt(containerStyle.paddingTop) || 0;
+    const paddingBottom = parseInt(containerStyle.paddingBottom) || 0;
+    const borderLeft = parseInt(containerStyle.borderLeftWidth) || 0;
+    const borderRight = parseInt(containerStyle.borderRightWidth) || 0;
+    const borderTop = parseInt(containerStyle.borderTopWidth) || 0;
+    const borderBottom = parseInt(containerStyle.borderBottomWidth) || 0;
+    
+    // Calcular dimensiones disponibles (descontando padding y borders)
+    const availableWidth = (container.clientWidth || defaultWidth) - paddingLeft - paddingRight - borderLeft - borderRight;
+    const availableHeight = (container.clientHeight || defaultHeight) - paddingTop - paddingBottom - borderTop - borderBottom;
+    
+    let width = Math.max(availableWidth, 100);
+    let height = Math.max(availableHeight, 100);
     
     // Validar dimensiones del contenedor
     if (width <= 0 || !isFinite(width)) {
@@ -1198,7 +1257,7 @@
     let width = dims.width;
     let height = dims.height;
     const defaultMargin = { top: 30, right: 20, bottom: 60, left: 70 };
-    const margin = calculateAxisMargins(spec, defaultMargin);
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
     // Para correlation heatmap, necesitamos espacio para el colorbar
     const isCorrelation = spec.isCorrelation === true;
@@ -1476,7 +1535,7 @@
     let width = dims.width;
     let height = dims.height;
     const defaultMargin = { top: 20, right: 150, bottom: 40, left: 50 }; // Más espacio a la derecha para leyenda
-    const margin = calculateAxisMargins(spec, defaultMargin);
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
     // Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
     // Calcular dimensiones del gráfico después de calcular márgenes
@@ -2109,9 +2168,9 @@
     let width = dims.width;
     let height = dims.height;
     const defaultMargin = { top: 20, right: 20, bottom: 60, left: 60 };
-    const margin = calculateAxisMargins(spec, defaultMargin);
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
-    // Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
+    // 🔒 MEJORA ESTÉTICA: Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
     // Calcular dimensiones del gráfico después de calcular márgenes
     let chartWidth = width - margin.left - margin.right;
     let chartHeight = height - margin.top - margin.bottom;
@@ -2122,6 +2181,14 @@
     if (width < minWidth) {
       width = minWidth;
       chartWidth = width - margin.left - margin.right;
+    } else {
+      // 🔒 MEJORA ESTÉTICA: Asegurar que el gráfico no exceda el contenedor
+      // Si el ancho calculado es mayor que el disponible, ajustar
+      const maxAvailableWidth = container.clientWidth || width;
+      if (width > maxAvailableWidth) {
+        width = maxAvailableWidth;
+        chartWidth = Math.max(width - margin.left - margin.right, minChartWidth);
+      }
     }
     
     // Verificar que la altura sea suficiente
@@ -2130,6 +2197,13 @@
     if (height < minHeight) {
       height = minHeight;
       chartHeight = height - margin.top - margin.bottom;
+    } else {
+      // 🔒 MEJORA ESTÉTICA: Asegurar que el gráfico no exceda el contenedor
+      const maxAvailableHeight = container.clientHeight || height;
+      if (height > maxAvailableHeight) {
+        height = maxAvailableHeight;
+        chartHeight = Math.max(height - margin.top - margin.bottom, minChartHeight);
+      }
     }
 
     const svg = d3.select(container).append('svg')
@@ -2422,9 +2496,9 @@
     let width = dims.width;
     let height = dims.height;
     const defaultMargin = { top: 60, right: 60, bottom: 60, left: 60 };
-    const margin = calculateAxisMargins(spec, defaultMargin);
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
-    // Calcular dimensiones del gráfico
+    // 🔒 MEJORA ESTÉTICA: Calcular dimensiones del gráfico considerando límites del contenedor
     let chartWidth = width - margin.left - margin.right;
     let chartHeight = height - margin.top - margin.bottom;
     
@@ -2434,6 +2508,13 @@
     if (width < minWidth) {
       width = minWidth;
       chartWidth = width - margin.left - margin.right;
+    } else {
+      // Asegurar que no exceda el contenedor
+      const maxAvailableWidth = container.clientWidth || width;
+      if (width > maxAvailableWidth) {
+        width = maxAvailableWidth;
+        chartWidth = Math.max(width - margin.left - margin.right, 200);
+      }
     }
     
     const minChartHeight = 300;
@@ -2938,8 +3019,9 @@
     let width = dims.width;
     let height = dims.height;
     const defaultMargin = { top: 60, right: 60, bottom: 60, left: 60 };
-    const margin = calculateAxisMargins(spec, defaultMargin);
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
+    // 🔒 MEJORA ESTÉTICA: Calcular dimensiones respetando límites del contenedor
     let chartWidth = width - margin.left - margin.right;
     let chartHeight = height - margin.top - margin.bottom;
     
@@ -2948,6 +3030,13 @@
     if (width < minWidth) {
       width = minWidth;
       chartWidth = width - margin.left - margin.right;
+    } else {
+      // Asegurar que no exceda el contenedor
+      const maxAvailableWidth = container.clientWidth || width;
+      if (width > maxAvailableWidth) {
+        width = maxAvailableWidth;
+        chartWidth = Math.max(width - margin.left - margin.right, 200);
+      }
     }
     
     const minChartHeight = 300;
@@ -3579,10 +3668,23 @@
     let width = dims.width;
     let height = dims.height;
     const defaultMargin = { top: 30, right: 20, bottom: 30, left: 20 };
-    const margin = calculateAxisMargins(spec, defaultMargin);
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
+    // 🔒 MEJORA ESTÉTICA: Asegurar que las dimensiones respeten el contenedor
     let chartWidth = width - margin.left - margin.right;
     let chartHeight = height - margin.top - margin.bottom;
+    
+    // Asegurar que no exceda el contenedor
+    const maxAvailableWidth = container.clientWidth || width;
+    const maxAvailableHeight = container.clientHeight || height;
+    if (width > maxAvailableWidth) {
+      width = maxAvailableWidth;
+      chartWidth = Math.max(width - margin.left - margin.right, 200);
+    }
+    if (height > maxAvailableHeight) {
+      height = maxAvailableHeight;
+      chartHeight = Math.max(height - margin.top - margin.bottom, 150);
+    }
     
     const minChartWidth = 400;
     const minWidth = margin.left + margin.right + minChartWidth;
@@ -4444,12 +4546,26 @@
   function renderBoxplotD3(container, spec, d3, divId) {
     const data = spec.data || [];
     const dims = getChartDimensions(container, spec, 400, 350);
-    const width = dims.width;
-    const height = dims.height;
+    let width = dims.width;
+    let height = dims.height;
     const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
-    const margin = calculateAxisMargins(spec, defaultMargin);
-    const chartWidth = width - margin.left - margin.right;
-    const chartHeight = height - margin.top - margin.bottom;
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
+    
+    // 🔒 MEJORA ESTÉTICA: Asegurar que las dimensiones respeten el contenedor
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    // Asegurar que no exceda el contenedor
+    const maxAvailableWidth = container.clientWidth || width;
+    const maxAvailableHeight = container.clientHeight || height;
+    if (width > maxAvailableWidth) {
+      width = maxAvailableWidth;
+      chartWidth = Math.max(width - margin.left - margin.right, 200);
+    }
+    if (height > maxAvailableHeight) {
+      height = maxAvailableHeight;
+      chartHeight = Math.max(height - margin.top - margin.bottom, 150);
+    }
     
     // Crear SVG con D3
     const svg = d3.select(container)
@@ -4634,9 +4750,9 @@
     let width = dims.width;
     let height = dims.height;
     const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
-    const margin = calculateAxisMargins(spec, defaultMargin);
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
-    // Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
+    // 🔒 MEJORA ESTÉTICA: Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
     // Calcular dimensiones del gráfico después de calcular márgenes
     let chartWidth = width - margin.left - margin.right;
     let chartHeight = height - margin.top - margin.bottom;
@@ -4647,6 +4763,13 @@
     if (width < minWidth) {
       width = minWidth;
       chartWidth = width - margin.left - margin.right;
+    } else {
+      // 🔒 MEJORA ESTÉTICA: Asegurar que el gráfico no exceda el contenedor
+      const maxAvailableWidth = container.clientWidth || width;
+      if (width > maxAvailableWidth) {
+        width = maxAvailableWidth;
+        chartWidth = Math.max(width - margin.left - margin.right, minChartWidth);
+      }
     }
     
     // Verificar que la altura sea suficiente
@@ -4655,6 +4778,13 @@
     if (height < minHeight) {
       height = minHeight;
       chartHeight = height - margin.top - margin.bottom;
+    } else {
+      // 🔒 MEJORA ESTÉTICA: Asegurar que el gráfico no exceda el contenedor
+      const maxAvailableHeight = container.clientHeight || height;
+      if (height > maxAvailableHeight) {
+        height = maxAvailableHeight;
+        chartHeight = Math.max(height - margin.top - margin.bottom, minChartHeight);
+      }
     }
     
     // Crear SVG con D3
@@ -4790,15 +4920,32 @@
     
     // Ejes
     if (spec.axes !== false) {
+      // 🔒 MEJORA ESTÉTICA: Detectar si necesitamos rotar etiquetas del eje X
+      const numBins = data.length;
+      const maxBinLabelLength = Math.max(...data.map(d => String(d.bin).length), 0);
+      const needsRotation = spec._autoRotateXTicks || numBins > 8 || maxBinLabelLength > 8;
+      const rotationAngle = needsRotation ? -45 : 0;
+      
       const xAxis = g.append('g')
         .attr('transform', `translate(0,${chartHeight})`)
-        .call(d3.axisBottom(x).tickFormat(d => d.toFixed(2)));
+        .call(d3.axisBottom(x).tickFormat(d => {
+          // Formato más corto para números largos
+          if (typeof d === 'number') {
+            if (d % 1 === 0) return d.toString();
+            return d.toFixed(maxBinLabelLength > 6 ? 1 : 2);
+          }
+          return String(d);
+        }));
       
       xAxis.selectAll('text')
-        .style('font-size', '12px')
+        .style('font-size', needsRotation ? '10px' : '11px')
         .style('font-weight', '600')
         .style('fill', '#000000')
-        .style('font-family', 'Arial, sans-serif');
+        .style('font-family', 'Arial, sans-serif')
+        .attr('transform', rotationAngle !== 0 ? `rotate(${rotationAngle})` : null)
+        .style('text-anchor', rotationAngle !== 0 ? 'end' : 'middle')
+        .attr('dx', rotationAngle !== 0 ? '-0.5em' : '0')
+        .attr('dy', rotationAngle !== 0 ? '0.5em' : '0.7em');
       
       xAxis.selectAll('line, path')
         .style('stroke', '#000000')
@@ -4831,16 +4978,40 @@
     let width = dims.width;
     let height = dims.height;
     const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
-    const margin = calculateAxisMargins(spec, defaultMargin);
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
-    // Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
-    const chartWidth = width - margin.left - margin.right;
-    const chartHeight = height - margin.top - margin.bottom;
+    // 🔒 MEJORA ESTÉTICA: Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
     
     // Verificar que el ancho sea suficiente (ajustar si es necesario)
-    const minWidth = margin.left + margin.right + Math.max(chartWidth, 200); // Mínimo 200px para el gráfico
+    const minChartWidth = 200;
+    const minWidth = margin.left + margin.right + minChartWidth;
     if (width < minWidth) {
       width = minWidth;
+      chartWidth = width - margin.left - margin.right;
+    } else {
+      // Asegurar que no exceda el contenedor
+      const maxAvailableWidth = container.clientWidth || width;
+      if (width > maxAvailableWidth) {
+        width = maxAvailableWidth;
+        chartWidth = Math.max(width - margin.left - margin.right, minChartWidth);
+      }
+    }
+    
+    // Verificar que la altura sea suficiente
+    const minChartHeight = 200;
+    const minHeight = margin.top + margin.bottom + minChartHeight;
+    if (height < minHeight) {
+      height = minHeight;
+      chartHeight = height - margin.top - margin.bottom;
+    } else {
+      // Asegurar que no exceda el contenedor
+      const maxAvailableHeight = container.clientHeight || height;
+      if (height > maxAvailableHeight) {
+        height = maxAvailableHeight;
+        chartHeight = Math.max(height - margin.top - margin.bottom, minChartHeight);
+      }
     }
     
     // Crear SVG con D3
@@ -5163,9 +5334,9 @@
     let width = dims.width;
     let height = dims.height;
     const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
-    const margin = calculateAxisMargins(spec, defaultMargin);
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
-    // Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
+    // 🔒 MEJORA ESTÉTICA: Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
     // Calcular dimensiones del gráfico después de calcular márgenes
     let chartWidth = width - margin.left - margin.right;
     let chartHeight = height - margin.top - margin.bottom;
@@ -5176,6 +5347,13 @@
     if (width < minWidth) {
       width = minWidth;
       chartWidth = width - margin.left - margin.right;
+    } else {
+      // 🔒 MEJORA ESTÉTICA: Asegurar que el gráfico no exceda el contenedor
+      const maxAvailableWidth = container.clientWidth || width;
+      if (width > maxAvailableWidth) {
+        width = maxAvailableWidth;
+        chartWidth = Math.max(width - margin.left - margin.right, minChartWidth);
+      }
     }
     
     // Verificar que la altura sea suficiente
@@ -5184,6 +5362,13 @@
     if (height < minHeight) {
       height = minHeight;
       chartHeight = height - margin.top - margin.bottom;
+    } else {
+      // 🔒 MEJORA ESTÉTICA: Asegurar que el gráfico no exceda el contenedor
+      const maxAvailableHeight = container.clientHeight || height;
+      if (height > maxAvailableHeight) {
+        height = maxAvailableHeight;
+        chartHeight = Math.max(height - margin.top - margin.bottom, minChartHeight);
+      }
     }
     
     // Crear SVG con D3

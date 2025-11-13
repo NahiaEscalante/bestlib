@@ -45,11 +45,11 @@
   border: 1px solid var(--matrix-cell-border-color);
   border-radius: var(--matrix-cell-border-radius);
   padding: var(--matrix-cell-padding);
-  overflow: visible !important;  /* CRÍTICO: visible para evitar cortes y permitir líneas conectivas */
+  overflow: visible !important;  /* CRÍTICO: visible para líneas conectivas, pero .matrix-cell tiene overflow: hidden */
   min-height: var(--matrix-cell-min-height);
   max-height: none;  /* Removido límite máximo para evitar cortes */
   display: flex;
-  align-items: flex-start;  /* Cambiado de center a flex-start para evitar recorte vertical */
+  align-items: center;  /* Centrar verticalmente para mejor presentación */
   justify-content: center;
   position: relative; /* Para posicionamiento de elementos internos */
   box-sizing: border-box; /* Asegurar que padding se incluya en dimensiones */
@@ -60,11 +60,11 @@
   background: var(--matrix-cell-inner-background);
   display: flex;
   justify-content: center;
-  align-items: flex-start;  /* Cambiado de center a flex-start para evitar recorte vertical */
+  align-items: center;  /* Centrar verticalmente para mejor presentación */
   font-family: var(--matrix-font-family);
   font-size: var(--matrix-font-size);
   border-radius: var(--matrix-cell-border-radius);
-  overflow: visible !important;  /* CRÍTICO: visible para evitar cortes de gráficos y líneas */
+  overflow: hidden !important;  /* 🔒 MEJORA ESTÉTICA: hidden para evitar que gráficos se salgan */
   min-height: 320px;  /* Aumentado para acomodar gráficos completos con ejes */
   width: 100%;  /* Asegurar que ocupe todo el ancho disponible */
   height: 100%;  /* Asegurar que ocupe toda la altura disponible */
@@ -72,8 +72,8 @@
   transition: all 0.3s ease;  /* Transición suave para todos los cambios */
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); /* Sombra sutil para profundidad */
   box-sizing: border-box; /* Asegurar que border se incluya en dimensiones */
-  /* Asegurar que el contenido SVG no se corte */
-  contain: layout style; /* Optimización sin cortar contenido */
+  /* Asegurar que el contenido se ajuste correctamente */
+  padding: 8px; /* Padding interno para evitar que gráficos toquen los bordes */
 }
 
 /* Indicadores visuales MEJORADOS para gráficos enlazados */
@@ -160,7 +160,9 @@
 
 /* Clase para mantener aspect ratio consistente en gráficos */
 .matrix-cell svg {
-  max-width: 100%;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  width: 100% !important;
   height: auto;
   /* Mantener aspect ratio aproximado */
   aspect-ratio: var(--chart-aspect-ratio);
@@ -169,9 +171,12 @@
   /* Mejorar calidad visual */
   shape-rendering: geometricPrecision;
   text-rendering: optimizeLegibility;
-  /* CRÍTICO: Asegurar que SVG no se corte */
-  overflow: visible !important;
+  /* CRÍTICO: Permitir que contenido se vea pero asegurar que SVG no exceda contenedor */
+  overflow: visible;
   display: block; /* Evitar espacios en blanco */
+  /* Asegurar que el SVG respete los límites del contenedor */
+  box-sizing: border-box;
+  object-fit: contain; /* Asegurar que el contenido se ajuste sin distorsión */
 }
 
 /* Mejoras para dashboards grandes (3x3, 4x4) */
