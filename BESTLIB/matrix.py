@@ -1699,10 +1699,17 @@ class MatrixLayout:
         # Escapar backticks para no romper el template literal JS
         escaped_layout = layout.replace("`", "\\`")
         
+        # Calcular número de filas y columnas para mejorar dimensiones en dashboards grandes
+        rows = [r for r in layout.strip().split("\n") if r]
+        row_count = len(rows)
+        col_count = len(rows[0]) if rows else 1
+        
         # Preparar metadata
         meta = {
             "__safe_html__": bool(self._safe_html),
-            "__div_id__": self.div_id
+            "__div_id__": self.div_id,
+            "__row_count__": row_count,  # Para cálculos de dimensiones en JS
+            "__col_count__": col_count   # Para cálculos de dimensiones en JS
         }
         
         # Agregar configuración de matriz si existe

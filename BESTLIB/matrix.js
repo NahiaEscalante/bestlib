@@ -243,9 +243,35 @@
       });
       container.style.gridTemplateRows = rowHeights.join(' ');
     } else {
-    // Aumentar altura de filas para evitar recorte - altura mínima para gráficos completos
-    // Considerando: padding (30px) + gráfico (320px) + espacio para ejes (20px extra)
-    container.style.gridTemplateRows = `repeat(${R}, minmax(350px, auto))`;
+      // 🔒 MEJORA ESTÉTICA: Ajustar altura de filas dinámicamente según tamaño del dashboard
+      // Para dashboards grandes (3x3, 4x4), reducir altura mínima para que se vean mejor
+      let minRowHeight = 350; // Por defecto
+      
+      // Calcular número total de celdas
+      const totalCells = R * C;
+      
+      // Si hay max_width, ajustar según el número de filas
+      if (mapping.__max_width__) {
+        const maxWidth = parseInt(mapping.__max_width__);
+        // Para dashboards grandes (9+ celdas), calcular altura basada en max_width
+        if (totalCells >= 9) {
+          // En dashboards grandes, la altura debe ser proporcional al ancho
+          // Usar aspect ratio aproximado de 1.2:1 (ancho:alto) para dashboards grandes
+          const estimatedCellWidth = (maxWidth / C) - (gap * (C - 1) / C) - (cellPadding * 2);
+          const estimatedCellHeight = estimatedCellWidth / 1.2; // Aspect ratio aproximado
+          minRowHeight = Math.max(200, Math.min(350, estimatedCellHeight)); // Entre 200 y 350px
+        } else if (totalCells >= 6) {
+          // Dashboards medianos (2x3, 3x2): altura intermedia
+          minRowHeight = 280;
+        }
+      } else if (totalCells >= 9) {
+        // Dashboards grandes sin max_width explícito: reducir altura mínima
+        minRowHeight = 280;
+      }
+      
+      // Aumentar altura de filas para evitar recorte - altura mínima para gráficos completos
+      // Considerando: padding (30px) + gráfico (320px) + espacio para ejes (20px extra)
+      container.style.gridTemplateRows = `repeat(${R}, minmax(${minRowHeight}px, auto))`;
     }
     
     // Configuración dinámica de gap
@@ -363,16 +389,24 @@
         // Agregar clases CSS para indicadores de enlace visual
         if (spec && typeof spec === 'object') {
           // Si es un gráfico principal (genera selecciones), agregar clase linked-primary
-          if (spec.__scatter_letter__ && spec.__scatter_letter__ === letter) {
+          // Verificar múltiples formas de identificar gráficos principales
+          const isPrimary = (spec.__scatter_letter__ && spec.__scatter_letter__ === letter) ||
+                           (spec.__is_primary_view__ === true) ||
+                           (spec.__view_letter__ && spec.__view_letter__ === letter && spec.interactive === true);
+          
+          if (isPrimary) {
             cell.classList.add('linked-primary');
             cell.setAttribute('title', `Gráfico principal (genera selecciones)`);
+            cell.setAttribute('data-is-primary', 'true');
           }
+          
           // Si está enlazado a otro gráfico (linked_to), agregar clase linked-secondary
           if (spec.__linked_to__) {
             cell.classList.add('linked-secondary');
-            cell.setAttribute('title', `Enlazado a gráfico '${spec.__linked_to__}'`);
+            const linkedTo = spec.__linked_to__;
+            cell.setAttribute('title', `Enlazado a gráfico '${linkedTo}'`);
             // Agregar atributo data para referencia
-            cell.setAttribute('data-linked-to', spec.__linked_to__);
+            cell.setAttribute('data-linked-to', linkedTo);
           }
         }
         
@@ -810,18 +844,29 @@
     }
     
     // Ajustar dimensiones para mantener aspect ratio, pero respetar los límites del contenedor
+    // 🔒 MEJORA ESTÉTICA: Relajar aspect ratio para dashboards grandes
     if (aspectRatio > 0 && isFinite(aspectRatio)) {
       const containerAspectRatio = width / height;
       
+      // Determinar si estamos en un dashboard grande (ajustar tolerancia)
+      let tolerance = 0.2; // Por defecto 20%
+      if (mapping && parentContainer) {
+        // Si hay muchas celdas, relajar el aspect ratio
+        const totalCells = (mapping.__row_count__ || 3) * (mapping.__col_count__ || 3);
+        if (totalCells >= 9) {
+          tolerance = 0.4; // Para dashboards grandes, permitir más variación (40%)
+        }
+      }
+      
       // Si el contenedor es mucho más ancho o más alto, ajustar para mantener proporciones
-      if (containerAspectRatio > aspectRatio * 1.2) {
+      if (containerAspectRatio > aspectRatio * (1 + tolerance)) {
         // Contenedor demasiado ancho: ajustar ancho basado en altura
         width = height * aspectRatio;
-      } else if (containerAspectRatio < aspectRatio * 0.8) {
+      } else if (containerAspectRatio < aspectRatio * (1 - tolerance)) {
         // Contenedor demasiado alto: ajustar altura basado en ancho
         height = width / aspectRatio;
       }
-      // Si está dentro de un rango razonable (20%), mantener dimensiones del contenedor
+      // Si está dentro del rango tolerado, mantener dimensiones del contenedor
     }
     
     // 🔒 CRÍTICO: Si hay max-width CSS, usarlo como límite ABSOLUTO del contenedor
@@ -838,11 +883,13 @@
     if (containerMaxWidth) {
       // Calcular número de columnas del grid dinámicamente
       let numColumns = 3; // Valor por defecto
+      let numRows = 3; // Valor por defecto
       
-      // Intentar obtener el número de columnas del grid desde computedStyle
+      // Intentar obtener el número de columnas y filas del grid desde computedStyle
       if (parentContainer) {
         const computedStyle = window.getComputedStyle(parentContainer);
         const gridCols = computedStyle.gridTemplateColumns;
+        const gridRows = computedStyle.gridTemplateRows;
         if (gridCols && gridCols !== 'none') {
           // Contar el número de tracks en el grid (separados por espacios)
           const tracks = gridCols.trim().split(/\s+/);
@@ -850,20 +897,48 @@
             numColumns = tracks.length;
           }
         }
+        if (gridRows && gridRows !== 'none') {
+          const rowTracks = gridRows.trim().split(/\s+/);
+          if (rowTracks.length > 0) {
+            numRows = rowTracks.length;
+          }
+        }
       }
       
-      // Calcular ancho máximo por celda
-      // Formula: (max_width_total / num_columnas) - (gap + padding estimado)
-      const gap = 20; // gap por defecto
-      const cellPadding = 20; // padding estimado por celda
-      const estimatedMaxCellWidth = (containerMaxWidth / numColumns) - gap - cellPadding;
+      // 🔒 MEJORA ESTÉTICA: Calcular ancho máximo por celda mejorado
+      // Para dashboards grandes, usar más espacio eficientemente
+      const totalCells = numColumns * numRows;
+      const gap = mapping.__gap__ !== undefined ? parseInt(mapping.__gap__) : 12;
+      const cellPadding = mapping.__cell_padding__ !== undefined ? parseInt(mapping.__cell_padding__) : 15;
       
-      // 🔒 APLICAR EL LÍMITE ESTRICTAMENTE
+      // Calcular espacio total disponible considerando gaps
+      const totalGaps = gap * (numColumns - 1);
+      const totalPadding = cellPadding * 2 * numColumns;
+      const availableWidth = containerMaxWidth - totalGaps - totalPadding;
+      
+      // Calcular ancho por celda
+      let estimatedMaxCellWidth = availableWidth / numColumns;
+      
+      // Para dashboards grandes (9+ celdas), permitir que los gráficos usen más espacio
+      // reduciendo el factor de reducción
+      if (totalCells >= 9) {
+        // En dashboards grandes, usar 95% del ancho calculado para mejor visualización
+        estimatedMaxCellWidth = estimatedMaxCellWidth * 0.95;
+      } else {
+        // En dashboards pequeños, usar 90% para mantener márgenes cómodos
+        estimatedMaxCellWidth = estimatedMaxCellWidth * 0.90;
+      }
+      
+      // Asegurar un mínimo razonable (200px para dashboards grandes, 250px para pequeños)
+      const minWidth = totalCells >= 9 ? 200 : 250;
+      estimatedMaxCellWidth = Math.max(minWidth, estimatedMaxCellWidth);
+      
+      // 🔒 APLICAR EL LÍMITE
       width = Math.min(width, estimatedMaxCellWidth);
       
       // Log solo cuando sea necesario (evitar spam en dashboards sin max_width)
       if (window._bestlib_debug) {
-        console.log(`[BESTLIB] max_width=${containerMaxWidth}, columns=${numColumns}, maxCellWidth=${estimatedMaxCellWidth.toFixed(0)}, finalWidth=${width.toFixed(0)}`);
+        console.log(`[BESTLIB] max_width=${containerMaxWidth}, columns=${numColumns}, rows=${numRows}, totalCells=${totalCells}, maxCellWidth=${estimatedMaxCellWidth.toFixed(0)}, finalWidth=${width.toFixed(0)}`);
       }
     }
     // IMPORTANTE: NO aplicar límite si no hay max_width explícito

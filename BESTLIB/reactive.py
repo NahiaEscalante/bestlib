@@ -1674,6 +1674,12 @@ class ReactiveMatrixLayout:
             if MatrixLayout._debug:
                 print(f"💡 Boxplot '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
         
+        # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
+        if linked_to:
+            kwargs['__linked_to__'] = primary_letter
+        elif not linked_to and 'primary_letter' in locals():
+            kwargs['__linked_to__'] = primary_letter
+        
         # Guardar parámetros
         boxplot_params = {
             'letter': letter,
@@ -2095,13 +2101,17 @@ class ReactiveMatrixLayout:
                 box_data = []
         
         if box_data:
-            MatrixLayout._map[letter] = {
+            boxplot_spec = {
                 'type': 'boxplot',
                 'data': box_data,
                 'column': column,
                 'category_col': category_col,
                 **kwargs
             }
+            # Asegurar que __linked_to__ esté en el spec si fue agregado antes
+            if '__linked_to__' in kwargs:
+                boxplot_spec['__linked_to__'] = kwargs['__linked_to__']
+            MatrixLayout._map[letter] = boxplot_spec
         
         return self
     

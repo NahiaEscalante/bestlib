@@ -146,12 +146,35 @@
   /* Cuando hay 9 o más celdas, optimizar tamaños */
   --matrix-cell-min-height: 280px;
   --matrix-cell-padding: 12px;
+  /* Reducir tamaño de indicadores para dashboards grandes */
 }
 
 .matrix-layout:has(> div:nth-child(12)) {
   /* Cuando hay 12 o más celdas, reducir aún más */
   --matrix-cell-min-height: 240px;
   --matrix-cell-padding: 10px;
+}
+
+/* Asegurar que los indicadores de enlace sean visibles */
+.matrix-cell.linked-primary::before,
+.matrix-cell.linked-secondary::after {
+  pointer-events: none; /* No interferir con interacciones del gráfico */
+  user-select: none;
+}
+
+/* Ajustar tamaño de indicadores en dashboards grandes */
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell.linked-primary::before,
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell.linked-secondary::after {
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+}
+
+.matrix-layout:has(> div:nth-child(12)) .matrix-cell.linked-primary::before,
+.matrix-layout:has(> div:nth-child(12)) .matrix-cell.linked-secondary::after {
+  width: 20px;
+  height: 20px;
+  font-size: 10px;
 }
 
 /* Contenedor de gráfico con aspect ratio controlado */
