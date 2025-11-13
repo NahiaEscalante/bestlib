@@ -441,8 +441,19 @@
               cell._chartSpec = spec;
               cell._chartDivId = divIdFromMapping;
               
-              // Renderizar inicialmente
-              renderChartD3(cell, spec, d3, divIdFromMapping);
+              // 🔒 MEJORA ESTÉTICA: Esperar a que el contenedor tenga dimensiones antes de renderizar
+              // Usar requestAnimationFrame para asegurar que el layout esté calculado
+              requestAnimationFrame(() => {
+                // Verificar que el contenedor tenga dimensiones
+                if (cell.offsetWidth === 0 || cell.offsetHeight === 0) {
+                  // Si aún no tiene dimensiones, esperar un frame más
+                  requestAnimationFrame(() => {
+                    renderChartD3(cell, spec, d3, divIdFromMapping);
+                  });
+                } else {
+                  renderChartD3(cell, spec, d3, divIdFromMapping);
+                }
+              });
               
               // CRÍTICO: NO usar ResizeObserver para gráficos interactivos con brush
               // Esto previene que el brush desaparezca al re-renderizar
@@ -1037,59 +1048,58 @@
     }
     
     // 🔒 MEJORA ESTÉTICA: Usar TODO el espacio disponible del contenedor
-    // Obtener dimensiones reales del contenedor (sin descontar padding, ya que el SVG debe ocupar todo)
-    const containerRect = container.getBoundingClientRect();
-    const containerWidth = containerRect.width || container.clientWidth || defaultWidth;
-    const containerHeight = containerRect.height || container.clientHeight || defaultHeight;
+    // Obtener dimensiones del contenedor de múltiples formas para máxima compatibilidad
+    let containerWidth = 0;
+    let containerHeight = 0;
     
-    // Usar el 100% del espacio disponible (el SVG ocupará todo el contenedor)
-    let width = Math.max(containerWidth, 100);
-    let height = Math.max(containerHeight, 100);
+    // Método 1: offsetWidth/offsetHeight (más confiable, incluye padding y border)
+    containerWidth = container.offsetWidth || 0;
+    containerHeight = container.offsetHeight || 0;
     
-    // Validar dimensiones del contenedor
+    // Método 2: getBoundingClientRect (más preciso si offsetWidth falla)
+    if (containerWidth <= 0 || containerHeight <= 0) {
+      const containerRect = container.getBoundingClientRect();
+      if (containerRect.width > 0 && containerRect.height > 0) {
+        containerWidth = containerRect.width;
+        containerHeight = containerRect.height;
+      }
+    }
+    
+    // Método 3: clientWidth/clientHeight
+    if (containerWidth <= 0 || containerHeight <= 0) {
+      containerWidth = container.clientWidth || 0;
+      containerHeight = container.clientHeight || 0;
+    }
+    
+    // Método 4: computed style como último recurso
+    if (containerWidth <= 0 || containerHeight <= 0) {
+      const computedStyle = window.getComputedStyle(container);
+      const styleWidth = parseFloat(computedStyle.width);
+      const styleHeight = parseFloat(computedStyle.height);
+      if (styleWidth > 0 && !isNaN(styleWidth)) containerWidth = styleWidth;
+      if (styleHeight > 0 && !isNaN(styleHeight)) containerHeight = styleHeight;
+    }
+    
+    // Si aún no tenemos dimensiones válidas, usar valores por defecto razonables
+    let width = containerWidth > 0 ? containerWidth : defaultWidth;
+    let height = containerHeight > 0 ? containerHeight : defaultHeight;
+    
+    // Validar dimensiones
     if (width <= 0 || !isFinite(width)) {
-      console.warn('[BESTLIB] Ancho del contenedor inválido:', width, 'usando valor por defecto');
       width = defaultWidth;
     }
     if (height <= 0 || !isFinite(height)) {
-      console.warn('[BESTLIB] Altura del contenedor inválida:', height, 'usando valor por defecto');
       height = defaultHeight;
     }
     
-    // 🔒 MEJORA ESTÉTICA: Mantener aspect ratio consistente
-    // Calcular aspect ratio basado en el tamaño del contenedor o usar el del spec
-    let aspectRatio = DEFAULT_ASPECT_RATIO;
-    if (spec.aspectRatio !== undefined) {
-      aspectRatio = parseFloat(spec.aspectRatio);
-    } else if (mapping && mapping.__aspect_ratio__) {
-      aspectRatio = parseFloat(mapping.__aspect_ratio__);
-    }
+    // 🔒 CRÍTICO: Asegurar dimensiones mínimas razonables
+    // Pero NO reducir si el contenedor es más grande - usar TODO el espacio
+    width = Math.max(width, 200);
+    height = Math.max(height, 150);
     
-    // Ajustar dimensiones para mantener aspect ratio, pero respetar los límites del contenedor
-    // 🔒 MEJORA ESTÉTICA: Relajar aspect ratio para dashboards grandes
-    if (aspectRatio > 0 && isFinite(aspectRatio)) {
-      const containerAspectRatio = width / height;
-      
-      // Determinar si estamos en un dashboard grande (ajustar tolerancia)
-      let tolerance = 0.2; // Por defecto 20%
-      if (mapping && parentContainer) {
-        // Si hay muchas celdas, relajar el aspect ratio
-        const totalCells = (mapping.__row_count__ || 3) * (mapping.__col_count__ || 3);
-        if (totalCells >= 9) {
-          tolerance = 0.4; // Para dashboards grandes, permitir más variación (40%)
-        }
-      }
-      
-      // Si el contenedor es mucho más ancho o más alto, ajustar para mantener proporciones
-      if (containerAspectRatio > aspectRatio * (1 + tolerance)) {
-        // Contenedor demasiado ancho: ajustar ancho basado en altura
-        width = height * aspectRatio;
-      } else if (containerAspectRatio < aspectRatio * (1 - tolerance)) {
-        // Contenedor demasiado alto: ajustar altura basado en ancho
-        height = width / aspectRatio;
-      }
-      // Si está dentro del rango tolerado, mantener dimensiones del contenedor
-    }
+    // 🔒 MEJORA ESTÉTICA: NO ajustar aspect ratio - usar TODO el espacio del contenedor
+    // El viewBox con preserveAspectRatio mantendrá las proporciones correctamente
+    // pero el SVG ocupará 100% del contenedor, evitando gráficos pequeños en espacios grandes
     
     // 🔒 CRÍTICO: Si hay max-width CSS, usarlo como límite ABSOLUTO del contenedor
     // Esto debe aplicarse ANTES de cualquier otro cálculo
