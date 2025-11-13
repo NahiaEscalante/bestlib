@@ -1728,12 +1728,18 @@ class MatrixLayout:
         
         mapping_js = json.dumps(_sanitize_for_json(mapping_merged))
         
+        # Generar estilo inline para el contenedor si hay max_width
+        inline_style = ""
+        if self._max_width is not None:
+            inline_style = f' style="max-width: {self._max_width}px; margin: 0 auto; box-sizing: border-box;"'
+        
         return {
             'js_code': js_code,
             'css_code': css_code,
             'escaped_layout': escaped_layout,
             'meta': meta,
-            'mapping_js': mapping_js
+            'mapping_js': mapping_js,
+            'inline_style': inline_style
         }
 
     def _generate_render_js(self, data):
@@ -1772,7 +1778,7 @@ class MatrixLayout:
         render_js = self._generate_render_js(data).strip()
         html = f"""
         <style>{data['css_code']}</style>
-        <div id="{self.div_id}" class="matrix-layout"></div>
+        <div id="{self.div_id}" class="matrix-layout"{data['inline_style']}></div>
         <script>
         {render_js}
         </script>
@@ -1798,7 +1804,7 @@ class MatrixLayout:
         
         html = f"""
         <style>{data['css_code']}</style>
-        <div id="{self.div_id}" class="matrix-layout"></div>
+        <div id="{self.div_id}" class="matrix-layout"{data['inline_style']}></div>
         """
         
         # Generar JavaScript usando método helper
@@ -1827,7 +1833,7 @@ class MatrixLayout:
             
             html_content = f"""
             <style>{data['css_code']}</style>
-            <div id="{self.div_id}" class="matrix-layout"></div>
+            <div id="{self.div_id}" class="matrix-layout"{data['inline_style']}></div>
             """
             
             # El código JS ya incluye ensureD3, solo necesitamos ejecutar el render

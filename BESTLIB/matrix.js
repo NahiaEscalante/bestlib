@@ -720,6 +720,20 @@
       parentContainer = parentContainer.parentElement;
     }
     
+    // 🔒 CRÍTICO: Si el contenedor padre tiene max-width en CSS, RESPETARLO SIEMPRE
+    // Esto previene expansión infinita al limitar desde el CSS
+    let cssMaxWidth = null;
+    if (parentContainer) {
+      const computedStyle = window.getComputedStyle(parentContainer);
+      const maxWidthStr = computedStyle.maxWidth;
+      if (maxWidthStr && maxWidthStr !== 'none') {
+        cssMaxWidth = parseInt(maxWidthStr);
+        if (isNaN(cssMaxWidth) || !isFinite(cssMaxWidth) || cssMaxWidth <= 0) {
+          cssMaxWidth = null;
+        }
+      }
+    }
+    
     // Si hay figsize global en el mapping, validarlo y usarlo
     if (mapping && mapping.__figsize__ && Array.isArray(mapping.__figsize__) && mapping.__figsize__.length === 2) {
       const width = Math.max(parseInt(mapping.__figsize__[0]) || defaultWidth, 100);
@@ -745,38 +759,45 @@
       height = defaultHeight;
     }
     
-    // CRÍTICO: Limitar el ancho máximo para prevenir expansión excesiva
-    // Si el contenedor padre tiene max-width, respetar ese límite ESTRICTAMENTE
-    if (mapping && mapping.__max_width__) {
-      const maxWidth = parseInt(mapping.__max_width__);
-      if (!isNaN(maxWidth) && isFinite(maxWidth) && maxWidth > 0) {
-        // Calcular número de columnas del grid dinámicamente
-        let numColumns = 3; // Valor por defecto
-        
-        // Intentar obtener el número de columnas del grid
-        if (parentContainer && parentContainer.style && parentContainer.style.gridTemplateColumns) {
-          const gridCols = parentContainer.style.gridTemplateColumns;
-          // Contar cuántas columnas hay (contar "fr" o espacios)
-          const matches = gridCols.match(/1fr|auto|minmax/g);
-          if (matches && matches.length > 0) {
-            numColumns = matches.length;
-          }
-        }
-        
-        // Calcular ancho máximo por celda (max_width / num_columnas - padding/gap)
-        const estimatedMaxCellWidth = (maxWidth / numColumns) - 40; // 40px para gap y padding
-        
-        // 🔒 APLICAR EL LÍMITE ESTRICTAMENTE - NO permitir que el ancho lo exceda
-        width = Math.min(width, estimatedMaxCellWidth);
-        
-        console.log(`[BESTLIB] max_width aplicado: containerWidth=${container.clientWidth}, maxCellWidth=${estimatedMaxCellWidth}, finalWidth=${width}`);
+    // 🔒 CRÍTICO: Si hay max-width CSS, usarlo como límite ABSOLUTO del contenedor
+    // Esto debe aplicarse ANTES de cualquier otro cálculo
+    let containerMaxWidth = cssMaxWidth;
+    if (!containerMaxWidth && mapping && mapping.__max_width__) {
+      containerMaxWidth = parseInt(mapping.__max_width__);
+      if (isNaN(containerMaxWidth) || !isFinite(containerMaxWidth) || containerMaxWidth <= 0) {
+        containerMaxWidth = null;
       }
     }
     
-    // Si el ancho es excesivamente grande, limitarlo a un máximo razonable
-    // Esto previene expansión infinita en contenedores muy anchos
-    // Solo aplica cuando NO hay max_width definido
-    if (!mapping || !mapping.__max_width__) {
+    if (containerMaxWidth) {
+      // Calcular número de columnas del grid dinámicamente
+      let numColumns = 3; // Valor por defecto
+      
+      // Intentar obtener el número de columnas del grid desde computedStyle
+      if (parentContainer) {
+        const computedStyle = window.getComputedStyle(parentContainer);
+        const gridCols = computedStyle.gridTemplateColumns;
+        if (gridCols && gridCols !== 'none') {
+          // Contar el número de tracks en el grid (separados por espacios)
+          const tracks = gridCols.trim().split(/\s+/);
+          if (tracks.length > 0) {
+            numColumns = tracks.length;
+          }
+        }
+      }
+      
+      // Calcular ancho máximo por celda
+      // Formula: (max_width_total / num_columnas) - (gap + padding estimado)
+      const gap = 20; // gap por defecto
+      const cellPadding = 20; // padding estimado por celda
+      const estimatedMaxCellWidth = (containerMaxWidth / numColumns) - gap - cellPadding;
+      
+      // 🔒 APLICAR EL LÍMITE ESTRICTAMENTE
+      width = Math.min(width, estimatedMaxCellWidth);
+      
+      console.log(`[BESTLIB] Límite max_width aplicado: cssMaxWidth=${cssMaxWidth}, containerMaxWidth=${containerMaxWidth}, numColumns=${numColumns}, maxCellWidth=${estimatedMaxCellWidth.toFixed(0)}, containerClientWidth=${container.clientWidth}, finalWidth=${width.toFixed(0)}`);
+    } else {
+      // Si NO hay max_width definido, aplicar un límite razonable por defecto
       const absoluteMaxWidth = 800;
       if (width > absoluteMaxWidth) {
         width = absoluteMaxWidth;
