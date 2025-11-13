@@ -380,36 +380,35 @@
               // Renderizar inicialmente
               renderChartD3(cell, spec, d3, divIdFromMapping);
               
-              // Agregar ResizeObserver para re-renderizar cuando cambie el tamaño
-              // Usar debounce para evitar re-renderizados excesivos
-              setupResizeObserver(cell, () => {
-                // Debounce: esperar 150ms antes de re-renderizar
-                if (cell._resizeTimeout) {
-                  clearTimeout(cell._resizeTimeout);
-                }
-                cell._resizeTimeout = setTimeout(() => {
-                  // CRÍTICO: NO re-renderizar si hay un brush activo (prevenir pérdida de selección)
-                  const existingSvg = cell.querySelector('svg');
-                  if (existingSvg) {
-                    const activeBrush = existingSvg.querySelector('.brush .selection');
-                    if (activeBrush && activeBrush.getAttribute('width') !== '0' && activeBrush.getAttribute('height') !== '0') {
-                      // Hay un brush activo con selección, NO re-renderizar
-                      console.log('[BESTLIB] ResizeObserver: Brush activo detectado, previniendo re-render');
-                      return;
-                    }
+              // CRÍTICO: NO usar ResizeObserver para gráficos interactivos con brush
+              // Esto previene que el brush desaparezca al re-renderizar
+              const isInteractive = spec.interactive !== false; // Por defecto true para scatter
+              const isScatterPlot = spec.type === 'scatter';
+              
+              if (!isInteractive || !isScatterPlot) {
+                // Solo agregar ResizeObserver para gráficos NO interactivos
+                // Usar debounce para evitar re-renderizados excesivos
+                setupResizeObserver(cell, () => {
+                  // Debounce: esperar 150ms antes de re-renderizar
+                  if (cell._resizeTimeout) {
+                    clearTimeout(cell._resizeTimeout);
                   }
-                  
-                  // Verificar que D3 todavía esté disponible
-                  if (global.d3 && cell._chartSpec) {
-                    // Limpiar SVG anterior
-                    if (existingSvg) {
-                      existingSvg.remove();
+                  cell._resizeTimeout = setTimeout(() => {
+                    // Verificar que D3 todavía esté disponible
+                    if (global.d3 && cell._chartSpec) {
+                      // Limpiar SVG anterior
+                      const existingSvg = cell.querySelector('svg');
+                      if (existingSvg) {
+                        existingSvg.remove();
+                      }
+                      // Re-renderizar el gráfico
+                      renderChartD3(cell, cell._chartSpec, global.d3, cell._chartDivId);
                     }
-                    // Re-renderizar el gráfico
-                    renderChartD3(cell, cell._chartSpec, global.d3, cell._chartDivId);
-                  }
-                }, 150);
-              });
+                  }, 150);
+                });
+              } else {
+                console.log('[BESTLIB] ResizeObserver desactivado para scatter plot interactivo (prevenir pérdida de brush)');
+              }
             } else if (isSimpleViz(spec)) {
               renderSimpleVizD3(cell, spec, d3);
             }
