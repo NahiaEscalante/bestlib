@@ -746,7 +746,7 @@
     }
     
     // CRÍTICO: Limitar el ancho máximo para prevenir expansión excesiva
-    // Si el contenedor padre tiene max-width, respetar ese límite
+    // Si el contenedor padre tiene max-width, respetar ese límite ESTRICTAMENTE
     if (mapping && mapping.__max_width__) {
       const maxWidth = parseInt(mapping.__max_width__);
       if (!isNaN(maxWidth) && isFinite(maxWidth) && maxWidth > 0) {
@@ -765,16 +765,22 @@
         
         // Calcular ancho máximo por celda (max_width / num_columnas - padding/gap)
         const estimatedMaxCellWidth = (maxWidth / numColumns) - 40; // 40px para gap y padding
+        
+        // 🔒 APLICAR EL LÍMITE ESTRICTAMENTE - NO permitir que el ancho lo exceda
         width = Math.min(width, estimatedMaxCellWidth);
+        
+        console.log(`[BESTLIB] max_width aplicado: containerWidth=${container.clientWidth}, maxCellWidth=${estimatedMaxCellWidth}, finalWidth=${width}`);
       }
     }
     
     // Si el ancho es excesivamente grande, limitarlo a un máximo razonable
     // Esto previene expansión infinita en contenedores muy anchos
-    // IMPORTANTE: Este límite solo aplica si el ancho calculado es excesivo
-    const absoluteMaxWidth = 800; // Aumentado de 600 a 800 para dar más espacio
-    if (width > absoluteMaxWidth) {
-      width = absoluteMaxWidth;
+    // Solo aplica cuando NO hay max_width definido
+    if (!mapping || !mapping.__max_width__) {
+      const absoluteMaxWidth = 800;
+      if (width > absoluteMaxWidth) {
+        width = absoluteMaxWidth;
+      }
     }
     
     // Asegurar dimensiones mínimas
