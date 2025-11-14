@@ -73,6 +73,7 @@ class MatrixLayout:
     def _prepare_data(data, x_col=None, y_col=None, category_col=None, value_col=None):
         """
         Prepara datos para visualización, aceptando DataFrames de pandas o listas de diccionarios.
+        OPTIMIZADO: Usa operaciones vectorizadas en lugar de iterrows() para mejor rendimiento.
         
         Args:
             data: DataFrame de pandas o lista de diccionarios
@@ -87,39 +88,42 @@ class MatrixLayout:
             - datos_originales: Lista de diccionarios con todas las columnas originales
         """
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            # Convertir DataFrame a lista de diccionarios
+            # OPTIMIZACIÓN: Convertir DataFrame a lista de diccionarios una sola vez
             original_data = data.to_dict('records')
             
-            processed_data = []
-            for idx, row in data.iterrows():
-                item = {}
-                
-                # Mapear columnas según especificación
-                if x_col and x_col in data.columns:
-                    item['x'] = row[x_col]
-                elif 'x' in row:
-                    item['x'] = row['x']
-                
-                if y_col and y_col in data.columns:
-                    item['y'] = row[y_col]
-                elif 'y' in row:
-                    item['y'] = row['y']
-                
-                if category_col and category_col in data.columns:
-                    item['category'] = row[category_col]
-                elif 'category' in row:
-                    item['category'] = row['category']
-                
-                if value_col and value_col in data.columns:
-                    item['value'] = row[value_col]
-                elif 'value' in row:
-                    item['value'] = row['value']
-                
-                # Guardar referencia a la fila original completa
+            # OPTIMIZACIÓN: Usar operaciones vectorizadas en lugar de iterrows()
+            # Crear DataFrame con solo las columnas necesarias
+            df_work = pd.DataFrame(index=data.index)
+            
+            # Mapear columnas según especificación (vectorizado)
+            if x_col and x_col in data.columns:
+                df_work['x'] = data[x_col]
+            elif 'x' in data.columns:
+                df_work['x'] = data['x']
+            
+            if y_col and y_col in data.columns:
+                df_work['y'] = data[y_col]
+            elif 'y' in data.columns:
+                df_work['y'] = data['y']
+            
+            if category_col and category_col in data.columns:
+                df_work['category'] = data[category_col]
+            elif 'category' in data.columns:
+                df_work['category'] = data['category']
+            
+            if value_col and value_col in data.columns:
+                df_work['value'] = data[value_col]
+            elif 'value' in data.columns:
+                df_work['value'] = data['value']
+            
+            # OPTIMIZACIÓN: Convertir a lista de diccionarios y agregar referencias
+            # Esto es mucho más rápido que iterrows()
+            processed_data = df_work.to_dict('records')
+            
+            # Agregar referencias a filas originales e índices
+            for idx, item in enumerate(processed_data):
                 item['_original_row'] = original_data[idx]
-                item['_original_index'] = int(idx)
-                
-                processed_data.append(item)
+                item['_original_index'] = int(data.index[idx])
             
             return processed_data, original_data
         else:
@@ -434,19 +438,21 @@ class MatrixLayout:
         
         processed_data, original_data = cls._prepare_data(data, x_col=x_col, y_col=y_col, category_col=category_col, value_col=size_col)
 
-        # Enriquecer con tamaño y color por punto si se especifican columnas
+        # OPTIMIZACIÓN: Enriquecer con tamaño y color usando operaciones vectorizadas
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
             if size_col and size_col in data.columns:
-                for idx, row in data.iterrows():
-                    if idx < len(processed_data):
-                        try:
-                            processed_data[idx]['size'] = float(row[size_col])
-                        except Exception:
-                            pass
+                # Vectorizado: asignar directamente desde la columna
+                size_values = data[size_col].astype(float, errors='ignore')
+                for idx in range(min(len(processed_data), len(size_values))):
+                    try:
+                        processed_data[idx]['size'] = float(size_values.iloc[idx])
+                    except (ValueError, TypeError):
+                        pass
             if color_col and color_col in data.columns:
-                for idx, row in data.iterrows():
-                    if idx < len(processed_data):
-                        processed_data[idx]['color'] = row[color_col]
+                # Vectorizado: asignar directamente desde la columna
+                color_values = data[color_col]
+                for idx in range(min(len(processed_data), len(color_values))):
+                    processed_data[idx]['color'] = color_values.iloc[idx]
         else:
             # Lista de dicts
             if isinstance(data, list):
@@ -468,6 +474,20 @@ class MatrixLayout:
         
         # Procesar figsize si está en kwargs
         cls._process_figsize_in_kwargs(kwargs)
+        
+        # OPTIMIZACIÓN: Aplicar sampling si se especifica maxPoints y hay muchos datos
+        max_points = kwargs.get('maxPoints', None)
+        if max_points and isinstance(max_points, int) and max_points > 0 and len(processed_data) > max_points:
+            # Sampling uniforme para mantener distribución (más rápido que aleatorio)
+            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+                # Usar pandas para sampling más eficiente (uniforme)
+                step = len(data) / max_points
+                sample_indices = [int(i * step) for i in range(max_points)]
+                processed_data = [processed_data[i] for i in sample_indices if i < len(processed_data)]
+            else:
+                # Sampling uniforme para listas
+                step = len(processed_data) / max_points
+                processed_data = [processed_data[int(i * step)] for i in range(max_points) if int(i * step) < len(processed_data)]
         
         spec = {
             'type': 'scatter',

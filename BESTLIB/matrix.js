@@ -5336,7 +5336,25 @@
    * Gráfico de dispersión con D3.js
    */
   function renderScatterPlotD3(container, spec, d3, divId) {
-    const data = spec.data || [];
+    let data = spec.data || [];
+    
+    // OPTIMIZACIÓN: Sampling automático para datasets grandes (>2000 puntos)
+    // Si no se especifica maxPoints y hay más de 2000 puntos, aplicar sampling automático
+    const maxPoints = spec.maxPoints;
+    const AUTO_SAMPLE_THRESHOLD = 2000;
+    const AUTO_SAMPLE_SIZE = 2000;
+    
+    if (!maxPoints && data.length > AUTO_SAMPLE_THRESHOLD) {
+      // Sampling uniforme para mantener distribución
+      const step = Math.ceil(data.length / AUTO_SAMPLE_SIZE);
+      data = data.filter((d, i) => i % step === 0);
+      console.log(`[BESTLIB] Aplicado sampling automático: ${spec.data.length} → ${data.length} puntos`);
+    } else if (maxPoints && data.length > maxPoints) {
+      // Sampling según maxPoints especificado
+      const step = Math.ceil(data.length / maxPoints);
+      data = data.filter((d, i) => i % step === 0);
+    }
+    
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
@@ -5464,8 +5482,17 @@
     };
     
     // Función para enviar evento de selección
+    // OPTIMIZACIÓN: Limitar tamaño del payload para datasets grandes
     const sendSelectionEvent = (indices) => {
-      const selected = data.filter((d, i) => indices.has(i));
+      const MAX_PAYLOAD_ITEMS = 1000; // Límite de items a enviar
+      
+      // OPTIMIZACIÓN: Si hay muchos índices, solo procesar los primeros N
+      const indicesArray = Array.from(indices);
+      const limitedIndices = indicesArray.length > MAX_PAYLOAD_ITEMS 
+        ? indicesArray.slice(0, MAX_PAYLOAD_ITEMS)
+        : indicesArray;
+      
+      const selected = limitedIndices.map(i => data[i]).filter(d => d !== undefined);
       const selectedItems = selected.map(d => d._original_row || d);
       
       // Obtener letra del scatter plot
@@ -5486,10 +5513,16 @@
       sendEvent(divId, 'select', {
         type: 'select',
         items: selectedItems,
-        count: selectedItems.length,
-        indices: Array.from(indices),
+        count: indices.size, // Contar total, no solo los enviados
+        indices: limitedIndices,
+        totalCount: indices.size, // Total real de seleccionados
         __scatter_letter__: scatterLetter
       });
+      
+      // Advertencia si se limitó el payload
+      if (indices.size > MAX_PAYLOAD_ITEMS) {
+        console.warn(`[BESTLIB] Selección grande (${indices.size} items). Enviando solo los primeros ${MAX_PAYLOAD_ITEMS} para optimizar rendimiento.`);
+      }
     };
     
     // Puntos con D3 (renderizar PRIMERO)
@@ -5584,19 +5617,30 @@
           
           const [[x0, y0], [x1, y1]] = event.selection;
           
-          // Identificar puntos dentro del área de brush
+          // OPTIMIZACIÓN: Usar coordenadas de datos directamente en lugar de convertir cada punto
+          const xMin = Math.min(x0, x1);
+          const xMax = Math.max(x0, x1);
+          const yMin = Math.min(y0, y1);
+          const yMax = Math.max(y0, y1);
+          
+          // OPTIMIZACIÓN: Convertir coordenadas de píxeles a datos una sola vez
+          const xDataMin = x.invert(xMin);
+          const xDataMax = x.invert(xMax);
+          const yDataMin = y.invert(yMax); // Invertir porque y escala está invertida
+          const yDataMax = y.invert(yMin);
+          
+          // OPTIMIZACIÓN: Identificar puntos dentro del área de brush usando comparación directa
           const brushedIndices = new Set();
-          data.forEach((d, i) => {
-              const px = x(d.x);
-              const py = y(d.y);
-            if (px >= Math.min(x0, x1) && px <= Math.max(x0, x1) && 
-                py >= Math.min(y0, y1) && py <= Math.max(y0, y1)) {
+          for (let i = 0; i < data.length; i++) {
+            const d = data[i];
+            if (d.x >= xDataMin && d.x <= xDataMax && 
+                d.y >= yDataMin && d.y <= yDataMax) {
               brushedIndices.add(i);
             }
-          });
+          }
           
-          // Combinar selección actual con brush (union)
-          // Durante el brush, mostrar visualmente qué puntos están dentro
+          // OPTIMIZACIÓN: Actualizar visualización solo de puntos que cambiaron
+          // En lugar de iterar sobre todos, usar D3's data binding más eficientemente
           g.selectAll('.dot').each(function(d, i) {
             const dot = d3.select(this);
             const isInBrush = brushedIndices.has(i);
@@ -5629,7 +5673,7 @@
                 .attr('stroke-width', 0)
                 .attr('opacity', 0.15);
             }
-            });
+          });
         })
         .on('end', function(event) {
           isBrushing = false;

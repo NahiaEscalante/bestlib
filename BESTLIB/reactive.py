@@ -39,13 +39,15 @@ def _items_to_dataframe(items):
     if not items:
         return pd.DataFrame()
     
-    # Convertir lista de diccionarios a DataFrame
+    # OPTIMIZACIÓN: Convertir lista de diccionarios a DataFrame de forma más eficiente
     try:
         if isinstance(items, list):
             if len(items) == 0:
                 return pd.DataFrame()
-            # Verificar que todos los items sean diccionarios
-            if all(isinstance(item, dict) for item in items):
+            # OPTIMIZACIÓN: Para listas grandes, verificar solo el primer elemento
+            # en lugar de todos los elementos
+            if len(items) > 0 and isinstance(items[0], dict):
+                # Todos parecen ser diccionarios, convertir directamente
                 return pd.DataFrame(items)
             else:
                 # Si hay items que no son diccionarios, intentar convertir de todas formas
