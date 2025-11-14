@@ -1499,9 +1499,8 @@ class ReactiveMatrixLayout:
                         
                         if (!targetCell) return;
                         
-                        targetCell.innerHTML = '';
-                        
-                        // CRÍTICO: Usar getChartDimensions() para calcular dimensiones de manera consistente
+                        // CRÍTICO: Calcular dimensiones ANTES de limpiar el innerHTML
+                        // para evitar que la celda pierda sus dimensiones
                         const dims = window.getChartDimensions ? 
                             window.getChartDimensions(targetCell, {{ type: 'histogram' }}, 400, 350) :
                             {{ width: Math.max(targetCell.clientWidth || 400, 200), height: 350 }};
@@ -1511,6 +1510,16 @@ class ReactiveMatrixLayout:
                         const chartWidth = width - margin.left - margin.right;
                         const chartHeight = height - margin.top - margin.bottom;
                         
+                        // CRÍTICO: Establecer altura mínima y máxima explícitamente en la celda
+                        // ANTES de limpiar el innerHTML para prevenir expansión infinita
+                        targetCell.style.minHeight = height + 'px';
+                        targetCell.style.maxHeight = height + 'px';
+                        targetCell.style.height = height + 'px';
+                        targetCell.style.overflow = 'hidden';
+                        
+                        // CRÍTICO: Limpiar solo después de establecer dimensiones
+                        targetCell.innerHTML = '';
+                        
                         const data = {hist_data_json};
                         
                         if (data.length === 0) {{
@@ -1518,10 +1527,14 @@ class ReactiveMatrixLayout:
                             return;
                         }}
                         
+                        // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
                         const svg = window.d3.select(targetCell)
                             .append('svg')
                             .attr('width', width)
-                            .attr('height', height);
+                            .attr('height', height)
+                            .style('max-height', height + 'px')
+                            .style('overflow', 'hidden')
+                            .style('display', 'block');
                         
                         const g = svg.append('g')
                             .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
@@ -1895,6 +1908,13 @@ class ReactiveMatrixLayout:
                         const chartWidth = width - margin.left - margin.right;
                         const chartHeight = height - margin.top - margin.bottom;
                         
+                        // CRÍTICO: Establecer altura mínima y máxima explícitamente en la celda
+                        // para prevenir expansión infinita
+                        targetCell.style.minHeight = height + 'px';
+                        targetCell.style.maxHeight = height + 'px';
+                        targetCell.style.height = height + 'px';
+                        targetCell.style.overflow = 'hidden';
+                        
                         const data = {box_data_json};
                         
                         if (data.length === 0) {{
@@ -1903,10 +1923,14 @@ class ReactiveMatrixLayout:
                             return;
                         }}
                         
+                        // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
                         const svg = window.d3.select(targetCell)
                             .append('svg')
                             .attr('width', width)
-                            .attr('height', height);
+                            .attr('height', height)
+                            .style('max-height', height + 'px')
+                            .style('overflow', 'hidden')
+                            .style('display', 'block');
                         
                         const g = svg.append('g')
                             .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
