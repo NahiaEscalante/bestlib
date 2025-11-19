@@ -448,7 +448,7 @@
                 if (cell.offsetWidth === 0 || cell.offsetHeight === 0) {
                   // Si aún no tiene dimensiones, esperar un frame más
                   requestAnimationFrame(() => {
-                    renderChartD3(cell, spec, d3, divIdFromMapping);
+              renderChartD3(cell, spec, d3, divIdFromMapping);
                   });
                 } else {
                   renderChartD3(cell, spec, d3, divIdFromMapping);
@@ -1233,7 +1233,7 @@
       console.error('renderChartD3: Tipo de gráfico no soportado', { chartType, spec });
     }
   }
-
+  
   /**
    * Heatmap con D3.js
    */
@@ -1763,7 +1763,7 @@
             .style('top', (mouseY - 10) + 'px')
             .style('display', 'block')
             .html(`<strong>${name}</strong><br/><strong>${xLabel}:</strong> ${d.x.toFixed(2)}<br/><strong>${yLabel}:</strong> ${d.y.toFixed(2)}`)
-            .transition()
+      .transition()
             .duration(200)
             .style('opacity', 1);
           
@@ -1851,7 +1851,7 @@
       });
     }
   }
-
+  
   /**
    * Función auxiliar para mostrar tooltip del Pie Chart (compatible con Colab)
    */
@@ -2032,7 +2032,7 @@
       })
       .on('mouseenter', function(event, d) {
         // Resaltar el segmento al pasar el mouse
-        d3.select(this)
+          d3.select(this)
           .attr('opacity', 1)
           .attr('stroke-width', 3)
           .attr('transform', 'scale(1.05)'); // Efecto de zoom
@@ -2048,7 +2048,7 @@
       })
       .on('mouseleave', function(event, d) {
         // Restaurar opacidad y stroke
-        d3.select(this)
+          d3.select(this)
           .attr('opacity', 0.9)
           .attr('stroke-width', 2)
           .attr('transform', 'scale(1)'); // Restaurar escala
@@ -2287,7 +2287,7 @@
           .attr('cy', y(yVal))
           .attr('r', 3)
           .attr('fill', color(category))
-          .attr('opacity', 0.7);
+            .attr('opacity', 0.7);
         return;
       }
       
@@ -2864,7 +2864,7 @@
             } catch (err) {
               // Ignorar errores
             }
-          });
+            });
         })
         .on('end', function(event) {
           // Restaurar eventos de puntos
@@ -3282,7 +3282,7 @@
             const element = d3.select(this);
             if (!element.empty()) {
               element
-                .transition()
+            .transition()
                 .duration(200)
                 .attr('cx', toX(newX))
                 .attr('cy', toY(newY));
@@ -3645,9 +3645,9 @@
         '</div>';
       container.innerHTML = errorMsg;
       console.error('Parallel Coordinates: Dimensiones insuficientes', { dimensions });
-      return;
-    }
-    
+        return;
+      }
+      
     // Validar que los datos tengan al menos una dimensión válida
     const validData = data.filter(d => {
       if (!d) return false;
@@ -4238,7 +4238,7 @@
               }
               
               // Redibujar líneas después de la transición para reflejar el nuevo orden
-              setTimeout(() => {
+        setTimeout(() => {
                 if (!isRedrawing) {
                   drawDataLines();
                 }
@@ -4580,16 +4580,16 @@
       .attr('width', width)
       .attr('height', height)
       .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
-    
+
     const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
-    
+
     // Escalas D3
     const x = d3.scaleBand()
       .domain(data.map(d => d.category))
       .range([0, chartWidth])
       .padding(0.2);
-    
+
     const y = d3.scaleLinear()
       .domain([d3.min(data, d => d.lower), d3.max(data, d => d.upper)])
       .nice()
@@ -4700,7 +4700,7 @@
         .attr('y', y(d.q3))
         .attr('width', boxWidth)
         .attr('height', y(d.q1) - y(d.q3))
-        .attr('fill', spec.color || '#4a90e2')
+      .attr('fill', spec.color || '#4a90e2')
         .attr('stroke', '#000')
         .attr('stroke-width', 2);
       
@@ -4721,7 +4721,7 @@
         .call(d3.axisBottom(x));
       
       xAxis.selectAll('text')
-        .style('font-size', '12px')
+      .style('font-size', '12px')
         .style('font-weight', '600')
         .style('fill', '#000000')
         .style('font-family', 'Arial, sans-serif');
@@ -4827,8 +4827,8 @@
         .style('color', '#fff')
         .style('padding', '10px 12px')
         .style('border-radius', '6px')
-        .style('pointer-events', 'none')
-        .style('opacity', 0)
+      .style('pointer-events', 'none')
+      .style('opacity', 0)
         .style('font-size', '12px')
         .style('z-index', 10000)
         .style('display', 'none')
@@ -4924,7 +4924,7 @@
       .duration(800)
       .attr('y', d => y(d.count))
       .attr('height', d => chartHeight - y(d.count));
-    
+
     // Ejes
     if (spec.axes !== false) {
       // 🔒 MEJORA ESTÉTICA: Detectar si necesitamos rotar etiquetas del eje X
@@ -5125,10 +5125,10 @@
           }
         }
         
-        sendEvent(divId, 'select', {
+          sendEvent(divId, 'select', { 
           type: 'select',
           items: [{ group: d.group, series: d.series }],
-          indices: [],
+            indices: [], 
           original_items: [d],
           __view_letter__: viewLetter,
           __is_primary_view__: spec.__is_primary_view__ || false
@@ -5243,11 +5243,11 @@
               const idMatch = container.id && container.id.match(/-cell-([A-Z])-/);
               if (idMatch) {
                 viewLetter = idMatch[1];
-              }
             }
           }
-          
-          sendEvent(divId, 'select', {
+          }
+
+        sendEvent(divId, 'select', { 
             type: 'select',
             items: items,  // Enviar todas las filas originales de esta categoría
             indices: [index],
@@ -5402,16 +5402,16 @@
       .attr('width', width)
       .attr('height', height)
       .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
-    
+
     const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
-    
+
     // Escalas D3
     const x = d3.scaleLinear()
       .domain(d3.extent(data, d => d.x) || [0, 100])
       .nice()
       .range([0, chartWidth]);
-    
+
     const y = d3.scaleLinear()
       .domain(d3.extent(data, d => d.y) || [0, 100])
       .nice()

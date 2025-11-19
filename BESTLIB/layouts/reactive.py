@@ -1,11 +1,7 @@
-﻿"""
-Sistema de Variables Reactivas para BESTLIB
-Permite que los datos se actualicen automáticamente sin re-ejecutar celdas
 """
-
-import ipywidgets as widgets
-from traitlets import List, Dict, Int, observe
-
+ReactiveMatrixLayout - Layout reactivo para BESTLIB
+Migrado desde reactive.py legacy a layouts/reactive.py según estructura modular
+"""
 try:
     import pandas as pd
     HAS_PANDAS = True
@@ -13,221 +9,9 @@ except ImportError:
     HAS_PANDAS = False
     pd = None
 
-
-def _items_to_dataframe(items):
-    """
-    Convierte una lista de diccionarios a un DataFrame de pandas.
-    
-    Args:
-        items: Lista de diccionarios o DataFrame
-    
-    Returns:
-        DataFrame de pandas si items no está vacío, DataFrame vacío si items está vacío,
-        o None si pandas no está disponible
-    """
-    if not HAS_PANDAS:
-        # Si pandas no está disponible, retornar None y dar warning
-        if items:
-            print("⚠️ Advertencia: pandas no está disponible. Los datos no se pueden convertir a DataFrame.")
-        return None
-    
-    # Si ya es un DataFrame, retornarlo
-    if HAS_PANDAS and isinstance(items, pd.DataFrame):
-        return items.copy()
-    
-    # Si es None o lista vacía, retornar DataFrame vacío
-    if not items:
-        return pd.DataFrame()
-    
-    # OPTIMIZACIÓN: Convertir lista de diccionarios a DataFrame de forma más eficiente
-    try:
-        if isinstance(items, list):
-            if len(items) == 0:
-                return pd.DataFrame()
-            # OPTIMIZACIÓN: Para listas grandes, verificar solo el primer elemento
-            # en lugar de todos los elementos
-            if len(items) > 0 and isinstance(items[0], dict):
-                # Todos parecen ser diccionarios, convertir directamente
-                return pd.DataFrame(items)
-            else:
-                # Si hay items que no son diccionarios, intentar convertir de todas formas
-                return pd.DataFrame(items)
-        else:
-            # Si no es lista ni DataFrame, intentar convertir
-            return pd.DataFrame([items] if not isinstance(items, (list, tuple)) else items)
-    except Exception as e:
-        print(f"⚠️ Error al convertir items a DataFrame: {e}")
-        print(f"   Items tipo: {type(items)}, Longitud: {len(items) if hasattr(items, '__len__') else 'N/A'}")
-        # En caso de error, retornar DataFrame vacío
-        return pd.DataFrame()
-
-
-class ReactiveData(widgets.Widget):
-    """
-    Widget reactivo que mantiene datos sincronizados entre celdas.
-    
-    Uso:
-        data = ReactiveData()
-        
-        # En cualquier celda, puedes observar cambios:
-        data.observe(lambda change: print(f"Nuevos datos: {change['new']}"))
-        
-        # Desde JavaScript (vía comm):
-        data.items = [{'x': 1, 'y': 2}, ...]
-        
-        # Los observadores se ejecutan automáticamente
-    """
-    
-    # Traits que se sincronizan con JavaScript
-    items = List(Dict()).tag(sync=True)
-    count = Int(0).tag(sync=True)
-    
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._callbacks = []
-    
-    def on_change(self, callback):
-        """
-        Registra un callback que se ejecuta cuando los datos cambian.
-        
-        Args:
-            callback: Función que recibe (items, count) como argumentos
-        """
-        # CRÍTICO: Verificar que el callback no esté ya registrado para evitar duplicados
-        # Comparar por referencia de función (closure) usando id()
-        callback_id = id(callback)
-        for existing_callback in self._callbacks:
-            if id(existing_callback) == callback_id:
-                # Callback ya está registrado, no agregar duplicado
-                return
-        self._callbacks.append(callback)
-    
-    @observe('items')
-    def _items_changed(self, change):
-        """Se ejecuta automáticamente cuando items cambia"""
-        new_items = change['new']
-        self.count = len(new_items)
-        
-        # Ejecutar callbacks registrados
-        # CRÍTICO: Usar una copia de la lista para evitar problemas si se modifican durante la ejecución
-        callbacks_to_execute = list(self._callbacks)
-        for callback in callbacks_to_execute:
-            try:
-                callback(new_items, self.count)
-            except Exception as e:
-                print(f"Error en callback: {e}")
-    
-    def update(self, items):
-        """Actualiza los items manualmente desde Python"""
-        # CRÍTICO: Flag para evitar actualizaciones múltiples simultáneas
-        # PERO: Solo bloquear si realmente hay una actualización en progreso
-        # No bloquear si el flag existe pero está en False
-        if hasattr(self, '_updating') and self._updating:
-            # Ya hay una actualización en progreso, ignorar esta llamada
-            return
-        self._updating = True
-        
-        try:
-            # Convertir a lista si es necesario y asegurar que sea una nueva referencia
-            if items is None:
-                items = []
-            else:
-                items = list(items)  # Crear nueva lista para forzar cambio
-            
-            # Actualizar count primero
-            new_count = len(items)
-            
-            # Solo actualizar si hay cambio real (evitar loops infinitos)
-            if self.items != items or self.count != new_count:
-        self.items = items
-                self.count = new_count
-                # NOTA: NO llamar callbacks manualmente aquí porque @observe('items') ya los ejecutará
-                # Llamar callbacks manualmente aquí causaría que se ejecuten DOS VECES:
-                # 1. Una vez aquí (manual)
-                # 2. Una vez en _items_changed() (automático por @observe)
-                # Esto es lo que estaba causando la duplicación del boxplot
-        finally:
-            # CRÍTICO: Resetear flag después de completar, incluso si hay una excepción
-            self._updating = False
-    
-    def clear(self):
-        """Limpia los datos"""
-        self.items = []
-        self.count = 0
-    
-    def get_items(self):
-        """Retorna los items actuales"""
-        return self.items
-    
-    def get_count(self):
-        """Retorna el número de items"""
-        return self.count
-
-
-class SelectionModel(ReactiveData):
-    """
-    Modelo reactivo especializado para selecciones de brush.
-    
-    Uso en BESTLIB:
-        selection = SelectionModel()
-        
-        # Registrar callback
-        def on_select(items, count):
-            print(f"✅ {count} puntos seleccionados")
-            # Hacer análisis automático
-            
-        selection.on_change(on_select)
-        
-        # Conectar con MatrixLayout
-        layout.connect_selection(selection)
-    """
-    
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.history = []  # Historial de selecciones
-    
-    @observe('items')
-    def _items_changed(self, change):
-        """Guarda historial de selecciones"""
-        super()._items_changed(change)
-        new_items = change['new']
-        if new_items:
-            self.history.append({
-                'timestamp': self._get_timestamp(),
-                'items': new_items,
-                'count': len(new_items)
-            })
-    
-    def _get_timestamp(self):
-        """Retorna timestamp actual"""
-        from datetime import datetime
-        return datetime.now().isoformat()
-    
-    def get_history(self):
-        """Retorna historial de selecciones"""
-        return self.history
-    
-    def get_last_selection(self):
-        """Retorna la última selección"""
-        if self.history:
-            return self.history[-1]
-        return None
-
-
-def create_reactive_variable(name="data"):
-    """
-    Factory function para crear variables reactivas rápidamente.
-    
-    Args:
-        name: Nombre de la variable (solo para debugging)
-    
-    Returns:
-        ReactiveData instance
-    """
-    var = ReactiveData()
-    var.name = name
-    return var
-
+# Importar desde módulos modulares
+from .matrix import MatrixLayout
+from ..reactive.selection import SelectionModel
 
 class ReactiveMatrixLayout:
     """
@@ -235,7 +19,8 @@ class ReactiveMatrixLayout:
     e integra LinkedViews dentro de la matriz ASCII.
     
     Uso:
-        from BESTLIB.reactive import ReactiveMatrixLayout, SelectionModel
+        from BESTLIB.layouts import ReactiveMatrixLayout
+        from BESTLIB.reactive import SelectionModel
         import pandas as pd
         
         # Crear modelo de selección
@@ -596,10 +381,10 @@ class ReactiveMatrixLayout:
                 raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
         
         # Guardar el enlace
-            self._barchart_to_scatter[letter] = primary_letter
-            
-            # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
-            kwargs['__linked_to__'] = primary_letter
+        self._barchart_to_scatter[letter] = primary_letter
+        
+        # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
+        kwargs['__linked_to__'] = primary_letter
         
         # Crear bar chart inicial con todos los datos
         MatrixLayout.map_barchart(
@@ -620,8 +405,8 @@ class ReactiveMatrixLayout:
         self._views[view_id] = {
             'type': 'barchart',
             'letter': letter,
-            'category_col': category_col,
-            'value_col': value_col,
+                'category_col': category_col,
+                'value_col': value_col,
             'kwargs': kwargs,
             'is_primary': is_primary
         }
@@ -629,14 +414,14 @@ class ReactiveMatrixLayout:
         
         # Si es vista enlazada, configurar callback de actualización
         if not is_primary:
-        # Guardar parámetros para el callback (closure)
-        barchart_params = {
-            'letter': letter,
-            'category_col': category_col,
-            'value_col': value_col,
-            'kwargs': kwargs.copy(),  # Copia para evitar mutaciones
-            'layout_div_id': self._layout.div_id
-        }
+            # Guardar parámetros para el callback (closure)
+            barchart_params = {
+                'letter': letter,
+                'category_col': category_col,
+                'value_col': value_col,
+                'kwargs': kwargs.copy(),  # Copia para evitar mutaciones
+                'layout_div_id': self._layout.div_id
+            }
         
             # Debug: verificar que la vista principal existe
             if MatrixLayout._debug:
@@ -645,53 +430,53 @@ class ReactiveMatrixLayout:
                 print(f"   - Callbacks actuales: {len(primary_selection._callbacks)}")
             
         # Configurar callback para actualizar bar chart cuando cambia selección
-        def update_barchart(items, count):
-            """Actualiza el bar chart cuando cambia la selección usando JavaScript"""
-            try:
+            def update_barchart(items, count):
+                """Actualiza el bar chart cuando cambia la selección usando JavaScript"""
+                try:
                     # Debug: verificar que el callback se está ejecutando
                     if MatrixLayout._debug:
                         print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando bar chart '{letter}' con {count} items seleccionados")
-                import json
-                from IPython.display import Javascript
+                    import json
+                    from IPython.display import Javascript
                     import time
-                
-                # Usar datos seleccionados o todos los datos
-                data_to_use = self._data
-                if items and len(items) > 0:
-                    # Convertir lista de dicts a DataFrame si es necesario
-                    if HAS_PANDAS and isinstance(items[0], dict):
-                        import pandas as pd
-                        data_to_use = pd.DataFrame(items)
-                    else:
-                        data_to_use = items
+                    
+                    # Usar datos seleccionados o todos los datos
+                    data_to_use = self._data
+                    if items and len(items) > 0:
+                        # Convertir lista de dicts a DataFrame si es necesario
+                        if HAS_PANDAS and isinstance(items[0], dict):
+                            import pandas as pd
+                            data_to_use = pd.DataFrame(items)
+                        else:
+                            data_to_use = items
                     else:
                         data_to_use = self._data
-                
-                # Preparar datos del bar chart
-                bar_data = self._prepare_barchart_data(
-                    data_to_use, 
-                    barchart_params['category_col'], 
-                    barchart_params['value_col'],
-                    barchart_params['kwargs']
-                )
-                
-                if not bar_data:
-                    return
-                
+                    
+                    # Preparar datos del bar chart
+                    bar_data = self._prepare_barchart_data(
+                        data_to_use, 
+                        barchart_params['category_col'], 
+                        barchart_params['value_col'],
+                        barchart_params['kwargs']
+                    )
+                    
+                    if not bar_data:
+                        return
+                    
                     # IMPORTANTE: NO actualizar el mapping aquí para evitar bucles infinitos
                     # Solo actualizar visualmente el gráfico con JavaScript
                     # El mapping solo se actualiza cuando es necesario (no en callbacks de actualización)
-                
-                # Crear JavaScript para actualizar el gráfico de forma más robusta
-                div_id = barchart_params['layout_div_id']
+                    
+                    # Crear JavaScript para actualizar el gráfico de forma más robusta
+                    div_id = barchart_params['layout_div_id']
                     # Sanitizar para evitar numpy.int64 en JSON
                     bar_data_json = json.dumps(_sanitize_for_json(bar_data))
-                color_map = barchart_params['kwargs'].get('colorMap', {})
-                color_map_json = json.dumps(color_map)
-                default_color = barchart_params['kwargs'].get('color', '#4a90e2')
-                show_axes = barchart_params['kwargs'].get('axes', True)
-                
-                js_update = f"""
+                    color_map = barchart_params['kwargs'].get('colorMap', {})
+                    color_map_json = json.dumps(color_map)
+                    default_color = barchart_params['kwargs'].get('color', '#4a90e2')
+                    show_axes = barchart_params['kwargs'].get('axes', True)
+                    
+                    js_update = f"""
                 (function() {{
                     // Flag para evitar actualizaciones múltiples simultáneas
                     if (window._bestlib_updating_{letter}) {{
@@ -956,21 +741,21 @@ class ReactiveMatrixLayout:
                 }})();
                 """
                 
-                # Ejecutar JavaScript para actualizar solo el bar chart
+                    # Ejecutar JavaScript para actualizar solo el bar chart
                     # IMPORTANTE: Usar display_id para que Jupyter reemplace el output anterior
                     # en lugar de crear uno nuevo, lo que previene la duplicación
-                try:
-                    from IPython.display import Javascript, display
+                    try:
+                        from IPython.display import Javascript, display
                         display(Javascript(js_update), clear=False, display_id=f'barchart-update-{letter}', update=True)
-                except:
-                    # Fallback si no está disponible
-                    pass
-                
-            except Exception as e:
-                if MatrixLayout._debug:
-                    print(f"⚠️ Error actualizando bar chart: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    except:
+                        # Fallback si no está disponible
+                        pass
+                    
+                except Exception as e:
+                    if MatrixLayout._debug:
+                        print(f"⚠️ Error actualizando bar chart: {e}")
+                        import traceback
+                        traceback.print_exc()
                     # Asegurar que el flag se resetee incluso si hay error
                     js_reset_flag = f"""
                     <script>
@@ -1702,7 +1487,7 @@ class ReactiveMatrixLayout:
             'category_col': category_col,
             'kwargs': kwargs.copy(),
             'layout_div_id': self._layout.div_id
-        }
+            }
         
         # Función de actualización del boxplot
         def update_boxplot(items, count):
