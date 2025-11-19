@@ -340,11 +340,11 @@ class LinkedViews:
             const barData = {bar_data_json};
             const colorMap = {color_map_json};
             
-            // Obtener dimensiones del SVG existente
+            // Obtener dimensiones del SVG existente (NO cambiar estas dimensiones)
             const width = parseFloat(svg.getAttribute('width')) || 600;
             const height = parseFloat(svg.getAttribute('height')) || 400;
             
-            // Calcular márgenes y área del gráfico
+            // Calcular márgenes y área del gráfico (usar los mismos márgenes que matrix.js)
             const margin = {{ top: 20, right: 20, bottom: 60, left: 60 }};
             const chartWidth = width - margin.left - margin.right;
             const chartHeight = height - margin.top - margin.bottom;
@@ -353,9 +353,8 @@ class LinkedViews:
             if (typeof d3 !== 'undefined') {{
                 const d3Svg = d3.select(svg);
                 
-                // Buscar el grupo principal del gráfico (el primer 'g' dentro del SVG, que es el grupo de transformación)
-                // En matrix.js, se crea como: svg.append('g').attr('transform', `translate(${{margin.left}},${{margin.top}})`);
-                let chartG = svg.querySelector('g');
+                // Buscar el grupo principal del gráfico (el primer 'g' dentro del SVG)
+                const chartG = svg.querySelector('g');
                 if (!chartG) {{
                     console.warn('No se encontró el grupo del gráfico');
                     return;
@@ -363,30 +362,23 @@ class LinkedViews:
                 
                 const d3G = d3.select(chartG);
                 
-                // Limpiar solo las barras y etiquetas (mantener ejes y otros elementos)
-                // En matrix.js, las barras son rect sin clase específica, pero están dentro del grupo principal
-                // Los ejes tienen clases específicas (.axis, .domain, .tick)
-                // Eliminar todos los rect que no sean parte de los ejes
-                d3G.selectAll('rect').each(function() {{
-                    const rect = d3.select(this);
-                    const classes = this.getAttribute('class') || '';
-                    // Solo eliminar si no es parte de los ejes
-                    if (!classes.includes('axis') && !classes.includes('domain') && !classes.includes('tick')) {{
-                        rect.remove();
-                    }}
-                }});
+                // CRÍTICO: Limpiar SOLO las barras (rect con clase 'bar'), NO los ejes
+                // Los ejes son grupos 'g' que contienen elementos .tick, .domain, etc.
+                d3G.selectAll('rect.bar').remove();
                 
-                // Eliminar etiquetas de barras si existen
+                // Eliminar etiquetas de barras si existen (pero NO las etiquetas de ejes)
+                // Las etiquetas de ejes están dentro de grupos de ejes, las de barras están directamente en el grupo principal
                 d3G.selectAll('text').each(function() {{
-                    const text = d3.select(this);
-                    const classes = this.getAttribute('class') || '';
-                    // Solo eliminar si es etiqueta de barra, no etiquetas de ejes
-                    if (classes.includes('bar-label') || (!classes.includes('axis') && !classes.includes('tick') && !classes.includes('domain'))) {{
-                        // Verificar que no sea parte de los ejes por posición
-                        const y = parseFloat(this.getAttribute('y')) || 0;
-                        if (y < chartHeight + 20) {{ // Etiquetas de barras están arriba
-                            text.remove();
-                        }}
+                    // Verificar si este texto es parte de un eje (está dentro de un grupo de eje)
+                    const parent = this.parentElement;
+                    if (parent && parent.tagName === 'g' && (parent.querySelector('.tick') || parent.querySelector('.domain'))) {{
+                        // Es parte de un eje, NO eliminar
+                        return;
+                    }}
+                    // Verificar si tiene clase de barra o está en posición de barra
+                    const y = parseFloat(this.getAttribute('y')) || 0;
+                    if (y < chartHeight + 30) {{ // Etiquetas de barras están arriba del área del gráfico
+                        d3.select(this).remove();
                     }}
                 }});
                 
@@ -403,7 +395,6 @@ class LinkedViews:
                     .range([chartHeight, 0]);
                 
                 // Dibujar nuevas barras usando el patrón enter/update/exit de D3
-                // En matrix.js, las barras tienen la clase 'bar'
                 const bars = d3G.selectAll('rect.bar')
                     .data(barData, d => d.category);
                 
@@ -432,36 +423,62 @@ class LinkedViews:
                     .attr('height', d => chartHeight - yScale(d.value))
                     .attr('fill', d => d.color || colorMap[d.category] || '#9b59b6');
                 
-                // Actualizar etiquetas
-                const labels = d3G.selectAll('text.bar-label')
-                    .data(barData);
+                // Actualizar ejes - En matrix.js, los ejes son grupos 'g' dentro del grupo principal
+                // El eje X está en translate(0, chartHeight), el eje Y está en translate(0, 0)
+                // Buscar los grupos de ejes por su transform usando querySelector nativo
+                const allGroups = chartG.querySelectorAll('g');
+                let xAxisGroup = null;
+                let yAxisGroup = null;
                 
-                labels.exit().remove();
+                for (let g of allGroups) {{
+                    const transform = g.getAttribute('transform') || '';
+                    // El eje X tiene transform="translate(0, chartHeight)"
+                    if (transform.includes(`translate(0,${{chartHeight}})`)) {{
+                        xAxisGroup = g;
+                    }}
+                    // El eje Y puede no tener transform o tener translate(0,0)
+                    // Pero también puede identificarse por tener elementos .tick sin estar en el eje X
+                    if (!xAxisGroup || g !== xAxisGroup) {{
+                        if (g.querySelector('.tick') && (!transform || transform.includes('translate(0,0)') || transform === '')) {{
+                            yAxisGroup = g;
+                        }}
+                    }}
+                }}
                 
-                labels.enter()
-                    .append('text')
-                    .attr('class', 'bar-label')
-                    .merge(labels)
-                    .attr('x', d => xScale(d.category) + xScale.bandwidth() / 2)
-                    .attr('y', d => yScale(d.value) - 5)
-                    .attr('text-anchor', 'middle')
-                    .attr('font-size', '11px')
-                    .attr('fill', '#333')
-                    .text(d => d.value);
-                
-                // Actualizar ejes si existen
-                const xAxisG = d3G.select('.x-axis');
-                const yAxisG = d3G.select('.y-axis');
-                
-                if (!xAxisG.empty()) {{
+                // Actualizar eje X
+                if (xAxisGroup) {{
                     const xAxis = d3.axisBottom(xScale);
-                    xAxisG.call(xAxis);
+                    d3.select(xAxisGroup).call(xAxis);
+                    // Actualizar estilos de texto del eje X
+                    d3.select(xAxisGroup).selectAll('text')
+                        .style('font-size', '12px')
+                        .style('font-weight', '600')
+                        .style('fill', '#000000');
+                    d3.select(xAxisGroup).selectAll('line, path')
+                        .style('stroke', '#000000')
+                        .style('stroke-width', '1.5px');
                 }}
                 
-                if (!yAxisG.empty()) {{
-                    const yAxis = d3.axisLeft(yScale);
-                    yAxisG.call(yAxis);
+                // Actualizar eje Y
+                if (yAxisGroup) {{
+                    const yAxis = d3.axisLeft(yScale).ticks(5);
+                    d3.select(yAxisGroup).call(yAxis);
+                    // Actualizar estilos de texto del eje Y
+                    d3.select(yAxisGroup).selectAll('text')
+                        .style('font-size', '12px')
+                        .style('font-weight', '600')
+                        .style('fill', '#000000');
+                    d3.select(yAxisGroup).selectAll('line, path')
+                        .style('stroke', '#000000')
+                        .style('stroke-width', '1.5px');
                 }}
+                
+                // Asegurar que el SVG mantenga sus dimensiones originales
+                svg.setAttribute('width', width);
+                svg.setAttribute('height', height);
+                svg.style.width = width + 'px';
+                svg.style.height = height + 'px';
+                
             }} else {{
                 console.warn('D3 no está disponible para actualizar el gráfico');
             }}
