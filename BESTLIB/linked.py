@@ -367,83 +367,42 @@ class LinkedViews:
                     return;
                 }}
                 
-                // CRÍTICO: Limpiar TODOS los SVGs en la celda antes de actualizar
-                // Esto previene la acumulación de SVGs múltiples
+                // CRÍTICO: Limpiar COMPLETAMENTE la celda antes de actualizar
+                // Esto previene la acumulación de SVGs múltiples que causa el crecimiento infinito
+                // Eliminar TODOS los SVGs y cualquier otro contenido
                 const existingSvgs = cell.querySelectorAll('svg');
-                if (existingSvgs.length > 1) {{
-                    console.warn('Se encontraron múltiples SVGs en la celda, limpiando todos excepto el primero');
-                    for (let i = 1; i < existingSvgs.length; i++) {{
-                        existingSvgs[i].remove();
-                    }}
-                }}
+                existingSvgs.forEach(svg => svg.remove());
                 
-                // Buscar el SVG dentro de la celda (debería haber solo uno ahora)
-                const svg = cell.querySelector('svg');
-                if (!svg) {{
-                    console.warn('SVG no encontrado en celda:', letter);
-                    window[flagName] = false;
-                    return;
-                }}
+                // También limpiar cualquier otro contenido residual
+                cell.innerHTML = '';
                 
                 // Obtener datos
                 const barData = {bar_data_json};
                 const colorMap = {color_map_json};
                 
-                // Obtener dimensiones del SVG existente (NO cambiar estas dimensiones)
-                const width = parseFloat(svg.getAttribute('width')) || 600;
-                const height = parseFloat(svg.getAttribute('height')) || 400;
+                // Obtener dimensiones del contenedor (usar dimensiones fijas para evitar expansión)
+                const containerWidth = cell.clientWidth || 500;
+                const containerHeight = cell.clientHeight || 400;
+                const width = Math.min(containerWidth, 600);
+                const height = Math.min(containerHeight, 400);
                 
                 // Calcular márgenes y área del gráfico (usar los mismos márgenes que matrix.js)
                 const margin = {{ top: 20, right: 20, bottom: 60, left: 60 }};
                 const chartWidth = width - margin.left - margin.right;
                 const chartHeight = height - margin.top - margin.bottom;
                 
-                // Usar D3 si está disponible
+                // Usar D3 si está disponible para re-renderizar completamente
                 if (typeof d3 !== 'undefined') {{
-                    const d3Svg = d3.select(svg);
+                    // CRÍTICO: Crear SVG completamente nuevo desde cero
+                    // Esto evita cualquier problema de acumulación o estado residual
+                    const svg = d3.select(cell)
+                        .append('svg')
+                        .attr('width', width)
+                        .attr('height', height)
+                        .style('overflow', 'visible');
                     
-                    // Buscar el grupo principal del gráfico (el primer 'g' dentro del SVG)
-                    const chartG = svg.querySelector('g');
-                    if (!chartG) {{
-                        console.warn('No se encontró el grupo del gráfico');
-                        window[flagName] = false;
-                        return;
-                    }}
-                    
-                    const d3G = d3.select(chartG);
-                    
-                    // CRÍTICO: Limpiar TODAS las barras ANTES de hacer data binding
-                    // Usar remove() de forma atómica para evitar race conditions
-                    // También limpiar cualquier SVG duplicado que pueda existir
-                    d3G.selectAll('rect.bar').remove();
-                    
-                    // CRÍTICO: Verificar que no haya múltiples grupos 'g' dentro del SVG
-                    // Si hay múltiples, mantener solo el primero (el que tiene el gráfico)
-                    const allGroups = svg.querySelectorAll('g');
-                    if (allGroups.length > 1) {{
-                        console.warn('Se encontraron múltiples grupos en SVG, manteniendo solo el primero');
-                        for (let i = 1; i < allGroups.length; i++) {{
-                            allGroups[i].remove();
-                        }}
-                        // Re-seleccionar el grupo después de limpiar
-                        const chartGAfter = svg.querySelector('g');
-                        if (chartGAfter) {{
-                            const d3GAfter = d3.select(chartGAfter);
-                            d3GAfter.selectAll('rect.bar').remove();
-                        }}
-                    }}
-                    
-                    // Eliminar etiquetas de barras si existen (pero NO las etiquetas de ejes)
-                    d3G.selectAll('text').each(function() {{
-                        const parent = this.parentElement;
-                        if (parent && parent.tagName === 'g' && (parent.querySelector('.tick') || parent.querySelector('.domain'))) {{
-                            return; // Es parte de un eje, NO eliminar
-                        }}
-                        const y = parseFloat(this.getAttribute('y')) || 0;
-                        if (y < chartHeight + 30) {{
-                            d3.select(this).remove();
-                        }}
-                    }});
+                    const g = svg.append('g')
+                        .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
                     
                     // Recalcular escalas con nuevos datos
                     const xScale = d3.scaleBand()
@@ -457,15 +416,10 @@ class LinkedViews:
                         .nice()
                         .range([chartHeight, 0]);
                     
-                    // CRÍTICO: Data binding DESPUÉS de limpiar - asegurar que empieza desde cero
-                    const bars = d3G.selectAll('rect.bar')
-                        .data(barData, d => d.category);
-                    
-                    // Eliminar barras antiguas que ya no están en los datos
-                    bars.exit().remove();
-                    
-                    // Agregar nuevas barras
-                    const barsEnter = bars.enter()
+                    // Dibujar barras desde cero
+                    const bars = g.selectAll('.bar')
+                        .data(barData)
+                        .enter()
                         .append('rect')
                         .attr('class', 'bar')
                         .attr('x', d => xScale(d.category))
@@ -474,73 +428,45 @@ class LinkedViews:
                         .attr('height', 0)
                         .attr('fill', d => d.color || colorMap[d.category] || '#9b59b6')
                         .attr('stroke', '#fff')
-                        .attr('stroke-width', 1);
-                    
-                    // Actualizar barras existentes y animar
-                    bars.merge(barsEnter)
+                        .attr('stroke-width', 1)
                         .transition()
                         .duration(300)
-                        .attr('x', d => xScale(d.category))
-                        .attr('width', xScale.bandwidth())
                         .attr('y', d => yScale(d.value))
-                        .attr('height', d => chartHeight - yScale(d.value))
-                        .attr('fill', d => d.color || colorMap[d.category] || '#9b59b6');
-                
-                // Actualizar ejes - En matrix.js, los ejes son grupos 'g' dentro del grupo principal
-                // El eje X está en translate(0, chartHeight), el eje Y está en translate(0, 0)
-                // Buscar los grupos de ejes por su transform usando querySelector nativo
-                const allGroups = chartG.querySelectorAll('g');
-                let xAxisGroup = null;
-                let yAxisGroup = null;
-                
-                for (let g of allGroups) {{
-                    const transform = g.getAttribute('transform') || '';
-                    // El eje X tiene transform="translate(0, chartHeight)"
-                    if (transform.includes(`translate(0,${{chartHeight}})`)) {{
-                        xAxisGroup = g;
-                    }}
-                    // El eje Y puede no tener transform o tener translate(0,0)
-                    // Pero también puede identificarse por tener elementos .tick sin estar en el eje X
-                    if (!xAxisGroup || g !== xAxisGroup) {{
-                        if (g.querySelector('.tick') && (!transform || transform.includes('translate(0,0)') || transform === '')) {{
-                            yAxisGroup = g;
-                        }}
-                    }}
-                }}
-                
-                    // Actualizar eje X
-                    if (xAxisGroup) {{
-                        const xAxis = d3.axisBottom(xScale);
-                        d3.select(xAxisGroup).call(xAxis);
-                        // Actualizar estilos de texto del eje X
-                        d3.select(xAxisGroup).selectAll('text')
-                            .style('font-size', '12px')
-                            .style('font-weight', '600')
-                            .style('fill', '#000000');
-                        d3.select(xAxisGroup).selectAll('line, path')
-                            .style('stroke', '#000000')
-                            .style('stroke-width', '1.5px');
-                    }}
+                        .attr('height', d => chartHeight - yScale(d.value));
                     
-                    // Actualizar eje Y
-                    if (yAxisGroup) {{
-                        const yAxis = d3.axisLeft(yScale).ticks(5);
-                        d3.select(yAxisGroup).call(yAxis);
-                        // Actualizar estilos de texto del eje Y
-                        d3.select(yAxisGroup).selectAll('text')
-                            .style('font-size', '12px')
-                            .style('font-weight', '600')
-                            .style('fill', '#000000');
-                        d3.select(yAxisGroup).selectAll('line, path')
-                            .style('stroke', '#000000')
-                            .style('stroke-width', '1.5px');
-                    }}
-                
-                    // Asegurar que el SVG mantenga sus dimensiones originales
-                    svg.setAttribute('width', width);
-                    svg.setAttribute('height', height);
-                    svg.style.width = width + 'px';
-                    svg.style.height = height + 'px';
+                    // Dibujar ejes desde cero
+                    const xAxis = g.append('g')
+                        .attr('transform', `translate(0,${{chartHeight}})`)
+                        .call(d3.axisBottom(xScale));
+                    
+                    xAxis.selectAll('text')
+                        .style('font-size', '12px')
+                        .style('font-weight', '600')
+                        .style('fill', '#000000')
+                        .style('font-family', 'Arial, sans-serif');
+                    
+                    xAxis.selectAll('line, path')
+                        .style('stroke', '#000000')
+                        .style('stroke-width', '1.5px');
+                    
+                    const yAxis = g.append('g')
+                        .call(d3.axisLeft(yScale).ticks(5));
+                    
+                    yAxis.selectAll('text')
+                        .style('font-size', '12px')
+                        .style('font-weight', '600')
+                        .style('fill', '#000000')
+                        .style('font-family', 'Arial, sans-serif');
+                    
+                    yAxis.selectAll('line, path')
+                        .style('stroke', '#000000')
+                        .style('stroke-width', '1.5px');
+                    
+                    // Asegurar que el SVG mantenga dimensiones fijas
+                    svg.attr('width', width);
+                    svg.attr('height', height);
+                    svg.style('width', width + 'px');
+                    svg.style('height', height + 'px');
                     
                 }} else {{
                     console.warn('D3 no está disponible para actualizar el gráfico');
