@@ -14,7 +14,31 @@ except ImportError:
     try:
         from traitlets import List, Dict, Int, observe
     except ImportError:
-        List = Dict = Int = None
+        # Crear stubs funcionales para traitlets
+        class _TraitStub:
+            def __init__(self, *args, **kwargs):
+                self._value = kwargs.get('default', [] if 'List' in str(type(self)) else 0)
+            def tag(self, **kwargs):
+                return self
+            def __call__(self, *args, **kwargs):
+                return _TraitStub()
+        
+        class ListStub(_TraitStub):
+            def __call__(self, *args, **kwargs):
+                return ListStub()
+        
+        class DictStub(_TraitStub):
+            def __call__(self, *args, **kwargs):
+                return DictStub()
+        
+        class IntStub(_TraitStub):
+            def __call__(self, *args, **kwargs):
+                return IntStub()
+        
+        List = ListStub
+        Dict = DictStub
+        Int = IntStub
+        
         def observe(*args, **kwargs):
             def decorator(func):
                 return func
