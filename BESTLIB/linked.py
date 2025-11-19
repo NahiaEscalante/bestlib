@@ -300,10 +300,9 @@ class LinkedViews:
                     **view_config['kwargs']
                 }
                 
-                # Re-mapear (actualizar el spec interno)
-                self._layouts[view_id].map({'B': bar_spec})
-                
                 # Actualizar el gráfico directamente con JavaScript sin recrear el contenedor
+                # NOTA: NO llamar layout.map() aquí porque puede disparar re-renders automáticos
+                # que causan acumulación de barras. Solo actualizamos con JS directamente.
                 div_id = self._div_ids.get(view_id)
                 if div_id:
                     self._update_chart_with_js(div_id, bar_spec)
