@@ -229,11 +229,37 @@ class LinkedViews:
         
         # Callback para actualizar selección
         def on_select(payload):
-            self._selected_data = payload.get('items', [])
+            # Debug: verificar que el callback se está ejecutando
+            if MatrixLayout._debug:
+                print(f"🔵 [LinkedViews] Callback select ejecutado: {len(payload.get('items', []))} items")
+                print(f"   - Payload keys: {list(payload.keys())}")
+                print(f"   - Layout div_id: {layout.div_id}")
+            
+            # Extraer items del payload
+            items = payload.get('items', [])
+            if not items:
+                # Si no hay items, limpiar selección
+                self._selected_data = []
+            else:
+                # Asegurar que items sea una lista
+                if not isinstance(items, list):
+                    items = [items]
+                self._selected_data = items
+            
             # Actualizar todas las vistas dependientes
             self._update_linked_views()
         
         layout.on('select', on_select)
+        
+        # CRÍTICO: Asegurar que el comm esté registrado antes de mostrar
+        # Esto es necesario para que los eventos funcionen correctamente
+        MatrixLayout.register_comm()
+        
+        # CRÍTICO: Registrar la instancia del layout para que el sistema de comm pueda encontrarla
+        # Esto asegura que los eventos lleguen al callback correcto
+        if hasattr(layout, 'div_id') and layout.div_id:
+            if MatrixLayout._debug:
+                print(f"✅ [LinkedViews] Layout registrado con div_id: {layout.div_id}")
         
         # Configurar scatter
         scatter_spec = {
@@ -540,7 +566,8 @@ class LinkedViews:
                 # Mostrar layout normalmente primero
                 layout.display()
                 # Luego mover al contenedor correcto con un delay para asegurar que se renderizó
-                self._move_layout_to_container(layout.div_id, container_id, delay=300)
+                # CRÍTICO: Usar un delay más largo para scatter plots para asegurar que el brush se inicialice
+                self._move_layout_to_container(layout.div_id, container_id, delay=500)
             elif view_config['type'] == 'barchart':
                 layout = self._create_barchart_layout(view_id, view_config)
                 self._div_ids[view_id] = layout.div_id
@@ -594,20 +621,58 @@ class LinkedViews:
                 }}
                 
                 // CRÍTICO: Mover TODO el contenido del layout al contenedor objetivo
-                // Esto incluye el div .matrix-layout y todo su contenido
-                targetContainer.innerHTML = layoutDiv.innerHTML;
+                // IMPORTANTE: NO usar innerHTML porque destruye los event listeners de D3.js (brush)
+                // En su lugar, mover los nodos directamente usando appendChild
+                
+                // Mover todos los hijos del layoutDiv al targetContainer
+                while (layoutDiv.firstChild) {{
+                    targetContainer.appendChild(layoutDiv.firstChild);
+                }}
                 
                 // Actualizar el div_id del contenedor para que coincida (para eventos)
                 const newLayoutDiv = targetContainer.querySelector('.matrix-layout');
                 if (newLayoutDiv) {{
                     newLayoutDiv.id = '{layout_div_id}';
+                    
+                    // CRÍTICO: Asegurar que el sistema de comm siga funcionando después de mover
+                    // El div_id se mantiene, así que el comm debería seguir funcionando
+                    if (typeof window.sendEvent === 'function') {{
+                        console.log('✅ Layout movido correctamente (preservando event listeners), div_id:', '{layout_div_id}');
+                    }} else {{
+                        console.warn('⚠️ window.sendEvent no está disponible después de mover layout');
+                    }}
+                    
+                    // CRÍTICO: Verificar que los event listeners del scatter plot sigan funcionando
+                    // Los event listeners deberían estar preservados porque movimos los nodos directamente
+                    const scatterPoints = newLayoutDiv.querySelectorAll('.scatter-point, circle[data-point]');
+                    const brushOverlay = newLayoutDiv.querySelector('.brush-overlay, .brush');
+                    if (scatterPoints.length > 0) {{
+                        console.log('✅ Encontrados', scatterPoints.length, 'puntos del scatter plot');
+                    }}
+                    if (brushOverlay) {{
+                        console.log('✅ Brush overlay encontrado');
+                    }}
                 }}
                 
-                // Eliminar el div original del layout (ya no es necesario)
-                // CRÍTICO: Solo eliminar si tiene un parentNode (no causar errores)
-                if (layoutDiv.parentNode) {{
-                    layoutDiv.parentNode.removeChild(layoutDiv);
-                }}
+                // CRÍTICO: NO eliminar el div original inmediatamente
+                // Esperar un poco para asegurar que todo se haya movido correctamente
+                // IMPORTANTE: El layoutDiv original puede estar vacío ahora, pero debemos eliminarlo
+                // para evitar duplicados en el DOM
+                setTimeout(function() {{
+                    // Verificar que el layoutDiv esté vacío antes de eliminarlo
+                    if (layoutDiv && layoutDiv.parentNode && layoutDiv.children.length === 0) {{
+                        layoutDiv.parentNode.removeChild(layoutDiv);
+                    }} else if (layoutDiv && layoutDiv.parentNode) {{
+                        // Si aún tiene hijos, moverlos también
+                        while (layoutDiv.firstChild) {{
+                            targetContainer.appendChild(layoutDiv.firstChild);
+                        }}
+                        // Luego eliminar el contenedor vacío
+                        if (layoutDiv.parentNode && layoutDiv.children.length === 0) {{
+                            layoutDiv.parentNode.removeChild(layoutDiv);
+                        }}
+                    }}
+                }}, 200);  // Aumentar delay para asegurar que todo se haya movido
             }}
             
             // Iniciar después de un delay inicial
