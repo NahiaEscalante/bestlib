@@ -258,7 +258,10 @@ class LinkedViews:
         
         bar_data = self._prepare_barchart_data(view_config, data)
         
-        layout = MatrixLayout("B")
+        # Obtener la letra de la vista (por defecto 'B' para barchart)
+        letter = view_config.get('letter', 'B')
+        
+        layout = MatrixLayout(letter)
         
         bar_spec = {
             'type': 'bar',
@@ -268,10 +271,12 @@ class LinkedViews:
             **view_config['kwargs']
         }
         
-        layout.map({'B': bar_spec})
+        layout.map({letter: bar_spec})
         self._layouts[view_id] = layout
-        # Guardar div_id para actualizaciones futuras
+        # Guardar div_id y letra para actualizaciones futuras
         self._div_ids[view_id] = layout.div_id
+        # Guardar la letra en view_config para uso en _update_chart_with_js
+        view_config['letter'] = letter
         
         return layout
     
@@ -306,22 +311,25 @@ class LinkedViews:
                 # que causan acumulación de barras. Solo actualizamos con JS directamente.
                 div_id = self._div_ids.get(view_id)
                 if div_id:
-                    self._update_chart_with_js(div_id, bar_spec)
+                    # Obtener la letra de la vista (por defecto 'B' para barchart)
+                    letter = view_config.get('letter', 'B')
+                    self._update_chart_with_js(div_id, bar_spec, letter=letter)
         
         # Actualizar widget de selección si existe
         self._update_selection_widget_display()
     
-    def _update_chart_with_js(self, div_id, bar_spec):
+    def _update_chart_with_js(self, div_id, bar_spec, letter='B'):
         """Actualiza un gráfico existente usando JavaScript sin recrear el contenedor"""
         import json
         
         # CRÍTICO: Protección contra race condition - evitar actualizaciones simultáneas
-        if div_id in self._updating_charts:
+        update_key = f"{div_id}:{letter}"
+        if update_key in self._updating_charts:
             # Ya hay una actualización en curso para este div, ignorar esta llamada
             return
         
         # Marcar como actualizando
-        self._updating_charts.add(div_id)
+        self._updating_charts.add(update_key)
         
         # Escapar datos para JavaScript
         bar_data_json = json.dumps(bar_spec['data'])
@@ -331,27 +339,48 @@ class LinkedViews:
         js_update = f"""
         (function() {{
             const divId = '{div_id}';
+            const letter = '{letter}';
             
             // CRÍTICO: Flag de protección a nivel de ventana para evitar ejecuciones simultáneas
-            const flagName = '_bestlib_updating_' + divId.replace(/[^a-zA-Z0-9]/g, '_');
+            const flagName = '_bestlib_updating_' + divId.replace(/[^a-zA-Z0-9]/g, '_') + '_' + letter;
             if (window[flagName]) {{
-                console.warn('Actualización ya en curso para:', divId);
+                console.warn('Actualización ya en curso para:', divId, letter);
                 return;
             }}
             window[flagName] = true;
             
             try {{
-                const container = document.getElementById(divId);
-                if (!container) {{
-                    console.warn('Contenedor no encontrado:', divId);
+                // CRÍTICO: Buscar el contenedor principal del layout
+                const mainContainer = document.getElementById(divId);
+                if (!mainContainer) {{
+                    console.warn('Contenedor principal no encontrado:', divId);
                     window[flagName] = false;
                     return;
                 }}
                 
-                // Buscar el SVG dentro del contenedor
-                const svg = container.querySelector('svg');
+                // CRÍTICO: Buscar la celda específica con data-letter dentro del layout
+                // El bar chart se renderiza dentro de una celda con clase 'matrix-cell' y data-letter
+                const cell = mainContainer.querySelector('.matrix-cell[data-letter="' + letter + '"]');
+                if (!cell) {{
+                    console.warn('Celda no encontrada para letra:', letter, 'en contenedor:', divId);
+                    window[flagName] = false;
+                    return;
+                }}
+                
+                // CRÍTICO: Limpiar TODOS los SVGs en la celda antes de actualizar
+                // Esto previene la acumulación de SVGs múltiples
+                const existingSvgs = cell.querySelectorAll('svg');
+                if (existingSvgs.length > 1) {{
+                    console.warn('Se encontraron múltiples SVGs en la celda, limpiando todos excepto el primero');
+                    for (let i = 1; i < existingSvgs.length; i++) {{
+                        existingSvgs[i].remove();
+                    }}
+                }}
+                
+                // Buscar el SVG dentro de la celda (debería haber solo uno ahora)
+                const svg = cell.querySelector('svg');
                 if (!svg) {{
-                    console.warn('SVG no encontrado en contenedor:', divId);
+                    console.warn('SVG no encontrado en celda:', letter);
                     window[flagName] = false;
                     return;
                 }}
@@ -385,7 +414,24 @@ class LinkedViews:
                     
                     // CRÍTICO: Limpiar TODAS las barras ANTES de hacer data binding
                     // Usar remove() de forma atómica para evitar race conditions
+                    // También limpiar cualquier SVG duplicado que pueda existir
                     d3G.selectAll('rect.bar').remove();
+                    
+                    // CRÍTICO: Verificar que no haya múltiples grupos 'g' dentro del SVG
+                    // Si hay múltiples, mantener solo el primero (el que tiene el gráfico)
+                    const allGroups = svg.querySelectorAll('g');
+                    if (allGroups.length > 1) {{
+                        console.warn('Se encontraron múltiples grupos en SVG, manteniendo solo el primero');
+                        for (let i = 1; i < allGroups.length; i++) {{
+                            allGroups[i].remove();
+                        }}
+                        // Re-seleccionar el grupo después de limpiar
+                        const chartGAfter = svg.querySelector('g');
+                        if (chartGAfter) {{
+                            const d3GAfter = d3.select(chartGAfter);
+                            d3GAfter.selectAll('rect.bar').remove();
+                        }}
+                    }}
                     
                     // Eliminar etiquetas de barras si existen (pero NO las etiquetas de ejes)
                     d3G.selectAll('text').each(function() {{
@@ -514,8 +560,8 @@ class LinkedViews:
         def reset_flag():
             import time
             time.sleep(0.5)  # Esperar 500ms para que el JS se ejecute
-            if div_id in self._updating_charts:
-                self._updating_charts.remove(div_id)
+            if update_key in self._updating_charts:
+                self._updating_charts.remove(update_key)
         
         thread = threading.Thread(target=reset_flag, daemon=True)
         thread.start()
