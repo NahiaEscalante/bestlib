@@ -523,124 +523,99 @@ class LinkedViews:
         
         display(HTML(''.join(html_parts)))
         
-        # Crear y mostrar cada vista directamente en sus contenedores
-        # CRÍTICO: NO usar _inject_layout_in_container porque causa loops infinitos
-        # En su lugar, renderizar directamente usando JavaScript en el contenedor correcto
+        # CRÍTICO: Pequeño delay para asegurar que los contenedores HTML se rendericen
+        # antes de mostrar los layouts
+        import time
+        time.sleep(0.2)  # 200ms debería ser suficiente
+        
+        # Crear y mostrar cada vista
+        # CRÍTICO: Usar display() normal de MatrixLayout y luego mover el contenido al contenedor correcto
+        # Esto asegura que todo el JavaScript necesario se cargue correctamente
         for view_id, view_config in self._views.items():
             container_id = f"{self._container_id}-{view_id}"
             
             if view_config['type'] == 'scatter':
                 layout = self._create_scatter_layout(view_id, view_config)
                 self._div_ids[view_id] = layout.div_id
-                # Renderizar directamente en el contenedor usando JavaScript
-                self._render_layout_in_container(layout, container_id, view_config)
+                # Mostrar layout normalmente primero
+                layout.display()
+                # Luego mover al contenedor correcto con un delay para asegurar que se renderizó
+                self._move_layout_to_container(layout.div_id, container_id, delay=300)
             elif view_config['type'] == 'barchart':
                 layout = self._create_barchart_layout(view_id, view_config)
                 self._div_ids[view_id] = layout.div_id
-                # Renderizar directamente en el contenedor usando JavaScript
-                self._render_layout_in_container(layout, container_id, view_config)
+                # Mostrar layout normalmente primero
+                layout.display()
+                # Luego mover al contenedor correcto con un delay para asegurar que se renderizó
+                self._move_layout_to_container(layout.div_id, container_id, delay=300)
     
-    def _render_layout_in_container(self, layout, container_id, view_config):
-        """Renderiza el layout directamente en el contenedor específico sin causar loops"""
+    def _move_layout_to_container(self, layout_div_id, container_id, delay=300):
+        """Mueve el contenido del layout al contenedor específico después de que se renderice"""
         if not HAS_IPYTHON:
             return
         
-        # Obtener los datos del layout para renderizar directamente
-        import json
-        from IPython.display import Javascript, HTML
+        from IPython.display import Javascript
         
-        # Para barchart, obtener los datos directamente
-        if view_config['type'] == 'barchart':
-            data = self._selected_data if self._selected_data else self._data
-            bar_data = self._prepare_barchart_data(view_config, data)
-            letter = view_config.get('letter', 'B')
+        # Mover el contenido una sola vez después de un delay
+        # CRÍTICO: Usar un delay suficiente para que el layout se renderice completamente
+        js_move = f"""
+        (function() {{
+            let attempts = 0;
+            const maxAttempts = 20; // Máximo 2 segundos (20 * 100ms)
             
-            # Renderizar directamente el bar chart en el contenedor
-            bar_data_json = json.dumps(bar_data)
-            color_map_json = json.dumps(view_config.get('kwargs', {}).get('colorMap', {}))
-            
-            js_render = f"""
-            (function() {{
-                function renderBarChart() {{
-                    const container = document.getElementById('{container_id}');
-                    if (!container) {{
-                        requestAnimationFrame(renderBarChart);
+            function moveLayout() {{
+                attempts++;
+                const targetContainer = document.getElementById('{container_id}');
+                const layoutDiv = document.getElementById('{layout_div_id}');
+                
+                // Verificar que ambos elementos existan
+                if (!targetContainer || !layoutDiv) {{
+                    if (attempts < maxAttempts) {{
+                        setTimeout(moveLayout, 100);
                         return;
                     }}
-                    
-                    // Verificar dimensiones
-                    if (container.offsetWidth === 0 || container.offsetHeight === 0) {{
-                        requestAnimationFrame(renderBarChart);
-                        return;
-                    }}
-                    
-                    // Limpiar contenedor completamente
-                    container.innerHTML = '';
-                    
-                    // Crear el div del layout dentro del contenedor
-                    const layoutDiv = document.createElement('div');
-                    layoutDiv.id = '{layout.div_id}';
-                    layoutDiv.className = 'matrix-layout';
-                    container.appendChild(layoutDiv);
-                    
-                    // Renderizar el bar chart directamente usando la función de matrix.js
-                    if (typeof render !== 'undefined' && typeof d3 !== 'undefined') {{
-                        const barData = {bar_data_json};
-                        const colorMap = {color_map_json};
-                        const letter = '{letter}';
-                        
-                        // Crear mapping para el layout
-                        const mapping = {{
-                            '{letter}': {{
-                                type: 'bar',
-                                data: barData,
-                                axes: true,
-                                interactive: false,
-                                colorMap: colorMap
-                            }},
-                            __div_id__: '{layout.div_id}',
-                            __safe_html__: true
-                        }};
-                        
-                        // Renderizar usando la función render de matrix.js
-                        render('{layout.div_id}', '{letter}', mapping);
-                    }} else {{
-                        console.warn('D3 o render no están disponibles');
-                    }}
+                    console.warn('No se encontraron contenedores después de', maxAttempts, 'intentos');
+                    return;
                 }}
                 
-                requestAnimationFrame(renderBarChart);
-            }})();
-            """
-            
-            display(Javascript(js_render))
-        
-        else:
-            # Para scatter, usar display normal pero mover después
-            layout.display()
-            
-            # Mover el contenido una sola vez después de un delay
-            js_move = f"""
-            (function() {{
-                setTimeout(function() {{
-                    const targetContainer = document.getElementById('{container_id}');
-                    const layoutDiv = document.getElementById('{layout.div_id}');
-                    
-                    if (targetContainer && layoutDiv && layoutDiv.innerHTML) {{
-                        targetContainer.innerHTML = layoutDiv.innerHTML;
-                        const newLayoutDiv = targetContainer.querySelector('.matrix-layout');
-                        if (newLayoutDiv) {{
-                            newLayoutDiv.id = '{layout.div_id}';
-                        }}
-                        if (layoutDiv.parentNode) {{
-                            layoutDiv.parentNode.removeChild(layoutDiv);
-                        }}
+                // Verificar que el layout tenga contenido renderizado
+                // Buscar SVG o contenido dentro del layout
+                const hasContent = layoutDiv.querySelector('svg') || 
+                                   layoutDiv.querySelector('.matrix-cell') ||
+                                   layoutDiv.innerHTML.trim().length > 0;
+                
+                if (!hasContent) {{
+                    if (attempts < maxAttempts) {{
+                        setTimeout(moveLayout, 100);
+                        return;
                     }}
-                }}, 200);
-            }})();
-            """
+                    console.warn('Layout no tiene contenido después de', maxAttempts, 'intentos');
+                    return;
+                }}
+                
+                // CRÍTICO: Mover TODO el contenido del layout al contenedor objetivo
+                // Esto incluye el div .matrix-layout y todo su contenido
+                targetContainer.innerHTML = layoutDiv.innerHTML;
+                
+                // Actualizar el div_id del contenedor para que coincida (para eventos)
+                const newLayoutDiv = targetContainer.querySelector('.matrix-layout');
+                if (newLayoutDiv) {{
+                    newLayoutDiv.id = '{layout_div_id}';
+                }}
+                
+                // Eliminar el div original del layout (ya no es necesario)
+                // CRÍTICO: Solo eliminar si tiene un parentNode (no causar errores)
+                if (layoutDiv.parentNode) {{
+                    layoutDiv.parentNode.removeChild(layoutDiv);
+                }}
+            }}
             
-            display(Javascript(js_move))
+            // Iniciar después de un delay inicial
+            setTimeout(moveLayout, {delay});
+        }})();
+        """
+        
+        display(Javascript(js_move))
     
     
     def get_selected_data(self):

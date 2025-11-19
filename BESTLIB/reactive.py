@@ -4,8 +4,8 @@ Permite que los datos se actualicen automáticamente sin re-ejecutar celdas
 """
 
 try:
-    import ipywidgets as widgets
-    from traitlets import List, Dict, Int, observe
+import ipywidgets as widgets
+from traitlets import List, Dict, Int, observe
     HAS_WIDGETS = True
 except ImportError:
     HAS_WIDGETS = False
@@ -153,7 +153,7 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
             
             # Solo actualizar si hay cambio real (evitar loops infinitos)
             if self.items != items or self.count != new_count:
-                self.items = items
+        self.items = items
                 self.count = new_count
                 # NOTA: NO llamar callbacks manualmente aquí porque @observe('items') ya los ejecutará
                 # Llamar callbacks manualmente aquí causaría que se ejecuten DOS VECES:
@@ -643,70 +643,70 @@ class ReactiveMatrixLayout:
         
         # Si es vista enlazada, configurar callback de actualización
         if not is_primary:
-            # Guardar parámetros para el callback (closure)
-            barchart_params = {
-                'letter': letter,
-                'category_col': category_col,
-                'value_col': value_col,
-                'kwargs': kwargs.copy(),  # Copia para evitar mutaciones
-                'layout_div_id': self._layout.div_id
-            }
-            
+        # Guardar parámetros para el callback (closure)
+        barchart_params = {
+            'letter': letter,
+            'category_col': category_col,
+            'value_col': value_col,
+            'kwargs': kwargs.copy(),  # Copia para evitar mutaciones
+            'layout_div_id': self._layout.div_id
+        }
+        
             # Debug: verificar que la vista principal existe
             if MatrixLayout._debug:
                 print(f"🔗 [ReactiveMatrixLayout] Registrando callback para bar chart '{letter}' enlazado a vista principal '{primary_letter}'")
                 print(f"   - SelectionModel ID: {id(primary_selection)}")
                 print(f"   - Callbacks actuales: {len(primary_selection._callbacks)}")
             
-            # Configurar callback para actualizar bar chart cuando cambia selección
-            def update_barchart(items, count):
-                """Actualiza el bar chart cuando cambia la selección usando JavaScript"""
-                try:
+        # Configurar callback para actualizar bar chart cuando cambia selección
+        def update_barchart(items, count):
+            """Actualiza el bar chart cuando cambia la selección usando JavaScript"""
+            try:
                     # Debug: verificar que el callback se está ejecutando
                     if MatrixLayout._debug:
                         print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando bar chart '{letter}' con {count} items seleccionados")
-                    import json
-                    from IPython.display import Javascript
+                import json
+                from IPython.display import Javascript
                     import time
-                    
-                    # Usar datos seleccionados o todos los datos
-                    data_to_use = self._data
-                    if items and len(items) > 0:
-                        # Convertir lista de dicts a DataFrame si es necesario
-                        if HAS_PANDAS and isinstance(items[0], dict):
-                            import pandas as pd
-                            data_to_use = pd.DataFrame(items)
-                        else:
-                            data_to_use = items
+                
+                # Usar datos seleccionados o todos los datos
+                data_to_use = self._data
+                if items and len(items) > 0:
+                    # Convertir lista de dicts a DataFrame si es necesario
+                    if HAS_PANDAS and isinstance(items[0], dict):
+                        import pandas as pd
+                        data_to_use = pd.DataFrame(items)
+                    else:
+                        data_to_use = items
                     else:
                         data_to_use = self._data
-                    
-                    # Preparar datos del bar chart
-                    bar_data = self._prepare_barchart_data(
-                        data_to_use, 
-                        barchart_params['category_col'], 
-                        barchart_params['value_col'],
-                        barchart_params['kwargs']
-                    )
-                    
-                    if not bar_data:
-                        return
-                    
+                
+                # Preparar datos del bar chart
+                bar_data = self._prepare_barchart_data(
+                    data_to_use, 
+                    barchart_params['category_col'], 
+                    barchart_params['value_col'],
+                    barchart_params['kwargs']
+                )
+                
+                if not bar_data:
+                    return
+                
                     # IMPORTANTE: NO actualizar el mapping aquí para evitar bucles infinitos
                     # Solo actualizar visualmente el gráfico con JavaScript
                     # El mapping solo se actualiza cuando es necesario (no en callbacks de actualización)
-                    
-                    # Crear JavaScript para actualizar el gráfico de forma más robusta
-                    div_id = barchart_params['layout_div_id']
+                
+                # Crear JavaScript para actualizar el gráfico de forma más robusta
+                div_id = barchart_params['layout_div_id']
                     # Sanitizar para evitar numpy.int64 en JSON
-                    bar_data_json = json.dumps(_sanitize_for_json(bar_data))
-                    color_map = barchart_params['kwargs'].get('colorMap', {})
-                    color_map_json = json.dumps(color_map)
-                    default_color = barchart_params['kwargs'].get('color', '#4a90e2')
-                    show_axes = barchart_params['kwargs'].get('axes', True)
-                    
-                    js_update = f"""
-                    (function() {{
+                bar_data_json = json.dumps(_sanitize_for_json(bar_data))
+                color_map = barchart_params['kwargs'].get('colorMap', {})
+                color_map_json = json.dumps(color_map)
+                default_color = barchart_params['kwargs'].get('color', '#4a90e2')
+                show_axes = barchart_params['kwargs'].get('axes', True)
+                
+                js_update = f"""
+                (function() {{
                         // Flag para evitar actualizaciones múltiples simultáneas
                     if (window._bestlib_updating_{letter}) {{
                         return;
@@ -969,22 +969,22 @@ class ReactiveMatrixLayout:
                     updateBarchart();
                 }})();
                 """
-                    
-                    # Ejecutar JavaScript para actualizar solo el bar chart
+                
+                # Ejecutar JavaScript para actualizar solo el bar chart
                     # IMPORTANTE: Usar display_id para que Jupyter reemplace el output anterior
                     # en lugar de crear uno nuevo, lo que previene la duplicación
-                    try:
-                        from IPython.display import Javascript, display
+                try:
+                    from IPython.display import Javascript, display
                         display(Javascript(js_update), clear=False, display_id=f'barchart-update-{letter}', update=True)
-                    except:
-                        # Fallback si no está disponible
-                        pass
-                    
-                except Exception as e:
-                    if MatrixLayout._debug:
-                        print(f"⚠️ Error actualizando bar chart: {e}")
-                        import traceback
-                        traceback.print_exc()
+                except:
+                    # Fallback si no está disponible
+                    pass
+                
+            except Exception as e:
+                if MatrixLayout._debug:
+                    print(f"⚠️ Error actualizando bar chart: {e}")
+                    import traceback
+                    traceback.print_exc()
                         # Asegurar que el flag se resetee incluso si hay error
                         js_reset_flag = f"""
                         <script>
@@ -1003,7 +1003,7 @@ class ReactiveMatrixLayout:
             primary_selection.on_change(update_barchart)
             
             # Marcar como callback registrado
-            self._barchart_callbacks[letter] = update_barchart
+        self._barchart_callbacks[letter] = update_barchart
         
         return self
 
