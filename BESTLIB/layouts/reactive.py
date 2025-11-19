@@ -76,6 +76,12 @@ class ReactiveMatrixLayout:
         )
         
         # Modelo reactivo
+        if SelectionModel is None:
+            raise ImportError(
+                "SelectionModel no está disponible. "
+                "Asegúrate de que el módulo reactive esté correctamente instalado. "
+                "Intenta: from BESTLIB.reactive.selection import SelectionModel"
+            )
         self.selection_model = selection_model or SelectionModel()
         
         # Conectar el modelo reactivo

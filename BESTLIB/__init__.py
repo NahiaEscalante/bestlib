@@ -23,8 +23,46 @@ try:
     SelectionModel = SM_modular
     ReactiveData = RD_modular
     HAS_REACTIVE = True
-except ImportError:
-    pass
+except (ImportError, AttributeError, ModuleNotFoundError) as e:
+    # Si falla el import desde .reactive, intentar import directo desde .reactive.selection
+    try:
+        from .reactive.selection import SelectionModel as SM_direct, ReactiveData as RD_direct
+        SelectionModel = SM_direct
+        ReactiveData = RD_direct
+        HAS_REACTIVE = True
+        # Intentar importar ReactiveEngine y LinkManager por separado
+        try:
+            from .reactive.engine import ReactiveEngine
+        except ImportError:
+            ReactiveEngine = None
+        try:
+            from .reactive.linking import LinkManager
+        except ImportError:
+            LinkManager = None
+    except (ImportError, AttributeError, ModuleNotFoundError):
+        # Si también falla, mantener None
+        SelectionModel = None
+        ReactiveData = None
+        ReactiveEngine = None
+        LinkManager = None
+        HAS_REACTIVE = False
+except Exception as e:
+    # Capturar cualquier otro error inesperado
+    import sys
+    if hasattr(sys, '_getframe'):  # Solo en entornos interactivos
+        print(f"⚠️ Error inesperado al importar módulo reactivo: {e}")
+        import traceback
+        traceback.print_exc()
+    # Intentar fallback directo
+    try:
+        from .reactive.selection import SelectionModel as SM_direct, ReactiveData as RD_direct
+        SelectionModel = SM_direct
+        ReactiveData = RD_direct
+        HAS_REACTIVE = True
+    except:
+        SelectionModel = None
+        ReactiveData = None
+        HAS_REACTIVE = False
 
 # Importar ReactiveMatrixLayout desde layouts/reactive.py (estructura modular)
 try:
