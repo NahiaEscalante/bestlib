@@ -1,4 +1,4 @@
-﻿"""
+"""
 Sistema de Variables Reactivas para BESTLIB
 Permite que los datos se actualicen automáticamente sin re-ejecutar celdas
 """

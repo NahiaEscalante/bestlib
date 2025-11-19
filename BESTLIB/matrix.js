@@ -218,10 +218,6 @@
     const C = rows[0].length;
     
     container.style.display = "grid";
-    container.style.boxSizing = "border-box";
-    container.style.width = "100%";
-    container.style.maxWidth = "100%";
-    container.style.overflow = "visible"; // Permitir que contenido se vea completo
     
     // Configuración dinámica de gap (definir ANTES de usarlo)
     const gap = mapping.__gap__ !== undefined ? mapping.__gap__ : 12;
@@ -240,8 +236,7 @@
       });
       container.style.gridTemplateColumns = colWidths.join(' ');
     } else {
-      // CRÍTICO: Usar 1fr para distribución uniforme y evitar deformaciones
-      container.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
+    container.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
     }
     
     // Configuración dinámica de filas
@@ -282,8 +277,7 @@
       
       // Aumentar altura de filas para evitar recorte - altura mínima para gráficos completos
       // Considerando: padding (30px) + gráfico (320px) + espacio para ejes (20px extra)
-      // CRÍTICO: Usar 1fr en lugar de auto para distribución uniforme
-      container.style.gridTemplateRows = `repeat(${R}, minmax(${minRowHeight}px, 1fr))`;
+      container.style.gridTemplateRows = `repeat(${R}, minmax(${minRowHeight}px, auto))`;
     }
     
     // Aplicar gap al contenedor
@@ -393,10 +387,6 @@
         // Usar grid-row y grid-column con span para fusionar celdas
         cell.style.gridRow = `${r + 1} / span ${height}`;
         cell.style.gridColumn = `${c + 1} / span ${width}`;
-        // CRÍTICO: Asegurar que la celda respete los límites del grid
-        cell.style.boxSizing = "border-box";
-        cell.style.minWidth = "0"; // Permitir que se ajuste al grid
-        cell.style.minHeight = "0"; // Permitir que se ajuste al grid
         
         // Agregar clases CSS para indicadores de enlace visual
         if (spec && typeof spec === 'object') {
@@ -4809,9 +4799,7 @@
       .append('svg')
       .attr('width', width)
       .attr('height', height)
-      .style('overflow', 'hidden')  // CRÍTICO: hidden para evitar que SVG se extienda más allá del contenedor
-      .style('max-width', '100%')
-      .style('max-height', '100%');
+      .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
     
     const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
