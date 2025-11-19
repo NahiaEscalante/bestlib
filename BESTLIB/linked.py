@@ -381,10 +381,18 @@ class LinkedViews:
                 const colorMap = {color_map_json};
                 
                 // Obtener dimensiones del contenedor (usar dimensiones fijas para evitar expansión)
-                const containerWidth = cell.clientWidth || 500;
-                const containerHeight = cell.clientHeight || 400;
-                const width = Math.min(containerWidth, 600);
-                const height = Math.min(containerHeight, 400);
+                // CRÍTICO: Si las dimensiones del contenedor no están disponibles, usar valores por defecto
+                let containerWidth = cell.clientWidth || cell.offsetWidth || 500;
+                let containerHeight = cell.clientHeight || cell.offsetHeight || 400;
+                
+                // Si aún no hay dimensiones, esperar un frame y usar valores por defecto seguros
+                if (containerWidth === 0 || containerHeight === 0) {{
+                    containerWidth = 500;
+                    containerHeight = 400;
+                }}
+                
+                const width = Math.min(Math.max(containerWidth, 400), 600);
+                const height = Math.min(Math.max(containerHeight, 300), 400);
                 
                 // Calcular márgenes y área del gráfico (usar los mismos márgenes que matrix.js)
                 const margin = {{ top: 20, right: 20, bottom: 60, left: 60 }};
@@ -417,22 +425,27 @@ class LinkedViews:
                         .range([chartHeight, 0]);
                     
                     // Dibujar barras desde cero
-                    const bars = g.selectAll('.bar')
-                        .data(barData)
-                        .enter()
-                        .append('rect')
-                        .attr('class', 'bar')
-                        .attr('x', d => xScale(d.category))
-                        .attr('width', xScale.bandwidth())
-                        .attr('y', chartHeight)
-                        .attr('height', 0)
-                        .attr('fill', d => d.color || colorMap[d.category] || '#9b59b6')
-                        .attr('stroke', '#fff')
-                        .attr('stroke-width', 1)
-                        .transition()
-                        .duration(300)
-                        .attr('y', d => yScale(d.value))
-                        .attr('height', d => chartHeight - yScale(d.value));
+                    // CRÍTICO: Verificar que hay datos antes de dibujar
+                    if (barData && barData.length > 0) {{
+                        const bars = g.selectAll('.bar')
+                            .data(barData)
+                            .enter()
+                            .append('rect')
+                            .attr('class', 'bar')
+                            .attr('x', d => xScale(d.category))
+                            .attr('width', xScale.bandwidth())
+                            .attr('y', chartHeight)
+                            .attr('height', 0)
+                            .attr('fill', d => d.color || colorMap[d.category] || '#9b59b6')
+                            .attr('stroke', '#fff')
+                            .attr('stroke-width', 1)
+                            .transition()
+                            .duration(300)
+                            .attr('y', d => yScale(d.value))
+                            .attr('height', d => chartHeight - yScale(d.value));
+                    }} else {{
+                        console.warn('No hay datos para dibujar barras');
+                    }}
                     
                     // Dibujar ejes desde cero
                     const xAxis = g.append('g')
@@ -510,16 +523,80 @@ class LinkedViews:
         
         display(HTML(''.join(html_parts)))
         
+        # CRÍTICO: Esperar un momento para que los contenedores se rendericen antes de mostrar los layouts
+        # Esto asegura que los contenedores tengan dimensiones correctas
+        import time
+        time.sleep(0.1)  # Pequeño delay para asegurar que el HTML se renderizó
+        
         # Crear y mostrar cada vista
         for view_id, view_config in self._views.items():
+            container_id = f"{self._container_id}-{view_id}"
+            
             if view_config['type'] == 'scatter':
                 layout = self._create_scatter_layout(view_id, view_config)
                 self._div_ids[view_id] = layout.div_id
-                layout.display()
+                # CRÍTICO: Inyectar el layout en el contenedor correcto usando JavaScript
+                self._inject_layout_in_container(layout, container_id)
             elif view_config['type'] == 'barchart':
                 layout = self._create_barchart_layout(view_id, view_config)
                 self._div_ids[view_id] = layout.div_id
-                layout.display()
+                # CRÍTICO: Inyectar el layout en el contenedor correcto usando JavaScript
+                self._inject_layout_in_container(layout, container_id)
+    
+    def _inject_layout_in_container(self, layout, container_id):
+        """Inyecta el layout en el contenedor específico usando JavaScript"""
+        if not HAS_IPYTHON:
+            # Fallback: usar display normal
+            layout.display()
+            return
+        
+        # Mostrar el layout normalmente primero (crea su propio div)
+        layout.display()
+        
+        # Luego mover el contenido al contenedor correcto usando JavaScript
+        # CRÍTICO: Usar requestAnimationFrame para asegurar que el DOM esté listo
+        from IPython.display import Javascript
+        
+        js_content = f"""
+        (function() {{
+            function moveLayout() {{
+                const targetContainer = document.getElementById('{container_id}');
+                const layoutDiv = document.getElementById('{layout.div_id}');
+                
+                if (!targetContainer || !layoutDiv) {{
+                    // Si aún no están disponibles, intentar de nuevo en el siguiente frame
+                    requestAnimationFrame(moveLayout);
+                    return;
+                }}
+                
+                // Verificar que el contenedor tenga dimensiones
+                if (targetContainer.offsetWidth === 0 || targetContainer.offsetHeight === 0) {{
+                    // Esperar un frame más si no tiene dimensiones
+                    requestAnimationFrame(moveLayout);
+                    return;
+                }}
+                
+                // Mover todo el contenido del layout al contenedor objetivo
+                targetContainer.innerHTML = layoutDiv.innerHTML;
+                
+                // Actualizar el div_id del contenedor para que coincida (para eventos)
+                const newLayoutDiv = targetContainer.querySelector('.matrix-layout');
+                if (newLayoutDiv) {{
+                    newLayoutDiv.id = '{layout.div_id}';
+                }}
+                
+                // Eliminar el div original del layout (ya no es necesario)
+                if (layoutDiv.parentNode) {{
+                    layoutDiv.parentNode.removeChild(layoutDiv);
+                }}
+            }}
+            
+            // Iniciar el proceso de movimiento
+            requestAnimationFrame(moveLayout);
+        }})();
+        """
+        
+        display(Javascript(js_content))
     
     
     def get_selected_data(self):
