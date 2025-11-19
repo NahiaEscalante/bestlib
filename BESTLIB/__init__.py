@@ -334,7 +334,7 @@ if HAS_UTILS:
     ])
 
 if HAS_REACTIVE:
-    __all__.extend(["ReactiveMatrixLayout", "SelectionModel", "ReactiveData", "ReactiveEngine", "LinkManager", "_ensure_reactive_imported"])
+    __all__.extend(["ReactiveMatrixLayout", "SelectionModel", "ReactiveData", "ReactiveEngine", "LinkManager", "_ensure_reactive_imported", "get_selection_model"])
 
 if HAS_LINKED:
     __all__.append("LinkedViews")
@@ -365,6 +365,31 @@ def _ensure_reactive_imported():
     if SelectionModel is None:
         _import_reactive_modules()
     return SelectionModel is not None
+
+def get_selection_model():
+    """
+    Función helper para obtener una instancia de SelectionModel de forma segura.
+    Útil cuando SelectionModel puede ser None debido a problemas de caché en Jupyter.
+    
+    Returns:
+        Instancia de SelectionModel
+        
+    Raises:
+        ImportError: Si SelectionModel no está disponible
+    """
+    # Asegurar que está importado
+    _ensure_reactive_imported()
+    
+    if SelectionModel is None:
+        raise ImportError(
+            "SelectionModel no está disponible.\n"
+            "Posibles soluciones:\n"
+            "1. Reinicia el kernel de Jupyter (Kernel → Restart Kernel)\n"
+            "2. Importa directamente: from BESTLIB.reactive.selection import SelectionModel\n"
+            "3. O simplemente no pases selection_model (se creará automáticamente)"
+        )
+    
+    return SelectionModel()
 
 def __getattr__(name):
     """

@@ -54,7 +54,7 @@ class ReactiveMatrixLayout:
         
         Args:
             ascii_layout: Layout ASCII (opcional)
-            selection_model: Instancia de SelectionModel para reactividad
+            selection_model: Instancia de SelectionModel para reactividad (opcional, se crea uno nuevo si es None)
             figsize: Tamaño global de gráficos (width, height) en pulgadas o píxeles
             row_heights: Lista de alturas por fila (px o fr)
             col_widths: Lista de anchos por columna (px, fr, o ratios)
@@ -75,28 +75,51 @@ class ReactiveMatrixLayout:
             max_width=max_width
         )
         
-        # Modelo reactivo - intentar reimportar si es None
-        # Importar SelectionModel localmente para evitar problemas de scope
-        from ..reactive.selection import SelectionModel as LocalSelectionModel
+        # Modelo reactivo - importar SelectionModel de forma robusta
+        # Estrategia: intentar múltiples formas de importar
+        LocalSelectionModel = None
         
-        # Si el import local falló, intentar desde BESTLIB.__init__
+        # Estrategia 1: Import directo desde reactive.selection (más confiable)
+        try:
+            from ..reactive.selection import SelectionModel as SM_direct
+            if SM_direct is not None:
+                LocalSelectionModel = SM_direct
+        except (ImportError, AttributeError, ModuleNotFoundError):
+            pass
+        
+        # Estrategia 2: Si falla, intentar desde reactive.__init__
         if LocalSelectionModel is None:
             try:
-                from .. import SelectionModel as SM_reimport
-                if SM_reimport is not None:
-                    LocalSelectionModel = SM_reimport
-            except (ImportError, AttributeError):
+                from ..reactive import SelectionModel as SM_reactive
+                if SM_reactive is not None:
+                    LocalSelectionModel = SM_reactive
+            except (ImportError, AttributeError, ModuleNotFoundError):
                 pass
         
+        # Estrategia 3: Intentar desde BESTLIB.__init__ (puede tener caché)
+        if LocalSelectionModel is None:
+            try:
+                from .. import SelectionModel as SM_init
+                if SM_init is not None:
+                    LocalSelectionModel = SM_init
+            except (ImportError, AttributeError, ModuleNotFoundError):
+                pass
+        
+        # Si todas las estrategias fallaron
         if LocalSelectionModel is None:
             raise ImportError(
                 "SelectionModel no está disponible.\n"
                 "Posibles soluciones:\n"
                 "1. Reinicia el kernel de Jupyter (Kernel → Restart Kernel)\n"
                 "2. Importa directamente: from BESTLIB.reactive.selection import SelectionModel\n"
-                "3. Fuerza reimport: import BESTLIB; BESTLIB._ensure_reactive_imported()"
+                "3. O usa: from BESTLIB.reactive import ReactiveMatrixLayout, SelectionModel"
             )
-        self.selection_model = selection_model or LocalSelectionModel()
+        
+        # Si selection_model es None, crear una nueva instancia
+        if selection_model is None:
+            self.selection_model = LocalSelectionModel()
+        else:
+            self.selection_model = selection_model
         
         # Conectar el modelo reactivo
         self._layout.connect_selection(self.selection_model)
