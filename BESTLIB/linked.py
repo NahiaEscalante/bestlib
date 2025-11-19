@@ -231,20 +231,33 @@ class LinkedViews:
         def on_select(payload):
             # Debug: verificar que el callback se está ejecutando
             if MatrixLayout._debug:
-                print(f"🔵 [LinkedViews] Callback select ejecutado: {len(payload.get('items', []))} items")
+                print(f"🔵 [LinkedViews] Callback select ejecutado")
                 print(f"   - Payload keys: {list(payload.keys())}")
                 print(f"   - Layout div_id: {layout.div_id}")
             
             # Extraer items del payload
             items = payload.get('items', [])
+            
+            # CRÍTICO: Verificar que items sea una lista válida
             if not items:
                 # Si no hay items, limpiar selección
                 self._selected_data = []
+                if MatrixLayout._debug:
+                    print(f"   ⚠️ No hay items en el payload, limpiando selección")
             else:
                 # Asegurar que items sea una lista
                 if not isinstance(items, list):
                     items = [items]
+                
+                # CRÍTICO: Verificar que los items tengan la estructura correcta
+                # Los items pueden venir directamente del scatter plot o pueden tener _original_row
                 self._selected_data = items
+                
+                if MatrixLayout._debug:
+                    print(f"   ✅ {len(items)} items recibidos")
+                    if len(items) > 0:
+                        print(f"   - Primer item keys: {list(items[0].keys()) if isinstance(items[0], dict) else 'No es dict'}")
+                        print(f"   - Primer item: {items[0]}")
             
             # Actualizar todas las vistas dependientes
             self._update_linked_views()
@@ -311,17 +324,60 @@ class LinkedViews:
         if not HAS_IPYTHON:
             return
         
+        # Debug: verificar que se está actualizando
+        if MatrixLayout._debug:
+            print(f"🔄 [LinkedViews] Actualizando vistas enlazadas con {len(self._selected_data) if self._selected_data else 0} items seleccionados")
+        
         # Actualizar solo los bar charts con datos seleccionados
         for view_id, view_config in self._views.items():
             if view_config['type'] == 'barchart' and view_id in self._layouts:
                 # Usar datos seleccionados si existen, sino usar originales
                 data = self._selected_data if self._selected_data else self._data
                 
+                # CRÍTICO: Si no hay datos seleccionados, usar todos los datos originales
+                if not data or len(data) == 0:
+                    data = self._data
+                    if MatrixLayout._debug:
+                        print(f"   ⚠️ No hay datos seleccionados, usando todos los datos originales ({len(self._data)} items)")
+                else:
+                    if MatrixLayout._debug:
+                        print(f"   ✅ Usando {len(data)} items seleccionados")
+                
                 # Extraer los datos originales
-                original_data = [item.get('_original', item) for item in data]
+                # CRÍTICO: Los items pueden venir con _original_row (usado por matrix.js) o _original (usado por _prepare_scatter_data),
+                # o pueden ser los datos originales directamente (con x, y, category)
+                original_data = []
+                for item in data:
+                    if isinstance(item, dict):
+                        # Intentar obtener _original_row primero (usado por matrix.js cuando viene del scatter plot)
+                        if '_original_row' in item:
+                            orig = item['_original_row']
+                            original_data.append(orig if orig is not None else item)
+                        # Luego intentar _original (usado por _prepare_scatter_data)
+                        elif '_original' in item:
+                            orig = item['_original']
+                            original_data.append(orig if orig is not None else item)
+                        # Si no tiene campos especiales, verificar si tiene x, y, category (datos del scatter plot)
+                        # Si tiene estos campos, es probable que ya sea el dato original
+                        elif 'x' in item and 'y' in item and 'category' in item:
+                            # Este es probablemente el dato original del scatter plot
+                            original_data.append(item)
+                        else:
+                            # Usar el item directamente (puede ser que ya sea el dato original)
+                            original_data.append(item)
+                    else:
+                        original_data.append(item)
+                
+                if MatrixLayout._debug:
+                    print(f"   📊 Datos originales extraídos: {len(original_data)} items")
                 
                 # Preparar nuevos datos del barchart
                 bar_data = self._prepare_barchart_data(view_config, original_data)
+                
+                if MatrixLayout._debug:
+                    print(f"   📊 Datos del barchart preparados: {len(bar_data)} categorías")
+                    for bar in bar_data:
+                        print(f"      - {bar.get('category', 'N/A')}: {bar.get('value', 0)}")
                 
                 # Actualizar el spec del layout existente
                 bar_spec = {
@@ -339,7 +395,12 @@ class LinkedViews:
                 if div_id:
                     # Obtener la letra de la vista (por defecto 'B' para barchart)
                     letter = view_config.get('letter', 'B')
+                    if MatrixLayout._debug:
+                        print(f"   🔄 Actualizando bar chart '{view_id}' (div_id: {div_id}, letter: {letter})")
                     self._update_chart_with_js(div_id, bar_spec, letter=letter)
+                else:
+                    if MatrixLayout._debug:
+                        print(f"   ⚠️ No se encontró div_id para vista '{view_id}'")
         
         # Actualizar widget de selección si existe
         self._update_selection_widget_display()
