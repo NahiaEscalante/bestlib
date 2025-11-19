@@ -75,14 +75,28 @@ class ReactiveMatrixLayout:
             max_width=max_width
         )
         
-        # Modelo reactivo
-        if SelectionModel is None:
+        # Modelo reactivo - intentar reimportar si es None
+        # Importar SelectionModel localmente para evitar problemas de scope
+        from ..reactive.selection import SelectionModel as LocalSelectionModel
+        
+        # Si el import local falló, intentar desde BESTLIB.__init__
+        if LocalSelectionModel is None:
+            try:
+                from .. import SelectionModel as SM_reimport
+                if SM_reimport is not None:
+                    LocalSelectionModel = SM_reimport
+            except (ImportError, AttributeError):
+                pass
+        
+        if LocalSelectionModel is None:
             raise ImportError(
-                "SelectionModel no está disponible. "
-                "Asegúrate de que el módulo reactive esté correctamente instalado. "
-                "Intenta: from BESTLIB.reactive.selection import SelectionModel"
+                "SelectionModel no está disponible.\n"
+                "Posibles soluciones:\n"
+                "1. Reinicia el kernel de Jupyter (Kernel → Restart Kernel)\n"
+                "2. Importa directamente: from BESTLIB.reactive.selection import SelectionModel\n"
+                "3. Fuerza reimport: import BESTLIB; BESTLIB._ensure_reactive_imported()"
             )
-        self.selection_model = selection_model or SelectionModel()
+        self.selection_model = selection_model or LocalSelectionModel()
         
         # Conectar el modelo reactivo
         self._layout.connect_selection(self.selection_model)

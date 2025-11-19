@@ -17,14 +17,21 @@ LinkManager = None
 ReactiveMatrixLayout = None
 HAS_REACTIVE = False
 
-# Importar desde reactive/ (versión modular)
-try:
-    from .reactive import SelectionModel as SM_modular, ReactiveData as RD_modular, ReactiveEngine, LinkManager
-    SelectionModel = SM_modular
-    ReactiveData = RD_modular
-    HAS_REACTIVE = True
-except (ImportError, AttributeError, ModuleNotFoundError) as e:
-    # Si falla el import desde .reactive, intentar import directo desde .reactive.selection
+def _import_reactive_modules():
+    """Función helper para importar módulos reactivos con múltiples fallbacks"""
+    global SelectionModel, ReactiveData, ReactiveEngine, LinkManager, HAS_REACTIVE
+    
+    # Estrategia 1: Import desde .reactive (módulo __init__.py)
+    try:
+        from .reactive import SelectionModel as SM_modular, ReactiveData as RD_modular, ReactiveEngine, LinkManager
+        SelectionModel = SM_modular
+        ReactiveData = RD_modular
+        HAS_REACTIVE = True
+        return True
+    except (ImportError, AttributeError, ModuleNotFoundError):
+        pass
+    
+    # Estrategia 2: Import directo desde .reactive.selection
     try:
         from .reactive.selection import SelectionModel as SM_direct, ReactiveData as RD_direct
         SelectionModel = SM_direct
@@ -39,30 +46,20 @@ except (ImportError, AttributeError, ModuleNotFoundError) as e:
             from .reactive.linking import LinkManager
         except ImportError:
             LinkManager = None
+        return True
     except (ImportError, AttributeError, ModuleNotFoundError):
-        # Si también falla, mantener None
-        SelectionModel = None
-        ReactiveData = None
-        ReactiveEngine = None
-        LinkManager = None
-        HAS_REACTIVE = False
-except Exception as e:
-    # Capturar cualquier otro error inesperado
-    import sys
-    if hasattr(sys, '_getframe'):  # Solo en entornos interactivos
-        print(f"⚠️ Error inesperado al importar módulo reactivo: {e}")
-        import traceback
-        traceback.print_exc()
-    # Intentar fallback directo
-    try:
-        from .reactive.selection import SelectionModel as SM_direct, ReactiveData as RD_direct
-        SelectionModel = SM_direct
-        ReactiveData = RD_direct
-        HAS_REACTIVE = True
-    except:
-        SelectionModel = None
-        ReactiveData = None
-        HAS_REACTIVE = False
+        pass
+    
+    # Si todo falla
+    SelectionModel = None
+    ReactiveData = None
+    ReactiveEngine = None
+    LinkManager = None
+    HAS_REACTIVE = False
+    return False
+
+# Intentar importar módulos reactivos
+_import_reactive_modules()
 
 # Importar ReactiveMatrixLayout desde layouts/reactive.py (estructura modular)
 try:
@@ -337,7 +334,7 @@ if HAS_UTILS:
     ])
 
 if HAS_REACTIVE:
-    __all__.extend(["ReactiveMatrixLayout", "SelectionModel", "ReactiveData", "ReactiveEngine", "LinkManager"])
+    __all__.extend(["ReactiveMatrixLayout", "SelectionModel", "ReactiveData", "ReactiveEngine", "LinkManager", "_ensure_reactive_imported"])
 
 if HAS_LINKED:
     __all__.append("LinkedViews")
@@ -355,6 +352,67 @@ if HAS_CHARTS:
         "PieChart",
         "GroupedBarChart"
     ])
+
+# ============================================================================
+# Importación lazy para SelectionModel y otros módulos reactivos
+# ============================================================================
+def _ensure_reactive_imported():
+    """
+    Función helper para asegurar que los módulos reactivos estén importados.
+    Útil para forzar reimport en Jupyter cuando hay problemas de caché.
+    """
+    global SelectionModel, ReactiveData, ReactiveEngine, LinkManager, HAS_REACTIVE
+    if SelectionModel is None:
+        _import_reactive_modules()
+    return SelectionModel is not None
+
+def __getattr__(name):
+    """
+    Importación lazy de módulos reactivos.
+    Si SelectionModel es None cuando se accede, intenta importarlo de nuevo.
+    """
+    global SelectionModel, ReactiveData, ReactiveEngine, LinkManager, HAS_REACTIVE
+    
+    if name == 'SelectionModel':
+        if SelectionModel is None:
+            # Intentar reimportar
+            if _import_reactive_modules():
+                return SelectionModel
+            else:
+                raise ImportError(
+                    "SelectionModel no está disponible.\n"
+                    "Posibles soluciones:\n"
+                    "1. Reinicia el kernel de Jupyter (Kernel → Restart Kernel)\n"
+                    "2. Importa directamente: from BESTLIB.reactive.selection import SelectionModel\n"
+                    "3. Fuerza reimport: import BESTLIB; BESTLIB._ensure_reactive_imported()"
+                )
+        return SelectionModel
+    
+    if name == 'ReactiveData':
+        if ReactiveData is None:
+            if _import_reactive_modules():
+                return ReactiveData
+            else:
+                raise ImportError("ReactiveData no está disponible.")
+        return ReactiveData
+    
+    if name == 'ReactiveEngine':
+        if ReactiveEngine is None:
+            if _import_reactive_modules():
+                return ReactiveEngine
+            else:
+                raise ImportError("ReactiveEngine no está disponible.")
+        return ReactiveEngine
+    
+    if name == 'LinkManager':
+        if LinkManager is None:
+            if _import_reactive_modules():
+                return LinkManager
+            else:
+                raise ImportError("LinkManager no está disponible.")
+        return LinkManager
+    
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 # ============================================================================
 # Inicialización automática
