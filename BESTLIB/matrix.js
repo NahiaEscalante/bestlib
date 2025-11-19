@@ -218,6 +218,10 @@
     const C = rows[0].length;
     
     container.style.display = "grid";
+    container.style.boxSizing = "border-box";
+    container.style.width = "100%";
+    container.style.maxWidth = "100%";
+    container.style.overflow = "visible"; // Permitir que contenido se vea completo
     
     // Configuración dinámica de gap (definir ANTES de usarlo)
     const gap = mapping.__gap__ !== undefined ? mapping.__gap__ : 12;
@@ -236,7 +240,8 @@
       });
       container.style.gridTemplateColumns = colWidths.join(' ');
     } else {
-    container.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
+      // CRÍTICO: Usar 1fr para distribución uniforme y evitar deformaciones
+      container.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
     }
     
     // Configuración dinámica de filas
@@ -277,7 +282,8 @@
       
       // Aumentar altura de filas para evitar recorte - altura mínima para gráficos completos
       // Considerando: padding (30px) + gráfico (320px) + espacio para ejes (20px extra)
-      container.style.gridTemplateRows = `repeat(${R}, minmax(${minRowHeight}px, auto))`;
+      // CRÍTICO: Usar 1fr en lugar de auto para distribución uniforme
+      container.style.gridTemplateRows = `repeat(${R}, minmax(${minRowHeight}px, 1fr))`;
     }
     
     // Aplicar gap al contenedor
@@ -387,6 +393,10 @@
         // Usar grid-row y grid-column con span para fusionar celdas
         cell.style.gridRow = `${r + 1} / span ${height}`;
         cell.style.gridColumn = `${c + 1} / span ${width}`;
+        // CRÍTICO: Asegurar que la celda respete los límites del grid
+        cell.style.boxSizing = "border-box";
+        cell.style.minWidth = "0"; // Permitir que se ajuste al grid
+        cell.style.minHeight = "0"; // Permitir que se ajuste al grid
         
         // Agregar clases CSS para indicadores de enlace visual
         if (spec && typeof spec === 'object') {
@@ -4799,7 +4809,9 @@
       .append('svg')
       .attr('width', width)
       .attr('height', height)
-      .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
+      .style('overflow', 'hidden')  // CRÍTICO: hidden para evitar que SVG se extienda más allá del contenedor
+      .style('max-width', '100%')
+      .style('max-height', '100%');
     
     const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
@@ -4973,6 +4985,23 @@
       
       // Renderizar etiquetas de ejes usando función helper
       renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+    }
+    
+    // CRÍTICO: Renderizar título del gráfico si está especificado
+    if (spec.title) {
+      const titleFontSize = spec.titleFontSize || 16;
+      const titleY = margin.top - 10;
+      const titleX = chartWidth / 2;
+      
+      svg.append('text')
+        .attr('x', titleX + margin.left)
+        .attr('y', titleY)
+        .attr('text-anchor', 'middle')
+        .style('font-size', `${titleFontSize}px`)
+        .style('font-weight', '700')
+        .style('fill', '#000000')
+        .style('font-family', 'Arial, sans-serif')
+        .text(spec.title);
     }
   }
   

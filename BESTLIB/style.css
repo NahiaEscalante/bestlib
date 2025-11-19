@@ -7,7 +7,7 @@
   --matrix-cell-border-radius: 8px;
   --matrix-cell-border-color: #e0e0e0;
   --matrix-cell-background: #ffffff;
-  --matrix-cell-inner-background: #fafafa;
+  --matrix-cell-inner-background: #ffffff;
   --matrix-cell-inner-border-color: #e0e0e0;
   --matrix-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --matrix-font-size: 14px;
@@ -57,7 +57,7 @@
 
 .matrix-cell {
   border: 2px solid var(--matrix-cell-inner-border-color);
-  background: var(--matrix-cell-inner-background);
+  background: #ffffff !important;
   display: flex;
   justify-content: center;
   align-items: center;  /* Centrar verticalmente para mejor presentación */
@@ -80,7 +80,7 @@
 .matrix-cell.linked-primary {
   border: var(--link-border-width) var(--link-border-style) var(--link-primary-color) !important;
   box-shadow: var(--link-shadow), inset 0 0 0 1px rgba(37, 99, 235, 0.1);
-  background: linear-gradient(to bottom, rgba(37, 99, 235, 0.03), var(--matrix-cell-inner-background));
+  background: #ffffff !important;
 }
 
 /* Etiquetas de enlace ahora se crean desde JavaScript, pero mantenemos estilos base */
@@ -93,7 +93,7 @@
 .matrix-cell.linked-secondary {
   border: var(--link-border-width) var(--link-border-style) var(--link-secondary-color) !important;
   box-shadow: var(--link-shadow), inset 0 0 0 1px rgba(220, 38, 38, 0.1);
-  background: linear-gradient(to bottom, rgba(220, 38, 38, 0.03), var(--matrix-cell-inner-background));
+  background: #ffffff !important;
 }
 
 /* Animación mejorada para indicador de enlace */
