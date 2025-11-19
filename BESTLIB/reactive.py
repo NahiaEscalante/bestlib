@@ -27,6 +27,30 @@ except ImportError:
     HAS_PANDAS = False
     pd = None
 
+# Helper function para importar MatrixLayout de forma robusta
+def _get_matrix_layout():
+    """Importa MatrixLayout de forma robusta (absoluto o relativo)"""
+    try:
+        from BESTLIB.matrix import MatrixLayout
+        return MatrixLayout
+    except ImportError:
+        try:
+            from BESTLIB.layouts.matrix import MatrixLayout
+            return MatrixLayout
+        except ImportError:
+            try:
+                from .matrix import MatrixLayout
+                return MatrixLayout
+            except ImportError:
+                try:
+                    from .layouts.matrix import MatrixLayout
+                    return MatrixLayout
+                except ImportError:
+                    raise ImportError(
+                        "No se pudo importar MatrixLayout. "
+                        "Asegúrate de que BESTLIB esté correctamente instalado."
+                    )
+
 
 def _items_to_dataframe(items):
     """
@@ -284,7 +308,7 @@ class ReactiveMatrixLayout:
             cell_padding: Padding de celdas en píxeles (default: 15px)
             max_width: Ancho máximo del layout en píxeles (default: 1200px)
         """
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         
         # Crear instancia base de MatrixLayout con parámetros de layout
         self._layout = MatrixLayout(
@@ -358,7 +382,7 @@ class ReactiveMatrixLayout:
         
         # Crear un handler personalizado para este scatter plot específico
         # El handler se conecta directamente al layout principal pero filtra por letra
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         
         # Crear handler que filtra eventos por letra del scatter
         # Usar closure para capturar la letra
@@ -474,7 +498,7 @@ class ReactiveMatrixLayout:
             layout.add_barchart('B2', category_col='subcategory', linked_to='B1')
         """
         # Importar MatrixLayout al inicio para evitar UnboundLocalError
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         
         if self._data is None:
             raise ValueError("Debe usar set_data() o add_scatter() primero para establecer los datos")
@@ -1002,8 +1026,11 @@ class ReactiveMatrixLayout:
             # Registrar callback en el modelo de selección de la vista principal
             primary_selection.on_change(update_barchart)
             
-            # Marcar como callback registrado
-        self._barchart_callbacks[letter] = update_barchart
+            # Marcar como callback registrado (solo para vistas enlazadas)
+            self._barchart_callbacks[letter] = update_barchart
+        
+        # NOTA: self._barchart_callbacks[letter] solo se asigna para vistas enlazadas
+        # Las vistas principales no necesitan este callback porque manejan sus propios eventos
         
         return self
 
@@ -1024,7 +1051,7 @@ class ReactiveMatrixLayout:
         Returns:
             self para encadenamiento
         """
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         if self._data is None:
             raise ValueError("Debe usar set_data() o add_scatter() primero")
         if main_col is None or sub_col is None:
@@ -1146,7 +1173,7 @@ class ReactiveMatrixLayout:
             layout.link_chart('P', 'pie', linked_to='S',
                              category_col='departamento')
         """
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         
         if self._data is None:
             raise ValueError("Debe usar set_data() o add_scatter() primero para establecer los datos")
@@ -1214,7 +1241,7 @@ class ReactiveMatrixLayout:
             layout.add_barchart('B', category_col='dept', interactive=True)
             layout.add_histogram('H2', column='salary', linked_to='B')
         """
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         
         if self._data is None:
             raise ValueError("Debe usar set_data() o add_scatter() primero para establecer los datos")
@@ -1324,7 +1351,7 @@ class ReactiveMatrixLayout:
             def update_histogram(items, count):
                 """Actualiza el histograma cuando cambia la selección"""
                 # CRÍTICO: Importar MatrixLayout al principio para evitar UnboundLocalError
-                from .matrix import MatrixLayout
+                MatrixLayout = _get_matrix_layout()
                 
                 # CRÍTICO: Flag para evitar ejecuciones múltiples simultáneas
                 if hasattr(update_histogram, '_executing') and update_histogram._executing:
@@ -1668,7 +1695,7 @@ class ReactiveMatrixLayout:
         Returns:
             self para encadenamiento
         """
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         
         if self._data is None:
             raise ValueError("Debe usar set_data() o add_scatter() primero para establecer los datos")
@@ -1722,7 +1749,7 @@ class ReactiveMatrixLayout:
         def update_boxplot(items, count):
             """Actualiza el boxplot cuando cambia la selección"""
             # CRÍTICO: Importar MatrixLayout al principio para evitar UnboundLocalError
-            from .matrix import MatrixLayout
+            MatrixLayout = _get_matrix_layout()
             
             # CRÍTICO: Flag para evitar ejecuciones múltiples simultáneas
             if hasattr(update_boxplot, '_executing') and update_boxplot._executing:
@@ -2041,14 +2068,14 @@ class ReactiveMatrixLayout:
                     if MatrixLayout._debug:
                         print(f"   📤 JavaScript del boxplot '{letter}' ejecutado (display_id: boxplot-update-{letter})")
                 except Exception as e:
-                    from .matrix import MatrixLayout
+                    MatrixLayout = _get_matrix_layout()
                     if MatrixLayout._debug:
                         print(f"⚠️ Error ejecutando JavaScript del boxplot: {e}")
                         import traceback
                         traceback.print_exc()
                     
             except Exception as e:
-                from .matrix import MatrixLayout
+                MatrixLayout = _get_matrix_layout()
                 import traceback
                 if MatrixLayout._debug:
                     print(f"⚠️ Error actualizando boxplot: {e}")
@@ -2203,7 +2230,7 @@ class ReactiveMatrixLayout:
             
             return bar_data
         except Exception as e:
-            from .matrix import MatrixLayout
+            MatrixLayout = _get_matrix_layout()
             import traceback
             if MatrixLayout._debug:
                 print(f"⚠️ Error preparando datos del bar chart: {e}")
@@ -2224,7 +2251,7 @@ class ReactiveMatrixLayout:
     # Nuevos gráficos dependientes
     # ==========================
     def add_heatmap(self, letter, x_col=None, y_col=None, value_col=None, linked_to=None, **kwargs):
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
         # initial render
@@ -2244,7 +2271,7 @@ class ReactiveMatrixLayout:
         return self
 
     def add_correlation_heatmap(self, letter, linked_to=None, **kwargs):
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
             raise ValueError("add_correlation_heatmap requiere DataFrame")
         MatrixLayout.map_correlation_heatmap(letter, self._data, **kwargs)
@@ -2265,7 +2292,7 @@ class ReactiveMatrixLayout:
         return self
 
     def add_line(self, letter, x_col=None, y_col=None, series_col=None, linked_to=None, **kwargs):
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
         MatrixLayout.map_line(letter, self._data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
@@ -2307,7 +2334,7 @@ class ReactiveMatrixLayout:
             layout.add_barchart('B', category_col='dept', interactive=True)
             layout.add_pie('P2', category_col='dept', linked_to='B')
         """
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
         
@@ -2420,7 +2447,7 @@ class ReactiveMatrixLayout:
             
             def update_pie(items, count):
                 """Actualiza el pie chart cuando cambia la selección"""
-                from .matrix import MatrixLayout
+                MatrixLayout = _get_matrix_layout()
                 from collections import defaultdict
                 import json
                 from IPython.display import Javascript
@@ -2821,7 +2848,7 @@ class ReactiveMatrixLayout:
         return self
 
     def add_violin(self, letter, value_col=None, category_col=None, bins=20, linked_to=None, **kwargs):
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
         MatrixLayout.map_violin(letter, self._data, value_col=value_col, category_col=category_col, bins=bins, **kwargs)
@@ -2849,7 +2876,7 @@ class ReactiveMatrixLayout:
         return self
 
     def add_radviz(self, letter, features=None, class_col=None, linked_to=None, **kwargs):
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
             raise ValueError("add_radviz requiere DataFrame")
         MatrixLayout.map_radviz(letter, self._data, features=features, class_col=class_col, **kwargs)
@@ -2892,7 +2919,7 @@ class ReactiveMatrixLayout:
         Returns:
             self para encadenamiento
         """
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
             raise ValueError("add_star_coordinates requiere DataFrame")
         MatrixLayout.map_star_coordinates(letter, self._data, features=features, class_col=class_col, **kwargs)
@@ -2935,7 +2962,7 @@ class ReactiveMatrixLayout:
         Returns:
             self para encadenamiento
         """
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
             raise ValueError("add_parallel_coordinates requiere DataFrame")
         MatrixLayout.map_parallel_coordinates(letter, self._data, dimensions=dimensions, category_col=category_col, **kwargs)
@@ -2979,7 +3006,7 @@ class ReactiveMatrixLayout:
 
         Requiere que los datos provengan de un DataFrame de pandas.
         """
-        from .matrix import MatrixLayout
+        MatrixLayout = _get_matrix_layout()
         if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
             raise ValueError("add_confusion_matrix requiere un DataFrame de pandas")
         if y_true_col is None or y_pred_col is None:
