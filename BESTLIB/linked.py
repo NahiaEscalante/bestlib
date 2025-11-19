@@ -61,6 +61,7 @@ class LinkedViews:
         self._layouts = {}  # {view_id: MatrixLayout instance}
         self._div_ids = {}  # {view_id: div_id} - Guardar div_id de cada layout
         self._container_id = f"linked-views-{id(self)}"
+        self._updating_charts = set()  # {div_id} - Flags para evitar actualizaciones simultáneas
         
     def set_data(self, data):
         """
@@ -314,6 +315,14 @@ class LinkedViews:
         """Actualiza un gráfico existente usando JavaScript sin recrear el contenedor"""
         import json
         
+        # CRÍTICO: Protección contra race condition - evitar actualizaciones simultáneas
+        if div_id in self._updating_charts:
+            # Ya hay una actualización en curso para este div, ignorar esta llamada
+            return
+        
+        # Marcar como actualizando
+        self._updating_charts.add(div_id)
+        
         # Escapar datos para JavaScript
         bar_data_json = json.dumps(bar_spec['data'])
         color_map_json = json.dumps(bar_spec.get('colorMap', {}))
@@ -322,105 +331,114 @@ class LinkedViews:
         js_update = f"""
         (function() {{
             const divId = '{div_id}';
-            const container = document.getElementById(divId);
-            if (!container) {{
-                console.warn('Contenedor no encontrado:', divId);
+            
+            // CRÍTICO: Flag de protección a nivel de ventana para evitar ejecuciones simultáneas
+            const flagName = '_bestlib_updating_' + divId.replace(/[^a-zA-Z0-9]/g, '_');
+            if (window[flagName]) {{
+                console.warn('Actualización ya en curso para:', divId);
                 return;
             }}
+            window[flagName] = true;
             
-            // Buscar el SVG dentro del contenedor
-            const svg = container.querySelector('svg');
-            if (!svg) {{
-                console.warn('SVG no encontrado en contenedor:', divId);
-                return;
-            }}
-            
-            // Obtener datos
-            const barData = {bar_data_json};
-            const colorMap = {color_map_json};
-            
-            // Obtener dimensiones del SVG existente (NO cambiar estas dimensiones)
-            const width = parseFloat(svg.getAttribute('width')) || 600;
-            const height = parseFloat(svg.getAttribute('height')) || 400;
-            
-            // Calcular márgenes y área del gráfico (usar los mismos márgenes que matrix.js)
-            const margin = {{ top: 20, right: 20, bottom: 60, left: 60 }};
-            const chartWidth = width - margin.left - margin.right;
-            const chartHeight = height - margin.top - margin.bottom;
-            
-            // Usar D3 si está disponible
-            if (typeof d3 !== 'undefined') {{
-                const d3Svg = d3.select(svg);
-                
-                // Buscar el grupo principal del gráfico (el primer 'g' dentro del SVG)
-                const chartG = svg.querySelector('g');
-                if (!chartG) {{
-                    console.warn('No se encontró el grupo del gráfico');
+            try {{
+                const container = document.getElementById(divId);
+                if (!container) {{
+                    console.warn('Contenedor no encontrado:', divId);
+                    window[flagName] = false;
                     return;
                 }}
                 
-                const d3G = d3.select(chartG);
+                // Buscar el SVG dentro del contenedor
+                const svg = container.querySelector('svg');
+                if (!svg) {{
+                    console.warn('SVG no encontrado en contenedor:', divId);
+                    window[flagName] = false;
+                    return;
+                }}
                 
-                // CRÍTICO: Limpiar SOLO las barras (rect con clase 'bar'), NO los ejes
-                // Los ejes son grupos 'g' que contienen elementos .tick, .domain, etc.
-                d3G.selectAll('rect.bar').remove();
+                // Obtener datos
+                const barData = {bar_data_json};
+                const colorMap = {color_map_json};
                 
-                // Eliminar etiquetas de barras si existen (pero NO las etiquetas de ejes)
-                // Las etiquetas de ejes están dentro de grupos de ejes, las de barras están directamente en el grupo principal
-                d3G.selectAll('text').each(function() {{
-                    // Verificar si este texto es parte de un eje (está dentro de un grupo de eje)
-                    const parent = this.parentElement;
-                    if (parent && parent.tagName === 'g' && (parent.querySelector('.tick') || parent.querySelector('.domain'))) {{
-                        // Es parte de un eje, NO eliminar
+                // Obtener dimensiones del SVG existente (NO cambiar estas dimensiones)
+                const width = parseFloat(svg.getAttribute('width')) || 600;
+                const height = parseFloat(svg.getAttribute('height')) || 400;
+                
+                // Calcular márgenes y área del gráfico (usar los mismos márgenes que matrix.js)
+                const margin = {{ top: 20, right: 20, bottom: 60, left: 60 }};
+                const chartWidth = width - margin.left - margin.right;
+                const chartHeight = height - margin.top - margin.bottom;
+                
+                // Usar D3 si está disponible
+                if (typeof d3 !== 'undefined') {{
+                    const d3Svg = d3.select(svg);
+                    
+                    // Buscar el grupo principal del gráfico (el primer 'g' dentro del SVG)
+                    const chartG = svg.querySelector('g');
+                    if (!chartG) {{
+                        console.warn('No se encontró el grupo del gráfico');
+                        window[flagName] = false;
                         return;
                     }}
-                    // Verificar si tiene clase de barra o está en posición de barra
-                    const y = parseFloat(this.getAttribute('y')) || 0;
-                    if (y < chartHeight + 30) {{ // Etiquetas de barras están arriba del área del gráfico
-                        d3.select(this).remove();
-                    }}
-                }});
-                
-                // Recalcular escalas con nuevos datos
-                const xScale = d3.scaleBand()
-                    .domain(barData.map(d => d.category))
-                    .range([0, chartWidth])
-                    .padding(0.2);
-                
-                const maxValue = d3.max(barData, d => d.value) || 1;
-                const yScale = d3.scaleLinear()
-                    .domain([0, maxValue * 1.1])
-                    .nice()
-                    .range([chartHeight, 0]);
-                
-                // Dibujar nuevas barras usando el patrón enter/update/exit de D3
-                const bars = d3G.selectAll('rect.bar')
-                    .data(barData, d => d.category);
-                
-                // Eliminar barras antiguas que ya no están en los datos
-                bars.exit().remove();
-                
-                // Agregar nuevas barras
-                const barsEnter = bars.enter()
-                    .append('rect')
-                    .attr('class', 'bar')
-                    .attr('x', d => xScale(d.category))
-                    .attr('width', xScale.bandwidth())
-                    .attr('y', chartHeight)
-                    .attr('height', 0)
-                    .attr('fill', d => d.color || colorMap[d.category] || '#9b59b6')
-                    .attr('stroke', '#fff')
-                    .attr('stroke-width', 1);
-                
-                // Actualizar barras existentes y animar
-                bars.merge(barsEnter)
-                    .transition()
-                    .duration(300)
-                    .attr('x', d => xScale(d.category))
-                    .attr('width', xScale.bandwidth())
-                    .attr('y', d => yScale(d.value))
-                    .attr('height', d => chartHeight - yScale(d.value))
-                    .attr('fill', d => d.color || colorMap[d.category] || '#9b59b6');
+                    
+                    const d3G = d3.select(chartG);
+                    
+                    // CRÍTICO: Limpiar TODAS las barras ANTES de hacer data binding
+                    // Usar remove() de forma atómica para evitar race conditions
+                    d3G.selectAll('rect.bar').remove();
+                    
+                    // Eliminar etiquetas de barras si existen (pero NO las etiquetas de ejes)
+                    d3G.selectAll('text').each(function() {{
+                        const parent = this.parentElement;
+                        if (parent && parent.tagName === 'g' && (parent.querySelector('.tick') || parent.querySelector('.domain'))) {{
+                            return; // Es parte de un eje, NO eliminar
+                        }}
+                        const y = parseFloat(this.getAttribute('y')) || 0;
+                        if (y < chartHeight + 30) {{
+                            d3.select(this).remove();
+                        }}
+                    }});
+                    
+                    // Recalcular escalas con nuevos datos
+                    const xScale = d3.scaleBand()
+                        .domain(barData.map(d => d.category))
+                        .range([0, chartWidth])
+                        .padding(0.2);
+                    
+                    const maxValue = d3.max(barData, d => d.value) || 1;
+                    const yScale = d3.scaleLinear()
+                        .domain([0, maxValue * 1.1])
+                        .nice()
+                        .range([chartHeight, 0]);
+                    
+                    // CRÍTICO: Data binding DESPUÉS de limpiar - asegurar que empieza desde cero
+                    const bars = d3G.selectAll('rect.bar')
+                        .data(barData, d => d.category);
+                    
+                    // Eliminar barras antiguas que ya no están en los datos
+                    bars.exit().remove();
+                    
+                    // Agregar nuevas barras
+                    const barsEnter = bars.enter()
+                        .append('rect')
+                        .attr('class', 'bar')
+                        .attr('x', d => xScale(d.category))
+                        .attr('width', xScale.bandwidth())
+                        .attr('y', chartHeight)
+                        .attr('height', 0)
+                        .attr('fill', d => d.color || colorMap[d.category] || '#9b59b6')
+                        .attr('stroke', '#fff')
+                        .attr('stroke-width', 1);
+                    
+                    // Actualizar barras existentes y animar
+                    bars.merge(barsEnter)
+                        .transition()
+                        .duration(300)
+                        .attr('x', d => xScale(d.category))
+                        .attr('width', xScale.bandwidth())
+                        .attr('y', d => yScale(d.value))
+                        .attr('height', d => chartHeight - yScale(d.value))
+                        .attr('fill', d => d.color || colorMap[d.category] || '#9b59b6');
                 
                 // Actualizar ejes - En matrix.js, los ejes son grupos 'g' dentro del grupo principal
                 // El eje X está en translate(0, chartHeight), el eje Y está en translate(0, 0)
@@ -444,47 +462,63 @@ class LinkedViews:
                     }}
                 }}
                 
-                // Actualizar eje X
-                if (xAxisGroup) {{
-                    const xAxis = d3.axisBottom(xScale);
-                    d3.select(xAxisGroup).call(xAxis);
-                    // Actualizar estilos de texto del eje X
-                    d3.select(xAxisGroup).selectAll('text')
-                        .style('font-size', '12px')
-                        .style('font-weight', '600')
-                        .style('fill', '#000000');
-                    d3.select(xAxisGroup).selectAll('line, path')
-                        .style('stroke', '#000000')
-                        .style('stroke-width', '1.5px');
+                    // Actualizar eje X
+                    if (xAxisGroup) {{
+                        const xAxis = d3.axisBottom(xScale);
+                        d3.select(xAxisGroup).call(xAxis);
+                        // Actualizar estilos de texto del eje X
+                        d3.select(xAxisGroup).selectAll('text')
+                            .style('font-size', '12px')
+                            .style('font-weight', '600')
+                            .style('fill', '#000000');
+                        d3.select(xAxisGroup).selectAll('line, path')
+                            .style('stroke', '#000000')
+                            .style('stroke-width', '1.5px');
+                    }}
+                    
+                    // Actualizar eje Y
+                    if (yAxisGroup) {{
+                        const yAxis = d3.axisLeft(yScale).ticks(5);
+                        d3.select(yAxisGroup).call(yAxis);
+                        // Actualizar estilos de texto del eje Y
+                        d3.select(yAxisGroup).selectAll('text')
+                            .style('font-size', '12px')
+                            .style('font-weight', '600')
+                            .style('fill', '#000000');
+                        d3.select(yAxisGroup).selectAll('line, path')
+                            .style('stroke', '#000000')
+                            .style('stroke-width', '1.5px');
+                    }}
+                
+                    // Asegurar que el SVG mantenga sus dimensiones originales
+                    svg.setAttribute('width', width);
+                    svg.setAttribute('height', height);
+                    svg.style.width = width + 'px';
+                    svg.style.height = height + 'px';
+                    
+                }} else {{
+                    console.warn('D3 no está disponible para actualizar el gráfico');
                 }}
-                
-                // Actualizar eje Y
-                if (yAxisGroup) {{
-                    const yAxis = d3.axisLeft(yScale).ticks(5);
-                    d3.select(yAxisGroup).call(yAxis);
-                    // Actualizar estilos de texto del eje Y
-                    d3.select(yAxisGroup).selectAll('text')
-                        .style('font-size', '12px')
-                        .style('font-weight', '600')
-                        .style('fill', '#000000');
-                    d3.select(yAxisGroup).selectAll('line, path')
-                        .style('stroke', '#000000')
-                        .style('stroke-width', '1.5px');
-                }}
-                
-                // Asegurar que el SVG mantenga sus dimensiones originales
-                svg.setAttribute('width', width);
-                svg.setAttribute('height', height);
-                svg.style.width = width + 'px';
-                svg.style.height = height + 'px';
-                
-            }} else {{
-                console.warn('D3 no está disponible para actualizar el gráfico');
+            }} finally {{
+                // CRÍTICO: Resetear flag SIEMPRE, incluso si hay error
+                window[flagName] = false;
             }}
         }})();
         """
         
+        # Ejecutar JavaScript y resetear flag después de un delay para asegurar que se ejecutó
         display(Javascript(js_update))
+        
+        # Resetear flag después de un breve delay (el JS se ejecuta de forma asíncrona)
+        import threading
+        def reset_flag():
+            import time
+            time.sleep(0.5)  # Esperar 500ms para que el JS se ejecute
+            if div_id in self._updating_charts:
+                self._updating_charts.remove(div_id)
+        
+        thread = threading.Thread(target=reset_flag, daemon=True)
+        thread.start()
     
     def display(self):
         """Muestra todas las vistas enlazadas en el notebook"""
