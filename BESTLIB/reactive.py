@@ -1,4 +1,4 @@
-"""
+﻿"""
 Sistema de Variables Reactivas para BESTLIB
 Permite que los datos se actualicen automáticamente sin re-ejecutar celdas
 """
@@ -605,15 +605,15 @@ class ReactiveMatrixLayout:
             elif linked_to in self._primary_view_models:
                 primary_letter = linked_to
                 primary_selection = self._primary_view_models[primary_letter]
-        else:
+            else:
                 # Si linked_to está especificado pero no existe, lanzar error
                 raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
-        
-        # Guardar el enlace
-        self._barchart_to_scatter[letter] = primary_letter
-        
-        # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
-        kwargs['__linked_to__'] = primary_letter
+            
+            # Guardar el enlace
+            self._barchart_to_scatter[letter] = primary_letter
+            
+            # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
+            kwargs['__linked_to__'] = primary_letter
         
         # Crear bar chart inicial con todos los datos
         MatrixLayout.map_barchart(
@@ -642,7 +642,7 @@ class ReactiveMatrixLayout:
         self._view_letters[view_id] = letter
         
         # Si es vista enlazada, configurar callback de actualización
-        if not is_primary:
+        if not is_primary and linked_to:
             # Guardar parámetros para el callback (closure)
             barchart_params = {
                 'letter': letter,
