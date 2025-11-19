@@ -3,6 +3,13 @@ ReactiveMatrixLayout - Layout reactivo para BESTLIB
 Migrado desde reactive.py legacy a layouts/reactive.py según estructura modular
 """
 try:
+    import ipywidgets as widgets
+    HAS_WIDGETS = True
+except ImportError:
+    HAS_WIDGETS = False
+    widgets = None
+
+try:
     import pandas as pd
     HAS_PANDAS = True
 except ImportError:

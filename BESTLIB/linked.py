@@ -17,10 +17,11 @@ except ImportError:
     pd = None
 
 try:
-    from IPython.display import display, HTML
+    from IPython.display import display, HTML, Javascript
     HAS_IPYTHON = True
 except ImportError:
     HAS_IPYTHON = False
+    Javascript = None
 
 
 class LinkedViews:
@@ -51,6 +52,7 @@ class LinkedViews:
         self._data = []  # Datos originales
         self._selected_data = []  # Datos seleccionados
         self._layouts = {}  # {view_id: MatrixLayout instance}
+        self._div_ids = {}  # {view_id: div_id} - Guardar div_id de cada layout
         self._container_id = f"linked-views-{id(self)}"
         
     def set_data(self, data):
@@ -236,6 +238,8 @@ class LinkedViews:
         
         layout.map({'S': scatter_spec})
         self._layouts[view_id] = layout
+        # Guardar div_id para actualizaciones futuras
+        self._div_ids[view_id] = layout.div_id
         
         return layout
     
@@ -258,6 +262,8 @@ class LinkedViews:
         
         layout.map({'B': bar_spec})
         self._layouts[view_id] = layout
+        # Guardar div_id para actualizaciones futuras
+        self._div_ids[view_id] = layout.div_id
         
         return layout
     
@@ -287,47 +293,185 @@ class LinkedViews:
                     **view_config['kwargs']
                 }
                 
-                # Re-mapear y re-renderizar
+                # Re-mapear (actualizar el spec interno)
                 self._layouts[view_id].map({'B': bar_spec})
                 
-                # Limpiar y re-renderizar el contenedor
-                container_id = f"{self._container_id}-{view_id}"
-                self._clear_and_redisplay(view_id, container_id)
+                # Actualizar el gráfico directamente con JavaScript sin recrear el contenedor
+                div_id = self._div_ids.get(view_id)
+                if div_id:
+                    self._update_chart_with_js(div_id, bar_spec)
     
-    def _clear_and_redisplay(self, view_id, container_id):
-        """Limpia y re-renderiza una vista específica"""
-        layout = self._layouts.get(view_id)
-        if not layout:
-            return
+    def _update_chart_with_js(self, div_id, bar_spec):
+        """Actualiza un gráfico existente usando JavaScript sin recrear el contenedor"""
+        import json
         
-        # JavaScript para limpiar el contenedor
-        js_clear = f"""
-        <script>
+        # Escapar datos para JavaScript
+        bar_data_json = json.dumps(bar_spec['data'])
+        color_map_json = json.dumps(bar_spec.get('colorMap', {}))
+        
+        # JavaScript para actualizar el gráfico directamente
+        js_update = f"""
         (function() {{
-            const container = document.getElementById('{container_id}');
-            if (container) {{
-                container.innerHTML = '';
+            const divId = '{div_id}';
+            const container = document.getElementById(divId);
+            if (!container) {{
+                console.warn('Contenedor no encontrado:', divId);
+                return;
+            }}
+            
+            // Buscar el SVG dentro del contenedor
+            const svg = container.querySelector('svg');
+            if (!svg) {{
+                console.warn('SVG no encontrado en contenedor:', divId);
+                return;
+            }}
+            
+            // Obtener datos
+            const barData = {bar_data_json};
+            const colorMap = {color_map_json};
+            
+            // Obtener dimensiones del SVG existente
+            const width = parseFloat(svg.getAttribute('width')) || 600;
+            const height = parseFloat(svg.getAttribute('height')) || 400;
+            
+            // Calcular márgenes y área del gráfico
+            const margin = {{ top: 20, right: 20, bottom: 60, left: 60 }};
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+            
+            // Usar D3 si está disponible
+            if (typeof d3 !== 'undefined') {{
+                const d3Svg = d3.select(svg);
+                
+                // Buscar el grupo principal del gráfico (el primer 'g' dentro del SVG, que es el grupo de transformación)
+                // En matrix.js, se crea como: svg.append('g').attr('transform', `translate(${{margin.left}},${{margin.top}})`);
+                let chartG = svg.querySelector('g');
+                if (!chartG) {{
+                    console.warn('No se encontró el grupo del gráfico');
+                    return;
+                }}
+                
+                const d3G = d3.select(chartG);
+                
+                // Limpiar solo las barras y etiquetas (mantener ejes y otros elementos)
+                // En matrix.js, las barras son rect sin clase específica, pero están dentro del grupo principal
+                // Los ejes tienen clases específicas (.axis, .domain, .tick)
+                // Eliminar todos los rect que no sean parte de los ejes
+                d3G.selectAll('rect').each(function() {{
+                    const rect = d3.select(this);
+                    const classes = this.getAttribute('class') || '';
+                    // Solo eliminar si no es parte de los ejes
+                    if (!classes.includes('axis') && !classes.includes('domain') && !classes.includes('tick')) {{
+                        rect.remove();
+                    }}
+                }});
+                
+                // Eliminar etiquetas de barras si existen
+                d3G.selectAll('text').each(function() {{
+                    const text = d3.select(this);
+                    const classes = this.getAttribute('class') || '';
+                    // Solo eliminar si es etiqueta de barra, no etiquetas de ejes
+                    if (classes.includes('bar-label') || (!classes.includes('axis') && !classes.includes('tick') && !classes.includes('domain'))) {{
+                        // Verificar que no sea parte de los ejes por posición
+                        const y = parseFloat(this.getAttribute('y')) || 0;
+                        if (y < chartHeight + 20) {{ // Etiquetas de barras están arriba
+                            text.remove();
+                        }}
+                    }}
+                }});
+                
+                // Recalcular escalas con nuevos datos
+                const xScale = d3.scaleBand()
+                    .domain(barData.map(d => d.category))
+                    .range([0, chartWidth])
+                    .padding(0.2);
+                
+                const maxValue = d3.max(barData, d => d.value) || 1;
+                const yScale = d3.scaleLinear()
+                    .domain([0, maxValue * 1.1])
+                    .nice()
+                    .range([chartHeight, 0]);
+                
+                // Dibujar nuevas barras usando el patrón enter/update/exit de D3
+                // En matrix.js, las barras tienen la clase 'bar'
+                const bars = d3G.selectAll('rect.bar')
+                    .data(barData, d => d.category);
+                
+                // Eliminar barras antiguas que ya no están en los datos
+                bars.exit().remove();
+                
+                // Agregar nuevas barras
+                const barsEnter = bars.enter()
+                    .append('rect')
+                    .attr('class', 'bar')
+                    .attr('x', d => xScale(d.category))
+                    .attr('width', xScale.bandwidth())
+                    .attr('y', chartHeight)
+                    .attr('height', 0)
+                    .attr('fill', d => d.color || colorMap[d.category] || '#9b59b6')
+                    .attr('stroke', '#fff')
+                    .attr('stroke-width', 1);
+                
+                // Actualizar barras existentes y animar
+                bars.merge(barsEnter)
+                    .transition()
+                    .duration(300)
+                    .attr('x', d => xScale(d.category))
+                    .attr('width', xScale.bandwidth())
+                    .attr('y', d => yScale(d.value))
+                    .attr('height', d => chartHeight - yScale(d.value))
+                    .attr('fill', d => d.color || colorMap[d.category] || '#9b59b6');
+                
+                // Actualizar etiquetas
+                const labels = d3G.selectAll('text.bar-label')
+                    .data(barData);
+                
+                labels.exit().remove();
+                
+                labels.enter()
+                    .append('text')
+                    .attr('class', 'bar-label')
+                    .merge(labels)
+                    .attr('x', d => xScale(d.category) + xScale.bandwidth() / 2)
+                    .attr('y', d => yScale(d.value) - 5)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-size', '11px')
+                    .attr('fill', '#333')
+                    .text(d => d.value);
+                
+                // Actualizar ejes si existen
+                const xAxisG = d3G.select('.x-axis');
+                const yAxisG = d3G.select('.y-axis');
+                
+                if (!xAxisG.empty()) {{
+                    const xAxis = d3.axisBottom(xScale);
+                    xAxisG.call(xAxis);
+                }}
+                
+                if (!yAxisG.empty()) {{
+                    const yAxis = d3.axisLeft(yScale);
+                    yAxisG.call(yAxis);
+                }}
+            }} else {{
+                console.warn('D3 no está disponible para actualizar el gráfico');
             }}
         }})();
-        </script>
         """
         
-        # Mostrar el script de limpieza y luego el nuevo gráfico
-        display(HTML(js_clear))
-        layout.display()
+        display(Javascript(js_update))
     
     def display(self):
         """Muestra todas las vistas enlazadas en el notebook"""
         if not HAS_IPYTHON:
             return
         
-        # Crear contenedor HTML para todas las vistas
-        html_parts = [f'<div id="{self._container_id}" style="display: flex; flex-wrap: wrap; gap: 20px;">']
+        # Crear contenedor HTML para todas las vistas con tamaños fijos
+        html_parts = [f'<div id="{self._container_id}" style="display: flex; flex-wrap: wrap; gap: 20px; width: 100%;">']
         
         for view_id in self._views.keys():
             container_id = f"{self._container_id}-{view_id}"
             html_parts.append(
-                f'<div id="{container_id}" style="flex: 1; min-width: 400px; max-width: 600px;"></div>'
+                f'<div id="{container_id}" style="flex: 1; min-width: 400px; max-width: 600px; width: 500px; height: 400px; overflow: hidden;"></div>'
             )
         
         html_parts.append('</div>')
@@ -337,9 +481,13 @@ class LinkedViews:
         # Crear y mostrar cada vista
         for view_id, view_config in self._views.items():
             if view_config['type'] == 'scatter':
-                self._create_scatter_layout(view_id, view_config).display()
+                layout = self._create_scatter_layout(view_id, view_config)
+                self._div_ids[view_id] = layout.div_id
+                layout.display()
             elif view_config['type'] == 'barchart':
-                self._create_barchart_layout(view_id, view_config).display()
+                layout = self._create_barchart_layout(view_id, view_config)
+                self._div_ids[view_id] = layout.div_id
+                layout.display()
     
     
     def get_selected_data(self):
