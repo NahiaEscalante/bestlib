@@ -4,8 +4,8 @@ Permite que los datos se actualicen automáticamente sin re-ejecutar celdas
 """
 
 try:
-    import ipywidgets as widgets
-    from traitlets import List, Dict, Int, observe
+import ipywidgets as widgets
+from traitlets import List, Dict, Int, observe
     HAS_WIDGETS = True
 except ImportError:
     HAS_WIDGETS = False
@@ -153,7 +153,7 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
             
             # Solo actualizar si hay cambio real (evitar loops infinitos)
             if self.items != items or self.count != new_count:
-                self.items = items
+        self.items = items
                 self.count = new_count
                 # NOTA: NO llamar callbacks manualmente aquí porque @observe('items') ya los ejecutará
                 # Llamar callbacks manualmente aquí causaría que se ejecuten DOS VECES:
@@ -643,14 +643,14 @@ class ReactiveMatrixLayout:
         
         # Si es vista enlazada, configurar callback de actualización
         if not is_primary:
-            # Guardar parámetros para el callback (closure)
-            barchart_params = {
-                'letter': letter,
-                'category_col': category_col,
-                'value_col': value_col,
-                'kwargs': kwargs.copy(),  # Copia para evitar mutaciones
-                'layout_div_id': self._layout.div_id
-            }
+        # Guardar parámetros para el callback (closure)
+        barchart_params = {
+            'letter': letter,
+            'category_col': category_col,
+            'value_col': value_col,
+            'kwargs': kwargs.copy(),  # Copia para evitar mutaciones
+            'layout_div_id': self._layout.div_id
+        }
         
             # Debug: verificar que la vista principal existe
             if MatrixLayout._debug:
