@@ -3,8 +3,22 @@ Sistema de Variables Reactivas para BESTLIB
 Permite que los datos se actualicen automáticamente sin re-ejecutar celdas
 """
 
-import ipywidgets as widgets
-from traitlets import List, Dict, Int, observe
+try:
+    import ipywidgets as widgets
+    from traitlets import List, Dict, Int, observe
+    HAS_WIDGETS = True
+except ImportError:
+    HAS_WIDGETS = False
+    widgets = None
+    # Crear stubs para traitlets si no está disponible
+    try:
+        from traitlets import List, Dict, Int, observe
+    except ImportError:
+        List = Dict = Int = None
+        def observe(*args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
 
 try:
     import pandas as pd
@@ -62,7 +76,7 @@ def _items_to_dataframe(items):
         return pd.DataFrame()
 
 
-class ReactiveData(widgets.Widget):
+class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
     """
     Widget reactivo que mantiene datos sincronizados entre celdas.
     
@@ -139,7 +153,7 @@ class ReactiveData(widgets.Widget):
             
             # Solo actualizar si hay cambio real (evitar loops infinitos)
             if self.items != items or self.count != new_count:
-        self.items = items
+                self.items = items
                 self.count = new_count
                 # NOTA: NO llamar callbacks manualmente aquí porque @observe('items') ya los ejecutará
                 # Llamar callbacks manualmente aquí causaría que se ejecuten DOS VECES:
@@ -596,10 +610,10 @@ class ReactiveMatrixLayout:
                 raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
         
         # Guardar el enlace
-            self._barchart_to_scatter[letter] = primary_letter
-            
-            # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
-            kwargs['__linked_to__'] = primary_letter
+        self._barchart_to_scatter[letter] = primary_letter
+        
+        # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
+        kwargs['__linked_to__'] = primary_letter
         
         # Crear bar chart inicial con todos los datos
         MatrixLayout.map_barchart(
@@ -629,31 +643,31 @@ class ReactiveMatrixLayout:
         
         # Si es vista enlazada, configurar callback de actualización
         if not is_primary:
-        # Guardar parámetros para el callback (closure)
-        barchart_params = {
-            'letter': letter,
-            'category_col': category_col,
-            'value_col': value_col,
-            'kwargs': kwargs.copy(),  # Copia para evitar mutaciones
-            'layout_div_id': self._layout.div_id
-        }
+            # Guardar parámetros para el callback (closure)
+            barchart_params = {
+                'letter': letter,
+                'category_col': category_col,
+                'value_col': value_col,
+                'kwargs': kwargs.copy(),  # Copia para evitar mutaciones
+                'layout_div_id': self._layout.div_id
+            }
         
             # Debug: verificar que la vista principal existe
             if MatrixLayout._debug:
                 print(f"🔗 [ReactiveMatrixLayout] Registrando callback para bar chart '{letter}' enlazado a vista principal '{primary_letter}'")
                 print(f"   - SelectionModel ID: {id(primary_selection)}")
                 print(f"   - Callbacks actuales: {len(primary_selection._callbacks)}")
-            
+        
         # Configurar callback para actualizar bar chart cuando cambia selección
         def update_barchart(items, count):
             """Actualiza el bar chart cuando cambia la selección usando JavaScript"""
             try:
-                    # Debug: verificar que el callback se está ejecutando
-                    if MatrixLayout._debug:
-                        print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando bar chart '{letter}' con {count} items seleccionados")
+                # Debug: verificar que el callback se está ejecutando
+                if MatrixLayout._debug:
+                    print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando bar chart '{letter}' con {count} items seleccionados")
                 import json
                 from IPython.display import Javascript
-                    import time
+                import time
                 
                 # Usar datos seleccionados o todos los datos
                 data_to_use = self._data
@@ -664,8 +678,8 @@ class ReactiveMatrixLayout:
                         data_to_use = pd.DataFrame(items)
                     else:
                         data_to_use = items
-                    else:
-                        data_to_use = self._data
+                else:
+                    data_to_use = self._data
                 
                 # Preparar datos del bar chart
                 bar_data = self._prepare_barchart_data(
@@ -712,7 +726,7 @@ class ReactiveMatrixLayout:
                             }} else {{
                                 console.error('Timeout esperando D3.js');
                                 window._bestlib_updating_{letter} = false;
-                                return;
+                            return;
                             }}
                         }}
                         

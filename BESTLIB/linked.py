@@ -23,6 +23,13 @@ except ImportError:
     HAS_IPYTHON = False
     Javascript = None
 
+try:
+    import ipywidgets as widgets
+    HAS_WIDGETS = True
+except ImportError:
+    HAS_WIDGETS = False
+    widgets = None
+
 
 class LinkedViews:
     """
@@ -300,6 +307,9 @@ class LinkedViews:
                 div_id = self._div_ids.get(view_id)
                 if div_id:
                     self._update_chart_with_js(div_id, bar_spec)
+        
+        # Actualizar widget de selección si existe
+        self._update_selection_widget_display()
     
     def _update_chart_with_js(self, div_id, bar_spec):
         """Actualiza un gráfico existente usando JavaScript sin recrear el contenedor"""
@@ -497,3 +507,54 @@ class LinkedViews:
     def get_selected_count(self):
         """Retorna el número de elementos seleccionados"""
         return len(self._selected_data)
+    
+    @property
+    def selection_widget(self):
+        """
+        Retorna el widget de selección para mostrar en Jupyter.
+        Similar a ReactiveMatrixLayout.selection_widget
+        
+        Uso:
+            display(linked.selection_widget)
+        """
+        if not HAS_WIDGETS:
+            print("⚠️ ipywidgets no está instalado. Instala con: pip install ipywidgets")
+            return None
+        
+        if not hasattr(self, '_selection_widget') or self._selection_widget is None:
+            # Crear widget visual
+            self._selection_widget = widgets.VBox([
+                widgets.HTML('<h4>📊 Datos Seleccionados</h4>'),
+                widgets.Label(value='Esperando selección...'),
+                widgets.IntText(value=0, description='Cantidad:', disabled=True)
+            ])
+            
+            # Función para actualizar el widget
+            def update_widget():
+                count = len(self._selected_data)
+                label = self._selection_widget.children[1]
+                counter = self._selection_widget.children[2]
+                
+                if count > 0:
+                    label.value = f'✅ {count} elementos seleccionados'
+                    counter.value = count
+                else:
+                    label.value = 'Esperando selección...'
+                    counter.value = 0
+            
+            # Guardar función de actualización para llamarla desde _update_linked_views
+            self._update_selection_widget = update_widget
+            
+            # Actualizar inicialmente
+            update_widget()
+        
+        return self._selection_widget
+    
+    def _update_selection_widget_display(self):
+        """Actualiza el widget de selección si existe"""
+        if hasattr(self, '_update_selection_widget'):
+            try:
+                self._update_selection_widget()
+            except Exception as e:
+                # Silenciar errores si el widget no está disponible
+                pass
