@@ -3552,7 +3552,7 @@ class ReactiveMatrixLayout:
 
         sel.on_change(update)
         return self
-    
+
     def add_kde(self, letter, column=None, bandwidth=None, linked_to=None, **kwargs):
         """Agrega KDE (Kernel Density Estimation) chart."""
         MatrixLayout = _get_matrix_layout()

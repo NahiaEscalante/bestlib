@@ -2846,7 +2846,7 @@ class ReactiveMatrixLayout:
 
         sel.on_change(update)
         return self
-    
+
     def add_line_plot(self, letter, x_col=None, y_col=None, series_col=None, linked_to=None, **kwargs):
         """
         Agrega line plot completo (versión mejorada del line chart).

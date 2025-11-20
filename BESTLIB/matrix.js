@@ -1302,6 +1302,18 @@
     
     const chartType = spec.type;
     
+    // Diagnóstico: verificar estructura de datos para gráficos avanzados
+    if (window._bestlib_debug && ['kde', 'distplot', 'rug', 'qqplot', 'ecdf', 'hist2d', 'polar', 'ridgeline', 'ribbon', 'funnel'].includes(chartType)) {
+      console.log(`[BESTLIB] renderChartD3: ${chartType}`, {
+        hasData: 'data' in spec,
+        dataType: spec.data ? (Array.isArray(spec.data) ? 'array' : typeof spec.data) : 'undefined',
+        dataLength: Array.isArray(spec.data) ? spec.data.length : (spec.data && typeof spec.data === 'object' ? Object.keys(spec.data).length : 0),
+        hasSeries: 'series' in spec,
+        seriesKeys: spec.series ? Object.keys(spec.series) : [],
+        specKeys: Object.keys(spec)
+      });
+    }
+    
     if (chartType === 'bar') {
       renderBarChartD3(container, spec, d3, divId);
     } else if (chartType === 'scatter') {
@@ -7151,6 +7163,10 @@
    */
   function renderKdeD3(container, spec, d3, divId) {
     const data = spec.data || [];
+    if (!data || data.length === 0) {
+      console.warn('[BESTLIB] renderKdeD3: No hay datos', { spec });
+      return;
+    }
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
@@ -7247,6 +7263,11 @@
     const kde = data.kde || [];
     const rug = data.rug || [];
     
+    if (!histogram || histogram.length === 0) {
+      console.warn('[BESTLIB] renderDistplotD3: No hay datos de histograma', { spec });
+      return;
+    }
+    
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
@@ -7277,13 +7298,22 @@
     const kdeColor = options.kdeColor || '#e24a4a';
     const rugColor = options.rugColor || '#4a90e2';
     
+    // Combinar todos los datos para calcular dominios
+    const allData = [...(histogram || []), ...(kde || [])];
+    const xDomain = allData.length > 0 
+      ? d3.extent(allData, d => d.x) 
+      : [0, 100];
+    const yMax = allData.length > 0 
+      ? d3.max(allData, d => d.y) 
+      : 1;
+    
     const x = d3.scaleLinear()
-      .domain(d3.extent([...histogram, ...kde].flat(), d => d.x) || [0, 100])
+      .domain(xDomain)
       .nice()
       .range([0, chartWidth]);
     
     const y = d3.scaleLinear()
-      .domain([0, d3.max([...histogram, ...kde].flat(), d => d.y) || 1])
+      .domain([0, yMax])
       .nice()
       .range([chartHeight, 0]);
     
@@ -7356,6 +7386,10 @@
    */
   function renderRugD3(container, spec, d3, divId) {
     const data = spec.data || [];
+    if (!data || data.length === 0) {
+      console.warn('[BESTLIB] renderRugD3: No hay datos', { spec });
+      return;
+    }
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
@@ -7448,6 +7482,10 @@
    */
   function renderQqplotD3(container, spec, d3, divId) {
     const data = spec.data || [];
+    if (!data || data.length === 0) {
+      console.warn('[BESTLIB] renderQqplotD3: No hay datos', { spec });
+      return;
+    }
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
@@ -7537,6 +7575,10 @@
    */
   function renderEcdfD3(container, spec, d3, divId) {
     const data = spec.data || [];
+    if (!data || data.length === 0) {
+      console.warn('[BESTLIB] renderEcdfD3: No hay datos', { spec });
+      return;
+    }
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
@@ -7620,6 +7662,10 @@
    */
   function renderRidgelineD3(container, spec, d3, divId) {
     const series = spec.series || {};
+    if (!series || Object.keys(series).length === 0) {
+      console.warn('[BESTLIB] renderRidgelineD3: No hay series', { spec });
+      return;
+    }
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
@@ -7741,6 +7787,10 @@
    */
   function renderRibbonD3(container, spec, d3, divId) {
     const data = spec.data || [];
+    if (!data || data.length === 0) {
+      console.warn('[BESTLIB] renderRibbonD3: No hay datos', { spec });
+      return;
+    }
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
@@ -7774,13 +7824,20 @@
     const gradient = options.gradient !== undefined ? options.gradient : true;
     
     const x = d3.scaleLinear()
-      .domain(d3.extent(data, d => d.x) || [0, 100])
+      .domain(data.length > 0 ? d3.extent(data, d => d.x) : [0, 100])
       .nice()
       .range([0, chartWidth]);
     
+    // Calcular dominio Y para ribbon (y1 e y2)
+    const y1Values = data.map(d => d.y1).filter(v => v != null);
+    const y2Values = data.map(d => d.y2).filter(v => v != null);
+    const allYValues = [...y1Values, ...y2Values];
+    const yDomain = allYValues.length > 0
+      ? [Math.min(...allYValues), Math.max(...allYValues)]
+      : [0, 100];
+    
     const y = d3.scaleLinear()
-      .domain([Math.min(d3.min(data, d => d.y1), d3.min(data, d => d.y2)), 
-               Math.max(d3.max(data, d => d.y1), d3.max(data, d => d.y2))])
+      .domain(yDomain)
       .nice()
       .range([chartHeight, 0]);
     
@@ -7883,6 +7940,10 @@
    */
   function renderHist2dD3(container, spec, d3, divId) {
     const data = spec.data || [];
+    if (!data || data.length === 0) {
+      console.warn('[BESTLIB] renderHist2dD3: No hay datos', { spec });
+      return;
+    }
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
@@ -7961,6 +8022,11 @@
    */
   function renderPolarD3(container, spec, d3, divId) {
     const data = spec.data || [];
+    if (!data || data.length === 0) {
+      console.warn('[BESTLIB] renderPolarD3: No hay datos', { spec });
+      return;
+    }
+    
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
@@ -7984,7 +8050,8 @@
     const showGrid = options.showGrid !== undefined ? options.showGrid : true;
     const showLabels = options.showLabels !== undefined ? options.showLabels : true;
     
-    const maxRadius = d3.max(data, d => d.radius) || 1;
+    // Calcular coordenadas polares desde angle y radius (no usar x, y pre-calculados)
+    const maxRadius = d3.max(data, d => (d.radius !== undefined ? d.radius : Math.sqrt(d.x*d.x + d.y*d.y))) || 1;
     const r = d3.scaleLinear()
       .domain([0, maxRadius])
       .range([0, radius]);
@@ -8018,27 +8085,43 @@
       }
     }
     
-    // Puntos
+    // Puntos - recalcular coordenadas desde angle y radius
     g.selectAll('.point')
       .data(data)
       .enter()
       .append('circle')
       .attr('class', 'bestlib-point')
-      .attr('cx', d => d.x)
-      .attr('cy', d => d.y)
+      .attr('cx', d => {
+        const angle = d.angle !== undefined ? d.angle : Math.atan2(d.y, d.x);
+        const rad = d.radius !== undefined ? d.radius : Math.sqrt(d.x*d.x + d.y*d.y);
+        return r(rad) * Math.cos(angle);
+      })
+      .attr('cy', d => {
+        const angle = d.angle !== undefined ? d.angle : Math.atan2(d.y, d.x);
+        const rad = d.radius !== undefined ? d.radius : Math.sqrt(d.x*d.x + d.y*d.y);
+        return r(rad) * Math.sin(angle);
+      })
       .attr('r', 3)
       .attr('fill', color)
       .attr('opacity', 0.6);
     
-    // Líneas desde el centro (opcional)
+    // Líneas desde el centro
     g.selectAll('.line')
       .data(data)
       .enter()
       .append('line')
       .attr('x1', 0)
       .attr('y1', 0)
-      .attr('x2', d => d.x)
-      .attr('y2', d => d.y)
+      .attr('x2', d => {
+        const angle = d.angle !== undefined ? d.angle : Math.atan2(d.y, d.x);
+        const rad = d.radius !== undefined ? d.radius : Math.sqrt(d.x*d.x + d.y*d.y);
+        return r(rad) * Math.cos(angle);
+      })
+      .attr('y2', d => {
+        const angle = d.angle !== undefined ? d.angle : Math.atan2(d.y, d.x);
+        const rad = d.radius !== undefined ? d.radius : Math.sqrt(d.x*d.x + d.y*d.y);
+        return r(rad) * Math.sin(angle);
+      })
       .attr('stroke', color)
       .attr('stroke-width', 1)
       .attr('opacity', 0.3);
@@ -8049,6 +8132,10 @@
    */
   function renderFunnelD3(container, spec, d3, divId) {
     const data = spec.data || [];
+    if (!data || data.length === 0) {
+      console.warn('[BESTLIB] renderFunnelD3: No hay datos', { spec });
+      return;
+    }
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
