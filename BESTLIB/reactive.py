@@ -1535,6 +1535,8 @@ class ReactiveMatrixLayout:
                     hist_data_json = json.dumps(_sanitize_for_json(hist_data))
                     default_color = kwargs.get('color', '#4a90e2')
                     show_axes = kwargs.get('axes', True)
+                    x_label = json.dumps(kwargs.get('xLabel', 'Bin'))
+                    y_label = json.dumps(kwargs.get('yLabel', 'Frequency'))
                     
                     js_update = f"""
                 (function() {{
@@ -1659,12 +1661,81 @@ class ReactiveMatrixLayout:
                             .attr('height', d => chartHeight - y(d.count));
                         
                         if ({str(show_axes).lower()}) {{
+                            // Detectar si necesitamos rotar etiquetas del eje X
+                            const numBins = data.length;
+                            const maxBinLabelLength = Math.max(...data.map(d => String(d.bin).length), 0);
+                            const needsRotation = numBins > 8 || maxBinLabelLength > 8;
+                            const rotationAngle = needsRotation ? -45 : 0;
+                            
                             const xAxis = g.append('g')
                                 .attr('transform', `translate(0,${{chartHeight}})`)
-                                .call(window.d3.axisBottom(x));
+                                .call(window.d3.axisBottom(x).tickFormat(d => {{
+                                    // Formato más corto para números largos
+                                    if (typeof d === 'number') {{
+                                        if (d % 1 === 0) return d.toString();
+                                        return d.toFixed(maxBinLabelLength > 6 ? 1 : 2);
+                                    }}
+                                    return String(d);
+                                }}));
+                            
+                            xAxis.selectAll('text')
+                                .style('font-size', needsRotation ? '10px' : '11px')
+                                .style('font-weight', '600')
+                                .style('fill', '#000000')
+                                .style('font-family', 'Arial, sans-serif')
+                                .attr('transform', rotationAngle !== 0 ? `rotate(${{rotationAngle}})` : null)
+                                .style('text-anchor', rotationAngle !== 0 ? 'end' : 'middle')
+                                .attr('dx', rotationAngle !== 0 ? '-0.5em' : '0')
+                                .attr('dy', rotationAngle !== 0 ? '0.5em' : '0.7em');
+                            
+                            xAxis.selectAll('line, path')
+                                .style('stroke', '#000000')
+                                .style('stroke-width', '1.5px');
                             
                             const yAxis = g.append('g')
-                                .call(window.d3.axisLeft(y));
+                                .call(window.d3.axisLeft(y).ticks(5));
+                            
+                            yAxis.selectAll('text')
+                                .style('font-size', '12px')
+                                .style('font-weight', '600')
+                                .style('fill', '#000000')
+                                .style('font-family', 'Arial, sans-serif');
+                            
+                            yAxis.selectAll('line, path')
+                                .style('stroke', '#000000')
+                                .style('stroke-width', '1.5px');
+                            
+                            // Renderizar etiquetas de ejes
+                            // Etiqueta del eje X (debajo del gráfico)
+                            const xLabelX = chartWidth / 2;
+                            const xLabelY = chartHeight + margin.bottom - 10;
+                            
+                            const xLabelText = g.append('text')
+                                .attr('x', xLabelX)
+                                .attr('y', xLabelY)
+                                .attr('text-anchor', 'middle')
+                                .style('font-size', '13px')
+                                .style('font-weight', '700')
+                                .style('fill', '#000000')
+                                .style('font-family', 'Arial, sans-serif')
+                                .text({x_label});
+                            
+                            // Etiqueta del eje Y (a la izquierda del gráfico, rotada -90 grados)
+                            const yLabelX = margin.left / 2;
+                            const yLabelY = margin.top + chartHeight / 2;
+                            
+                            const yLabelText = svg.append('text')
+                                .attr('x', yLabelX)
+                                .attr('y', yLabelY)
+                                .attr('text-anchor', 'middle')
+                                .attr('dominant-baseline', 'central')
+                                .style('font-size', '13px')
+                                .style('font-weight', '700')
+                                .style('fill', '#000000')
+                                .style('font-family', 'Arial, sans-serif')
+                                .style('pointer-events', 'none')
+                                .attr('transform', `rotate(-90 ${{yLabelX}} ${{yLabelY}})`)
+                                .text({y_label});
                         }}
                     }}
                     
