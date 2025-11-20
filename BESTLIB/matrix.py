@@ -1829,8 +1829,7 @@ class MatrixLayout:
         cls._map[letter] = spec
         return spec
     
-    @classmethod
-    def map_kde(cls, letter, data, column=None, bandwidth=None, **kwargs):
+    def map_kde(self, letter, data, column=None, bandwidth=None, **kwargs):
         """Crea KDE (Kernel Density Estimation) chart."""
         try:
             from .charts import ChartRegistry
@@ -1838,13 +1837,16 @@ class MatrixLayout:
             spec = chart.get_spec(data, column=column, bandwidth=bandwidth, **kwargs)
         except Exception:
             spec = {'type': 'kde', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
+        # Guardar en ambas: clase (para compatibilidad) e instancia (para renderizado)
+        if not hasattr(self.__class__, '_map') or self.__class__._map is None:
+            self.__class__._map = {}
+        self.__class__._map[letter] = spec
+        if not hasattr(self, '_map') or self._map is None:
+            self._map = {}
+        self._map[letter] = spec
         return spec
     
-    @classmethod
-    def map_distplot(cls, letter, data, column=None, bins=30, kde=True, rug=False, **kwargs):
+    def map_distplot(self, letter, data, column=None, bins=30, kde=True, rug=False, **kwargs):
         """Crea distribution plot (histograma + KDE)."""
         try:
             from .charts import ChartRegistry
@@ -1852,13 +1854,15 @@ class MatrixLayout:
             spec = chart.get_spec(data, column=column, bins=bins, kde=kde, rug=rug, **kwargs)
         except Exception:
             spec = {'type': 'distplot', 'data': {}, **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
+        if not hasattr(self.__class__, '_map') or self.__class__._map is None:
+            self.__class__._map = {}
+        self.__class__._map[letter] = spec
+        if not hasattr(self, '_map') or self._map is None:
+            self._map = {}
+        self._map[letter] = spec
         return spec
     
-    @classmethod
-    def map_rug(cls, letter, data, column=None, axis='x', **kwargs):
+    def map_rug(self, letter, data, column=None, axis='x', **kwargs):
         """Crea rug plot."""
         try:
             from .charts import ChartRegistry
@@ -1866,13 +1870,15 @@ class MatrixLayout:
             spec = chart.get_spec(data, column=column, axis=axis, **kwargs)
         except Exception:
             spec = {'type': 'rug', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
+        if not hasattr(self.__class__, '_map') or self.__class__._map is None:
+            self.__class__._map = {}
+        self.__class__._map[letter] = spec
+        if not hasattr(self, '_map') or self._map is None:
+            self._map = {}
+        self._map[letter] = spec
         return spec
     
-    @classmethod
-    def map_qqplot(cls, letter, data, column=None, dist='norm', **kwargs):
+    def map_qqplot(self, letter, data, column=None, dist='norm', **kwargs):
         """Crea Q-Q plot."""
         try:
             from .charts import ChartRegistry
@@ -1880,13 +1886,15 @@ class MatrixLayout:
             spec = chart.get_spec(data, column=column, dist=dist, **kwargs)
         except Exception:
             spec = {'type': 'qqplot', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
+        if not hasattr(self.__class__, '_map') or self.__class__._map is None:
+            self.__class__._map = {}
+        self.__class__._map[letter] = spec
+        if not hasattr(self, '_map') or self._map is None:
+            self._map = {}
+        self._map[letter] = spec
         return spec
     
-    @classmethod
-    def map_ecdf(cls, letter, data, column=None, **kwargs):
+    def map_ecdf(self, letter, data, column=None, **kwargs):
         """Crea ECDF (Empirical Cumulative Distribution Function) chart."""
         try:
             from .charts import ChartRegistry
@@ -1894,13 +1902,15 @@ class MatrixLayout:
             spec = chart.get_spec(data, column=column, **kwargs)
         except Exception:
             spec = {'type': 'ecdf', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
+        if not hasattr(self.__class__, '_map') or self.__class__._map is None:
+            self.__class__._map = {}
+        self.__class__._map[letter] = spec
+        if not hasattr(self, '_map') or self._map is None:
+            self._map = {}
+        self._map[letter] = spec
         return spec
     
-    @classmethod
-    def map_ridgeline(cls, letter, data, column=None, category_col=None, bandwidth=None, **kwargs):
+    def map_ridgeline(self, letter, data, column=None, category_col=None, bandwidth=None, **kwargs):
         """Crea ridgeline plot (joy plot)."""
         try:
             from .charts import ChartRegistry
@@ -1908,9 +1918,12 @@ class MatrixLayout:
             spec = chart.get_spec(data, column=column, category_col=category_col, bandwidth=bandwidth, **kwargs)
         except Exception:
             spec = {'type': 'ridgeline', 'series': {}, **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
+        if not hasattr(self.__class__, '_map') or self.__class__._map is None:
+            self.__class__._map = {}
+        self.__class__._map[letter] = spec
+        if not hasattr(self, '_map') or self._map is None:
+            self._map = {}
+        self._map[letter] = spec
         return spec
     
     @classmethod
@@ -1927,8 +1940,7 @@ class MatrixLayout:
         cls._map[letter] = spec
         return spec
     
-    @classmethod
-    def map_hist2d(cls, letter, data, x_col=None, y_col=None, bins=20, **kwargs):
+    def map_hist2d(self, letter, data, x_col=None, y_col=None, bins=20, **kwargs):
         """Crea 2D histogram."""
         try:
             from .charts import ChartRegistry
@@ -1936,13 +1948,15 @@ class MatrixLayout:
             spec = chart.get_spec(data, x_col=x_col, y_col=y_col, bins=bins, **kwargs)
         except Exception:
             spec = {'type': 'hist2d', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
+        if not hasattr(self.__class__, '_map') or self.__class__._map is None:
+            self.__class__._map = {}
+        self.__class__._map[letter] = spec
+        if not hasattr(self, '_map') or self._map is None:
+            self._map = {}
+        self._map[letter] = spec
         return spec
     
-    @classmethod
-    def map_polar(cls, letter, data, angle_col=None, radius_col=None, angle_unit='rad', **kwargs):
+    def map_polar(self, letter, data, angle_col=None, radius_col=None, angle_unit='rad', **kwargs):
         """Crea polar plot."""
         try:
             from .charts import ChartRegistry
@@ -1950,13 +1964,15 @@ class MatrixLayout:
             spec = chart.get_spec(data, angle_col=angle_col, radius_col=radius_col, angle_unit=angle_unit, **kwargs)
         except Exception:
             spec = {'type': 'polar', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
+        if not hasattr(self.__class__, '_map') or self.__class__._map is None:
+            self.__class__._map = {}
+        self.__class__._map[letter] = spec
+        if not hasattr(self, '_map') or self._map is None:
+            self._map = {}
+        self._map[letter] = spec
         return spec
     
-    @classmethod
-    def map_funnel(cls, letter, data, stage_col=None, value_col=None, **kwargs):
+    def map_funnel(self, letter, data, stage_col=None, value_col=None, **kwargs):
         """Crea funnel plot."""
         try:
             from .charts import ChartRegistry
@@ -1964,9 +1980,12 @@ class MatrixLayout:
             spec = chart.get_spec(data, stage_col=stage_col, value_col=value_col, **kwargs)
         except Exception:
             spec = {'type': 'funnel', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
+        if not hasattr(self.__class__, '_map') or self.__class__._map is None:
+            self.__class__._map = {}
+        self.__class__._map[letter] = spec
+        if not hasattr(self, '_map') or self._map is None:
+            self._map = {}
+        self._map[letter] = spec
         return spec
     
     @classmethod
@@ -2014,6 +2033,11 @@ class MatrixLayout:
         self._has_custom_select_handler = False  # Flag para rastrear handlers personalizados
         self._reactive_model = None  # Para modelo reactivo
         self._merge_opt = None  # Merge explícito por instancia (True | False | [letras])
+        
+        # CRÍTICO: Inicializar self._map copiando desde cls._map para que los specs estén disponibles
+        # Los métodos map_* guardan en cls._map, pero _prepare_repr_data usa self._map
+        import copy
+        self._map = copy.deepcopy(cls._map) if cls._map else {}
         
         # Registrar handler por defecto para eventos 'select' que muestre los datos seleccionados
         self._register_default_select_handler()
