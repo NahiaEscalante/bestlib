@@ -206,6 +206,84 @@ class MatrixLayout:
         cls._map[letter] = spec
         return spec
     
+    @classmethod
+    def map_line_plot(cls, letter, data, **kwargs):
+        """Método helper para crear line plot completo"""
+        from ..charts.registry import ChartRegistry
+        
+        chart = ChartRegistry.get('line_plot')
+        spec = chart.get_spec(data, **kwargs)
+        
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_horizontal_bar(cls, letter, data, **kwargs):
+        """Método helper para crear horizontal bar chart"""
+        from ..charts.registry import ChartRegistry
+        
+        chart = ChartRegistry.get('horizontal_bar')
+        spec = chart.get_spec(data, **kwargs)
+        
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_hexbin(cls, letter, data, **kwargs):
+        """Método helper para crear hexbin chart"""
+        from ..charts.registry import ChartRegistry
+        
+        chart = ChartRegistry.get('hexbin')
+        spec = chart.get_spec(data, **kwargs)
+        
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_errorbars(cls, letter, data, **kwargs):
+        """Método helper para crear errorbars chart"""
+        from ..charts.registry import ChartRegistry
+        
+        chart = ChartRegistry.get('errorbars')
+        spec = chart.get_spec(data, **kwargs)
+        
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_fill_between(cls, letter, data, **kwargs):
+        """Método helper para crear fill_between chart"""
+        from ..charts.registry import ChartRegistry
+        
+        chart = ChartRegistry.get('fill_between')
+        spec = chart.get_spec(data, **kwargs)
+        
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_step(cls, letter, data, **kwargs):
+        """Método helper para crear step plot"""
+        from ..charts.registry import ChartRegistry
+        
+        chart = ChartRegistry.get('step_plot')
+        spec = chart.get_spec(data, **kwargs)
+        
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
     def _prepare_repr_data(self, layout_to_use=None):
         """
         Prepara datos comunes para _repr_html_ y _repr_mimebundle_.

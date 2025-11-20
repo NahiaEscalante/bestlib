@@ -1613,6 +1613,223 @@ class MatrixLayout:
         return spec
     
     @classmethod
+    def map_line_plot(cls, letter, data, x_col=None, y_col=None, series_col=None, **kwargs):
+        """
+        Crea line plot completo (versión mejorada del line chart).
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el gráfico
+            data: DataFrame de pandas o lista de diccionarios
+            x_col: Nombre de columna para eje X
+            y_col: Nombre de columna para eje Y
+            series_col: Nombre de columna para series (opcional)
+            **kwargs: Argumentos adicionales (colorMap, strokeWidth, markers, axes, etc.)
+        
+        Returns:
+            dict: Especificación del line plot para usar en map()
+        """
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('line_plot')
+            spec = chart.get_spec(data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
+        except Exception:
+            # Fallback a implementación directa si ChartRegistry no está disponible
+            spec = cls.map_line(letter, data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
+            spec['type'] = 'line_plot'
+        
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_horizontal_bar(cls, letter, data, category_col=None, value_col=None, **kwargs):
+        """
+        Crea horizontal bar chart.
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el gráfico
+            data: DataFrame de pandas o lista de diccionarios
+            category_col: Nombre de columna para categorías
+            value_col: Nombre de columna para valores (opcional, cuenta si se omite)
+            **kwargs: Argumentos adicionales (color, colorMap, axes, etc.)
+        
+        Returns:
+            dict: Especificación del horizontal bar chart para usar en map()
+        """
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('horizontal_bar')
+            spec = chart.get_spec(data, category_col=category_col, value_col=value_col, **kwargs)
+        except Exception:
+            # Fallback a implementación directa
+            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+                if category_col is None:
+                    raise ValueError("category_col requerido para horizontal bar")
+                if value_col:
+                    df = data[[category_col, value_col]].dropna()
+                    bar_data = [{'category': str(cat), 'value': float(val)} for cat, val in zip(df[category_col], df[value_col])]
+                else:
+                    counts = data[category_col].value_counts()
+                    bar_data = [{'category': str(cat), 'value': int(count)} for cat, count in counts.items()]
+            else:
+                if category_col is None:
+                    raise ValueError("category_col requerido para horizontal bar")
+                from collections import Counter
+                if value_col:
+                    bar_data = [{'category': str(d.get(category_col)), 'value': float(d.get(value_col, 0))} for d in data if category_col in d]
+                else:
+                    cats = [d.get(category_col) for d in data if category_col in d]
+                    counts = Counter(cats)
+                    bar_data = [{'category': str(cat), 'value': int(count)} for cat, count in counts.items()]
+            
+            spec = {'type': 'horizontal_bar', 'data': bar_data, **kwargs}
+        
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_hexbin(cls, letter, data, x_col=None, y_col=None, **kwargs):
+        """
+        Crea hexbin chart (visualización de densidad).
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el gráfico
+            data: DataFrame de pandas o lista de diccionarios
+            x_col: Nombre de columna para eje X
+            y_col: Nombre de columna para eje Y
+            **kwargs: Argumentos adicionales (bins, colorScale, axes, etc.)
+        
+        Returns:
+            dict: Especificación del hexbin chart para usar en map()
+        """
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('hexbin')
+            spec = chart.get_spec(data, x_col=x_col, y_col=y_col, **kwargs)
+        except Exception:
+            # Fallback a implementación directa
+            processed_data, _ = cls._prepare_data(data, x_col=x_col, y_col=y_col)
+            spec = {'type': 'hexbin', 'data': processed_data, 'options': {'bins': kwargs.get('bins', 20)}, **kwargs}
+        
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_errorbars(cls, letter, data, x_col=None, y_col=None, yerr=None, xerr=None, **kwargs):
+        """
+        Crea errorbars chart.
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el gráfico
+            data: DataFrame de pandas o lista de diccionarios
+            x_col: Nombre de columna para eje X
+            y_col: Nombre de columna para eje Y
+            yerr: Nombre de columna para error en Y (opcional)
+            xerr: Nombre de columna para error en X (opcional)
+            **kwargs: Argumentos adicionales (color, strokeWidth, capSize, axes, etc.)
+        
+        Returns:
+            dict: Especificación del errorbars chart para usar en map()
+        """
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('errorbars')
+            spec = chart.get_spec(data, x_col=x_col, y_col=y_col, yerr=yerr, xerr=xerr, **kwargs)
+        except Exception:
+            # Fallback a implementación directa
+            processed_data, _ = cls._prepare_data(data, x_col=x_col, y_col=y_col)
+            # Agregar errores si existen
+            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+                if yerr and yerr in data.columns:
+                    for idx, val in enumerate(data[yerr]):
+                        if idx < len(processed_data):
+                            processed_data[idx]['yerr'] = float(val) if pd.notna(val) else 0
+                if xerr and xerr in data.columns:
+                    for idx, val in enumerate(data[xerr]):
+                        if idx < len(processed_data):
+                            processed_data[idx]['xerr'] = float(val) if pd.notna(val) else 0
+            spec = {'type': 'errorbars', 'data': processed_data, **kwargs}
+        
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_fill_between(cls, letter, data, x_col=None, y1=None, y2=None, **kwargs):
+        """
+        Crea fill_between chart (área entre dos líneas).
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el gráfico
+            data: DataFrame de pandas o lista de diccionarios
+            x_col: Nombre de columna para eje X
+            y1: Nombre de columna para primera línea Y
+            y2: Nombre de columna para segunda línea Y
+            **kwargs: Argumentos adicionales (color, opacity, axes, etc.)
+        
+        Returns:
+            dict: Especificación del fill_between chart para usar en map()
+        """
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('fill_between')
+            spec = chart.get_spec(data, x_col=x_col, y1=y1, y2=y2, **kwargs)
+        except Exception:
+            # Fallback a implementación directa
+            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+                if x_col is None or y1 is None or y2 is None:
+                    raise ValueError("x_col, y1 e y2 son requeridos para fill_between")
+                df = data[[x_col, y1, y2]].dropna()
+                fill_data = [{'x': float(x), 'y1': float(y1_val), 'y2': float(y2_val)} 
+                            for x, y1_val, y2_val in zip(df[x_col], df[y1], df[y2])]
+            else:
+                fill_data = [{'x': float(d.get(x_col, 0)), 'y1': float(d.get(y1, 0)), 'y2': float(d.get(y2, 0))} 
+                           for d in data if x_col in d and y1 in d and y2 in d]
+            spec = {'type': 'fill_between', 'data': fill_data, 'options': {'opacity': kwargs.get('opacity', 0.3)}, **kwargs}
+        
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_step(cls, letter, data, x_col=None, y_col=None, **kwargs):
+        """
+        Crea step plot (líneas escalonadas).
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el gráfico
+            data: DataFrame de pandas o lista de diccionarios
+            x_col: Nombre de columna para eje X
+            y_col: Nombre de columna para eje Y
+            **kwargs: Argumentos adicionales (stepType, color, strokeWidth, axes, etc.)
+        
+        Returns:
+            dict: Especificación del step plot para usar en map()
+        """
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('step_plot')
+            spec = chart.get_spec(data, x_col=x_col, y_col=y_col, **kwargs)
+        except Exception:
+            # Fallback a implementación directa
+            processed_data, _ = cls._prepare_data(data, x_col=x_col, y_col=y_col)
+            # Ordenar por x para step plot
+            processed_data = sorted(processed_data, key=lambda d: d.get('x', 0))
+            spec = {'type': 'step_plot', 'data': processed_data, 'options': {'stepType': kwargs.get('stepType', 'step')}, **kwargs}
+        
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
     def set_safe_html(cls, safe: bool):
         cls._safe_html = bool(safe)
     

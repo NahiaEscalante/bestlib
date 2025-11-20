@@ -18,6 +18,14 @@ from .star_coordinates import StarCoordinatesChart
 from .parallel_coordinates import ParallelCoordinatesChart
 from .grouped_bar import GroupedBarChart
 
+# Nuevos gráficos
+from .line_plot import LinePlotChart
+from .horizontal_bar import HorizontalBarChart
+from .hexbin import HexbinChart
+from .errorbars import ErrorbarsChart
+from .fill_between import FillBetweenChart
+from .step_plot import StepPlotChart
+
 # Registrar todos los gráficos automáticamente
 ChartRegistry.register(ScatterChart)
 ChartRegistry.register(BarChart)
@@ -31,6 +39,14 @@ ChartRegistry.register(RadvizChart)
 ChartRegistry.register(StarCoordinatesChart)
 ChartRegistry.register(ParallelCoordinatesChart)
 ChartRegistry.register(GroupedBarChart)
+
+# Registrar nuevos gráficos
+ChartRegistry.register(LinePlotChart)
+ChartRegistry.register(HorizontalBarChart)
+ChartRegistry.register(HexbinChart)
+ChartRegistry.register(ErrorbarsChart)
+ChartRegistry.register(FillBetweenChart)
+ChartRegistry.register(StepPlotChart)
 
 __all__ = [
     'ChartBase',
@@ -46,6 +62,12 @@ __all__ = [
     'RadvizChart',
     'StarCoordinatesChart',
     'ParallelCoordinatesChart',
-    'GroupedBarChart'
+    'GroupedBarChart',
+    'LinePlotChart',
+    'HorizontalBarChart',
+    'HexbinChart',
+    'ErrorbarsChart',
+    'FillBetweenChart',
+    'StepPlotChart'
 ]
 

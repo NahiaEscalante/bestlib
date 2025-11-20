@@ -2846,7 +2846,220 @@ class ReactiveMatrixLayout:
 
         sel.on_change(update)
         return self
-
+    
+    def add_line_plot(self, letter, x_col=None, y_col=None, series_col=None, linked_to=None, **kwargs):
+        """
+        Agrega line plot completo (versión mejorada del line chart).
+        
+        Args:
+            letter: Letra del layout ASCII
+            x_col: Nombre de columna para eje X
+            y_col: Nombre de columna para eje Y
+            series_col: Nombre de columna para series (opcional)
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        MatrixLayout.map_line_plot(letter, self._data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
+        if linked_to is None:
+            return self
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            return self
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_line_plot(letter, data_to_use, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+    
+    def add_horizontal_bar(self, letter, category_col=None, value_col=None, linked_to=None, **kwargs):
+        """
+        Agrega horizontal bar chart.
+        
+        Args:
+            letter: Letra del layout ASCII
+            category_col: Nombre de columna para categorías
+            value_col: Nombre de columna para valores (opcional)
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        MatrixLayout.map_horizontal_bar(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
+        if linked_to is None:
+            return self
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            return self
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_horizontal_bar(letter, data_to_use, category_col=category_col, value_col=value_col, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+    
+    def add_hexbin(self, letter, x_col=None, y_col=None, linked_to=None, **kwargs):
+        """
+        Agrega hexbin chart (visualización de densidad).
+        
+        Args:
+            letter: Letra del layout ASCII
+            x_col: Nombre de columna para eje X
+            y_col: Nombre de columna para eje Y
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales (bins, colorScale, etc.)
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        MatrixLayout.map_hexbin(letter, self._data, x_col=x_col, y_col=y_col, **kwargs)
+        if linked_to is None:
+            return self
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            return self
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_hexbin(letter, data_to_use, x_col=x_col, y_col=y_col, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+    
+    def add_errorbars(self, letter, x_col=None, y_col=None, yerr=None, xerr=None, linked_to=None, **kwargs):
+        """
+        Agrega errorbars chart.
+        
+        Args:
+            letter: Letra del layout ASCII
+            x_col: Nombre de columna para eje X
+            y_col: Nombre de columna para eje Y
+            yerr: Nombre de columna para error en Y (opcional)
+            xerr: Nombre de columna para error en X (opcional)
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        MatrixLayout.map_errorbars(letter, self._data, x_col=x_col, y_col=y_col, yerr=yerr, xerr=xerr, **kwargs)
+        if linked_to is None:
+            return self
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            return self
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_errorbars(letter, data_to_use, x_col=x_col, y_col=y_col, yerr=yerr, xerr=xerr, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+    
+    def add_fill_between(self, letter, x_col=None, y1=None, y2=None, linked_to=None, **kwargs):
+        """
+        Agrega fill_between chart (área entre dos líneas).
+        
+        Args:
+            letter: Letra del layout ASCII
+            x_col: Nombre de columna para eje X
+            y1: Nombre de columna para primera línea Y
+            y2: Nombre de columna para segunda línea Y
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        MatrixLayout.map_fill_between(letter, self._data, x_col=x_col, y1=y1, y2=y2, **kwargs)
+        if linked_to is None:
+            return self
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            return self
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_fill_between(letter, data_to_use, x_col=x_col, y1=y1, y2=y2, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+    
+    def add_step(self, letter, x_col=None, y_col=None, linked_to=None, **kwargs):
+        """
+        Agrega step plot (líneas escalonadas).
+        
+        Args:
+            letter: Letra del layout ASCII
+            x_col: Nombre de columna para eje X
+            y_col: Nombre de columna para eje Y
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales (stepType, etc.)
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        MatrixLayout.map_step(letter, self._data, x_col=x_col, y_col=y_col, **kwargs)
+        if linked_to is None:
+            return self
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            return self
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_step(letter, data_to_use, x_col=x_col, y_col=y_col, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
 
     
     def display(self, ascii_layout=None):
