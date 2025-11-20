@@ -3552,7 +3552,256 @@ class ReactiveMatrixLayout:
 
         sel.on_change(update)
         return self
-
+    
+    def add_kde(self, letter, column=None, bandwidth=None, linked_to=None, **kwargs):
+        """Agrega KDE (Kernel Density Estimation) chart."""
+        MatrixLayout = _get_matrix_layout()
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if column is None:
+            raise ValueError("Debe especificar 'column' para KDE")
+        MatrixLayout.map_kde(letter, self._data, column=column, bandwidth=bandwidth, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_kde(letter, df, column=column, bandwidth=bandwidth, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
+    
+    def add_distplot(self, letter, column=None, bins=30, kde=True, rug=False, linked_to=None, **kwargs):
+        """Agrega distribution plot (histograma + KDE)."""
+        MatrixLayout = _get_matrix_layout()
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if column is None:
+            raise ValueError("Debe especificar 'column' para distplot")
+        MatrixLayout.map_distplot(letter, self._data, column=column, bins=bins, kde=kde, rug=rug, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_distplot(letter, df, column=column, bins=bins, kde=kde, rug=rug, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
+    
+    def add_rug(self, letter, column=None, axis='x', linked_to=None, **kwargs):
+        """Agrega rug plot."""
+        MatrixLayout = _get_matrix_layout()
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if column is None:
+            raise ValueError("Debe especificar 'column' para rug plot")
+        MatrixLayout.map_rug(letter, self._data, column=column, axis=axis, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_rug(letter, df, column=column, axis=axis, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
+    
+    def add_qqplot(self, letter, column=None, dist='norm', linked_to=None, **kwargs):
+        """Agrega Q-Q plot."""
+        MatrixLayout = _get_matrix_layout()
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if column is None:
+            raise ValueError("Debe especificar 'column' para Q-Q plot")
+        MatrixLayout.map_qqplot(letter, self._data, column=column, dist=dist, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_qqplot(letter, df, column=column, dist=dist, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
+    
+    def add_ecdf(self, letter, column=None, linked_to=None, **kwargs):
+        """Agrega ECDF (Empirical Cumulative Distribution Function) chart."""
+        MatrixLayout = _get_matrix_layout()
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if column is None:
+            raise ValueError("Debe especificar 'column' para ECDF")
+        MatrixLayout.map_ecdf(letter, self._data, column=column, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_ecdf(letter, df, column=column, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
+    
+    def add_ridgeline(self, letter, column=None, category_col=None, bandwidth=None, linked_to=None, **kwargs):
+        """Agrega ridgeline plot (joy plot)."""
+        MatrixLayout = _get_matrix_layout()
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if column is None or category_col is None:
+            raise ValueError("Debe especificar 'column' y 'category_col' para ridgeline")
+        MatrixLayout.map_ridgeline(letter, self._data, column=column, category_col=category_col, bandwidth=bandwidth, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_ridgeline(letter, df, column=column, category_col=category_col, bandwidth=bandwidth, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
+    
+    def add_ribbon(self, letter, x_col=None, y1_col=None, y2_col=None, linked_to=None, **kwargs):
+        """Agrega ribbon plot (área entre líneas con gradiente)."""
+        MatrixLayout = _get_matrix_layout()
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if x_col is None or y1_col is None or y2_col is None:
+            raise ValueError("Debe especificar 'x_col', 'y1_col' y 'y2_col' para ribbon")
+        MatrixLayout.map_ribbon(letter, self._data, x_col=x_col, y1_col=y1_col, y2_col=y2_col, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_ribbon(letter, df, x_col=x_col, y1_col=y1_col, y2_col=y2_col, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
+    
+    def add_hist2d(self, letter, x_col=None, y_col=None, bins=20, linked_to=None, **kwargs):
+        """Agrega 2D histogram."""
+        MatrixLayout = _get_matrix_layout()
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if x_col is None or y_col is None:
+            raise ValueError("Debe especificar 'x_col' y 'y_col' para hist2d")
+        MatrixLayout.map_hist2d(letter, self._data, x_col=x_col, y_col=y_col, bins=bins, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_hist2d(letter, df, x_col=x_col, y_col=y_col, bins=bins, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
+    
+    def add_polar(self, letter, angle_col=None, radius_col=None, angle_unit='rad', linked_to=None, **kwargs):
+        """Agrega polar plot."""
+        MatrixLayout = _get_matrix_layout()
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if angle_col is None or radius_col is None:
+            raise ValueError("Debe especificar 'angle_col' y 'radius_col' para polar plot")
+        MatrixLayout.map_polar(letter, self._data, angle_col=angle_col, radius_col=radius_col, angle_unit=angle_unit, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_polar(letter, df, angle_col=angle_col, radius_col=radius_col, angle_unit=angle_unit, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
+    
+    def add_funnel(self, letter, stage_col=None, value_col=None, linked_to=None, **kwargs):
+        """Agrega funnel plot."""
+        MatrixLayout = _get_matrix_layout()
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if stage_col is None or value_col is None:
+            raise ValueError("Debe especificar 'stage_col' y 'value_col' para funnel plot")
+        MatrixLayout.map_funnel(letter, self._data, stage_col=stage_col, value_col=value_col, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_funnel(letter, df, stage_col=stage_col, value_col=value_col, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
 
     
     def display(self, ascii_layout=None):

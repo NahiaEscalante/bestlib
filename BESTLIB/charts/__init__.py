@@ -26,6 +26,18 @@ from .errorbars import ErrorbarsChart
 from .fill_between import FillBetweenChart
 from .step_plot import StepPlotChart
 
+# Gráficos avanzados
+from .kde import KdeChart
+from .distplot import DistplotChart
+from .rug import RugChart
+from .qqplot import QqplotChart
+from .ecdf import EcdfChart
+from .ridgeline import RidgelineChart
+from .ribbon import RibbonChart
+from .hist2d import Hist2dChart
+from .polar import PolarChart
+from .funnel import FunnelChart
+
 # Registrar todos los gráficos automáticamente
 ChartRegistry.register(ScatterChart)
 ChartRegistry.register(BarChart)
@@ -48,6 +60,18 @@ ChartRegistry.register(ErrorbarsChart)
 ChartRegistry.register(FillBetweenChart)
 ChartRegistry.register(StepPlotChart)
 
+# Registrar gráficos avanzados
+ChartRegistry.register(KdeChart)
+ChartRegistry.register(DistplotChart)
+ChartRegistry.register(RugChart)
+ChartRegistry.register(QqplotChart)
+ChartRegistry.register(EcdfChart)
+ChartRegistry.register(RidgelineChart)
+ChartRegistry.register(RibbonChart)
+ChartRegistry.register(Hist2dChart)
+ChartRegistry.register(PolarChart)
+ChartRegistry.register(FunnelChart)
+
 __all__ = [
     'ChartBase',
     'ChartRegistry',
@@ -68,6 +92,16 @@ __all__ = [
     'HexbinChart',
     'ErrorbarsChart',
     'FillBetweenChart',
-    'StepPlotChart'
+    'StepPlotChart',
+    'KdeChart',
+    'DistplotChart',
+    'RugChart',
+    'QqplotChart',
+    'EcdfChart',
+    'RidgelineChart',
+    'RibbonChart',
+    'Hist2dChart',
+    'PolarChart',
+    'FunnelChart'
 ]
 

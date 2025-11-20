@@ -1,0 +1,157 @@
+"""
+Rug Plot Chart para BESTLIB
+Marcadores en el eje para mostrar distribución de datos
+"""
+from .base import ChartBase
+from ..data.validators import validate_scatter_data
+from ..utils.figsize import process_figsize_in_kwargs
+from ..core.exceptions import ChartError, DataError
+
+try:
+    import pandas as pd
+    import numpy as np
+    HAS_PANDAS = True
+    HAS_NUMPY = True
+except ImportError:
+    HAS_PANDAS = False
+    HAS_NUMPY = False
+    pd = None
+    np = None
+
+
+class RugChart(ChartBase):
+    """Gráfico rug plot (marcadores en el eje)"""
+    
+    @property
+    def chart_type(self):
+        return 'rug'
+    
+    def validate_data(self, data, column=None, **kwargs):
+        """
+        Valida que los datos sean adecuados para rug plot.
+        
+        Args:
+            data: DataFrame o lista de diccionarios
+            column: Nombre de columna numérica
+            **kwargs: Otros parámetros
+        
+        Raises:
+            ChartError: Si los datos no son válidos
+        """
+        if not column:
+            raise ChartError("column es requerido para rug plot")
+        
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if column not in data.columns:
+                raise ChartError(f"Columna '{column}' no encontrada en los datos")
+            if not pd.api.types.is_numeric_dtype(data[column]):
+                raise ChartError(f"Columna '{column}' debe ser numérica")
+        else:
+            if isinstance(data, list) and len(data) > 0:
+                if column not in data[0]:
+                    raise ChartError(f"Columna '{column}' no encontrada en los datos")
+            else:
+                raise ChartError("Los datos deben ser un DataFrame o lista no vacía")
+    
+    def prepare_data(self, data, column=None, **kwargs):
+        """
+        Prepara datos para rug plot.
+        
+        Args:
+            data: DataFrame o lista de diccionarios
+            column: Nombre de columna numérica
+            **kwargs: Otros parámetros
+        
+        Returns:
+            dict: Datos preparados con 'x' y 'y' (posiciones en el eje)
+        """
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            values = data[column].dropna().values
+        else:
+            values = [d[column] for d in data if column in d and d[column] is not None]
+            if HAS_NUMPY:
+                values = np.array(values)
+        
+        if len(values) == 0:
+            raise ChartError("No hay datos válidos para rug plot")
+        
+        # Crear datos para rug plot: cada valor se marca en el eje
+        rug_data = []
+        for val in values:
+            rug_data.append({
+                'x': float(val),
+                'y': 0  # Posición en el eje (se ajustará en JS)
+            })
+        
+        return {'data': rug_data}
+    
+    def get_spec(self, data, column=None, axis='x', **kwargs):
+        """
+        Genera la especificación del rug plot.
+        
+        Args:
+            data: DataFrame o lista de diccionarios
+            column: Nombre de columna numérica
+            axis: Eje donde mostrar rug ('x' o 'y')
+            **kwargs: Opciones adicionales (color, size, opacity, etc.)
+        
+        Returns:
+            dict: Spec conforme a BESTLIB Visualization Spec
+        """
+        # Validar datos
+        self.validate_data(data, column=column, **kwargs)
+        
+        # Preparar datos
+        rug_data = self.prepare_data(
+            data,
+            column=column,
+            **kwargs
+        )
+        
+        # Procesar figsize si está en kwargs
+        process_figsize_in_kwargs(kwargs)
+        
+        # Agregar etiquetas de ejes automáticamente
+        if 'xLabel' not in kwargs and column and axis == 'x':
+            kwargs['xLabel'] = column
+        if 'yLabel' not in kwargs and column and axis == 'y':
+            kwargs['yLabel'] = column
+        
+        # Construir spec
+        spec = {
+            'type': self.chart_type,
+            'data': rug_data['data'],
+        }
+        
+        # Agregar encoding
+        encoding = {}
+        if column:
+            encoding['x' if axis == 'x' else 'y'] = {'field': column}
+        
+        if encoding:
+            spec['encoding'] = encoding
+        
+        # Agregar options
+        options = {}
+        for key in ['color', 'size', 'opacity', 'axes', 'xLabel', 'yLabel', 'figsize', 'interactive', 'axis']:
+            if key in kwargs:
+                options[key] = kwargs.pop(key)
+        
+        # Valores por defecto
+        if 'color' not in options:
+            options['color'] = '#4a90e2'
+        if 'size' not in options:
+            options['size'] = 2
+        if 'opacity' not in options:
+            options['opacity'] = 0.6
+        if 'axis' not in options:
+            options['axis'] = axis
+        
+        if options:
+            spec['options'] = options
+        
+        # Agregar cualquier otro kwargs restante
+        spec.update(kwargs)
+        
+        return spec
+

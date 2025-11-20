@@ -284,6 +284,116 @@ class MatrixLayout:
         cls._map[letter] = spec
         return spec
     
+    @classmethod
+    def map_kde(cls, letter, data, **kwargs):
+        """Método helper para crear KDE"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('kde')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_distplot(cls, letter, data, **kwargs):
+        """Método helper para crear distplot"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('distplot')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_rug(cls, letter, data, **kwargs):
+        """Método helper para crear rug plot"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('rug')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_qqplot(cls, letter, data, **kwargs):
+        """Método helper para crear Q-Q plot"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('qqplot')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_ecdf(cls, letter, data, **kwargs):
+        """Método helper para crear ECDF"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('ecdf')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_ridgeline(cls, letter, data, **kwargs):
+        """Método helper para crear ridgeline plot"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('ridgeline')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_ribbon(cls, letter, data, **kwargs):
+        """Método helper para crear ribbon plot"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('ribbon')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_hist2d(cls, letter, data, **kwargs):
+        """Método helper para crear 2D histogram"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('hist2d')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_polar(cls, letter, data, **kwargs):
+        """Método helper para crear polar plot"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('polar')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_funnel(cls, letter, data, **kwargs):
+        """Método helper para crear funnel plot"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('funnel')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
     def _prepare_repr_data(self, layout_to_use=None):
         """
         Prepara datos comunes para _repr_html_ y _repr_mimebundle_.

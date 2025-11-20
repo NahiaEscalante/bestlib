@@ -1830,6 +1830,146 @@ class MatrixLayout:
         return spec
     
     @classmethod
+    def map_kde(cls, letter, data, column=None, bandwidth=None, **kwargs):
+        """Crea KDE (Kernel Density Estimation) chart."""
+        try:
+            from .charts import ChartRegistry
+            chart = ChartRegistry.get('kde')
+            spec = chart.get_spec(data, column=column, bandwidth=bandwidth, **kwargs)
+        except Exception:
+            spec = {'type': 'kde', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_distplot(cls, letter, data, column=None, bins=30, kde=True, rug=False, **kwargs):
+        """Crea distribution plot (histograma + KDE)."""
+        try:
+            from .charts import ChartRegistry
+            chart = ChartRegistry.get('distplot')
+            spec = chart.get_spec(data, column=column, bins=bins, kde=kde, rug=rug, **kwargs)
+        except Exception:
+            spec = {'type': 'distplot', 'data': {}, **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_rug(cls, letter, data, column=None, axis='x', **kwargs):
+        """Crea rug plot."""
+        try:
+            from .charts import ChartRegistry
+            chart = ChartRegistry.get('rug')
+            spec = chart.get_spec(data, column=column, axis=axis, **kwargs)
+        except Exception:
+            spec = {'type': 'rug', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_qqplot(cls, letter, data, column=None, dist='norm', **kwargs):
+        """Crea Q-Q plot."""
+        try:
+            from .charts import ChartRegistry
+            chart = ChartRegistry.get('qqplot')
+            spec = chart.get_spec(data, column=column, dist=dist, **kwargs)
+        except Exception:
+            spec = {'type': 'qqplot', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_ecdf(cls, letter, data, column=None, **kwargs):
+        """Crea ECDF (Empirical Cumulative Distribution Function) chart."""
+        try:
+            from .charts import ChartRegistry
+            chart = ChartRegistry.get('ecdf')
+            spec = chart.get_spec(data, column=column, **kwargs)
+        except Exception:
+            spec = {'type': 'ecdf', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_ridgeline(cls, letter, data, column=None, category_col=None, bandwidth=None, **kwargs):
+        """Crea ridgeline plot (joy plot)."""
+        try:
+            from .charts import ChartRegistry
+            chart = ChartRegistry.get('ridgeline')
+            spec = chart.get_spec(data, column=column, category_col=category_col, bandwidth=bandwidth, **kwargs)
+        except Exception:
+            spec = {'type': 'ridgeline', 'series': {}, **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_ribbon(cls, letter, data, x_col=None, y1_col=None, y2_col=None, **kwargs):
+        """Crea ribbon plot (área entre líneas con gradiente)."""
+        try:
+            from .charts import ChartRegistry
+            chart = ChartRegistry.get('ribbon')
+            spec = chart.get_spec(data, x_col=x_col, y1_col=y1_col, y2_col=y2_col, **kwargs)
+        except Exception:
+            spec = {'type': 'ribbon', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_hist2d(cls, letter, data, x_col=None, y_col=None, bins=20, **kwargs):
+        """Crea 2D histogram."""
+        try:
+            from .charts import ChartRegistry
+            chart = ChartRegistry.get('hist2d')
+            spec = chart.get_spec(data, x_col=x_col, y_col=y_col, bins=bins, **kwargs)
+        except Exception:
+            spec = {'type': 'hist2d', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_polar(cls, letter, data, angle_col=None, radius_col=None, angle_unit='rad', **kwargs):
+        """Crea polar plot."""
+        try:
+            from .charts import ChartRegistry
+            chart = ChartRegistry.get('polar')
+            spec = chart.get_spec(data, angle_col=angle_col, radius_col=radius_col, angle_unit=angle_unit, **kwargs)
+        except Exception:
+            spec = {'type': 'polar', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_funnel(cls, letter, data, stage_col=None, value_col=None, **kwargs):
+        """Crea funnel plot."""
+        try:
+            from .charts import ChartRegistry
+            chart = ChartRegistry.get('funnel')
+            spec = chart.get_spec(data, stage_col=stage_col, value_col=value_col, **kwargs)
+        except Exception:
+            spec = {'type': 'funnel', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
     def set_safe_html(cls, safe: bool):
         cls._safe_html = bool(safe)
     

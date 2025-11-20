@@ -327,7 +327,17 @@
         value.type === 'hexbin' ||
         value.type === 'errorbars' ||
         value.type === 'fill_between' ||
-        value.type === 'step_plot'
+        value.type === 'step_plot' ||
+        value.type === 'kde' ||
+        value.type === 'distplot' ||
+        value.type === 'rug' ||
+        value.type === 'qqplot' ||
+        value.type === 'ecdf' ||
+        value.type === 'ridgeline' ||
+        value.type === 'ribbon' ||
+        value.type === 'hist2d' ||
+        value.type === 'polar' ||
+        value.type === 'funnel'
       );
     }
     
@@ -1326,6 +1336,26 @@
       renderFillBetweenD3(container, spec, d3, divId);
     } else if (chartType === 'step_plot') {
       renderStepPlotD3(container, spec, d3, divId);
+    } else if (chartType === 'kde') {
+      renderKdeD3(container, spec, d3, divId);
+    } else if (chartType === 'distplot') {
+      renderDistplotD3(container, spec, d3, divId);
+    } else if (chartType === 'rug') {
+      renderRugD3(container, spec, d3, divId);
+    } else if (chartType === 'qqplot') {
+      renderQqplotD3(container, spec, d3, divId);
+    } else if (chartType === 'ecdf') {
+      renderEcdfD3(container, spec, d3, divId);
+    } else if (chartType === 'ridgeline') {
+      renderRidgelineD3(container, spec, d3, divId);
+    } else if (chartType === 'ribbon') {
+      renderRibbonD3(container, spec, d3, divId);
+    } else if (chartType === 'hist2d') {
+      renderHist2dD3(container, spec, d3, divId);
+    } else if (chartType === 'polar') {
+      renderPolarD3(container, spec, d3, divId);
+    } else if (chartType === 'funnel') {
+      renderFunnelD3(container, spec, d3, divId);
     } else {
       // Tipo de gráfico no soportado aún, mostrar mensaje visible
       const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
@@ -7113,6 +7143,1033 @@
           .style('font-size', '12px')
           .text(yLabel);
       }
+    }
+  }
+
+  /**
+   * KDE (Kernel Density Estimation) con D3.js
+   */
+  function renderKdeD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const dims = getChartDimensions(container, spec, 400, 350);
+    let width = dims.width;
+    let height = dims.height;
+    
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 20, right: 20, bottom: 35, left: 40 }
+      : { top: 25, right: 25, bottom: 45, left: 55 };
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
+    
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
+      .style('overflow', 'visible');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const options = spec.options || {};
+    const color = options.color || spec.color || '#4a90e2';
+    const fill = options.fill !== undefined ? options.fill : true;
+    const opacity = options.opacity || 0.3;
+    const strokeWidth = options.strokeWidth || spec.strokeWidth || 2;
+    
+    const x = d3.scaleLinear()
+      .domain(d3.extent(data, d => d.x) || [0, 100])
+      .nice()
+      .range([0, chartWidth]);
+    
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d.y) || 1])
+      .nice()
+      .range([chartHeight, 0]);
+    
+    // Área rellena
+    if (fill) {
+      const area = d3.area()
+        .x(d => x(d.x))
+        .y0(chartHeight)
+        .y1(d => y(d.y))
+        .curve(d3.curveMonotoneX);
+      
+      g.append('path')
+        .datum(data)
+        .attr('fill', color)
+        .attr('fill-opacity', opacity)
+        .attr('d', area);
+    }
+    
+    // Línea
+    const line = d3.line()
+      .x(d => x(d.x))
+      .y(d => y(d.y))
+      .curve(d3.curveMonotoneX);
+    
+    g.append('path')
+      .datum(data)
+      .attr('fill', 'none')
+      .attr('stroke', color)
+      .attr('stroke-width', strokeWidth)
+      .attr('d', line)
+      .attr('class', 'bestlib-line');
+    
+    // Ejes
+    if (spec.axes !== false) {
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x));
+      
+      applyUnifiedAxisStyles(xAxis);
+      
+      const yAxis = g.append('g')
+        .call(d3.axisLeft(y));
+      
+      applyUnifiedAxisStyles(yAxis);
+      
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+    }
+  }
+  
+  /**
+   * Distribution Plot (histograma + KDE) con D3.js
+   */
+  function renderDistplotD3(container, spec, d3, divId) {
+    const data = spec.data || {};
+    const histogram = data.histogram || [];
+    const kde = data.kde || [];
+    const rug = data.rug || [];
+    
+    const dims = getChartDimensions(container, spec, 400, 350);
+    let width = dims.width;
+    let height = dims.height;
+    
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 20, right: 20, bottom: 35, left: 40 }
+      : { top: 25, right: 25, bottom: 45, left: 55 };
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
+    
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
+      .style('overflow', 'visible');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const options = spec.options || {};
+    const color = options.color || spec.color || '#4a90e2';
+    const kdeColor = options.kdeColor || '#e24a4a';
+    const rugColor = options.rugColor || '#4a90e2';
+    
+    const x = d3.scaleLinear()
+      .domain(d3.extent([...histogram, ...kde].flat(), d => d.x) || [0, 100])
+      .nice()
+      .range([0, chartWidth]);
+    
+    const y = d3.scaleLinear()
+      .domain([0, d3.max([...histogram, ...kde].flat(), d => d.y) || 1])
+      .nice()
+      .range([chartHeight, 0]);
+    
+    // Histograma
+    if (histogram.length > 0) {
+      g.selectAll('.bar')
+        .data(histogram)
+        .enter()
+        .append('rect')
+        .attr('class', 'bestlib-bar')
+        .attr('x', d => x(d.bin_start))
+        .attr('width', d => x(d.bin_end) - x(d.bin_start))
+        .attr('y', d => y(d.y))
+        .attr('height', d => chartHeight - y(d.y))
+        .attr('fill', color)
+        .attr('opacity', 0.6);
+    }
+    
+    // KDE
+    if (kde.length > 0) {
+      const kdeLine = d3.line()
+        .x(d => x(d.x))
+        .y(d => y(d.y))
+        .curve(d3.curveMonotoneX);
+      
+      g.append('path')
+        .datum(kde)
+        .attr('fill', 'none')
+        .attr('stroke', kdeColor)
+        .attr('stroke-width', 2)
+        .attr('d', kdeLine)
+        .attr('class', 'bestlib-line');
+    }
+    
+    // Rug
+    if (rug.length > 0) {
+      g.selectAll('.rug')
+        .data(rug)
+        .enter()
+        .append('line')
+        .attr('class', 'bestlib-point')
+        .attr('x1', d => x(d.x))
+        .attr('x2', d => x(d.x))
+        .attr('y1', chartHeight)
+        .attr('y2', chartHeight + 5)
+        .attr('stroke', rugColor)
+        .attr('stroke-width', 1)
+        .attr('opacity', 0.6);
+    }
+    
+    // Ejes
+    if (spec.axes !== false) {
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x));
+      
+      applyUnifiedAxisStyles(xAxis);
+      
+      const yAxis = g.append('g')
+        .call(d3.axisLeft(y));
+      
+      applyUnifiedAxisStyles(yAxis);
+      
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+    }
+  }
+  
+  /**
+   * Rug Plot con D3.js
+   */
+  function renderRugD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const dims = getChartDimensions(container, spec, 400, 350);
+    let width = dims.width;
+    let height = dims.height;
+    
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 20, right: 20, bottom: 35, left: 40 }
+      : { top: 25, right: 25, bottom: 45, left: 55 };
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
+    
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
+      .style('overflow', 'visible');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const options = spec.options || {};
+    const axis = options.axis || 'x';
+    const color = options.color || spec.color || '#4a90e2';
+    const size = options.size || 2;
+    const opacity = options.opacity || 0.6;
+    
+    if (axis === 'x') {
+      const x = d3.scaleLinear()
+        .domain(d3.extent(data, d => d.x) || [0, 100])
+        .nice()
+        .range([0, chartWidth]);
+      
+      g.selectAll('.rug')
+        .data(data)
+        .enter()
+        .append('line')
+        .attr('class', 'bestlib-point')
+        .attr('x1', d => x(d.x))
+        .attr('x2', d => x(d.x))
+        .attr('y1', chartHeight)
+        .attr('y2', chartHeight + size * 3)
+        .attr('stroke', color)
+        .attr('stroke-width', size)
+        .attr('opacity', opacity);
+      
+      if (spec.axes !== false) {
+        const xAxis = g.append('g')
+          .attr('transform', `translate(0,${chartHeight})`)
+          .call(d3.axisBottom(x));
+        
+        applyUnifiedAxisStyles(xAxis);
+        renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+      }
+    } else {
+      const y = d3.scaleLinear()
+        .domain(d3.extent(data, d => d.x) || [0, 100])
+        .nice()
+        .range([chartHeight, 0]);
+      
+      g.selectAll('.rug')
+        .data(data)
+        .enter()
+        .append('line')
+        .attr('class', 'bestlib-point')
+        .attr('x1', 0)
+        .attr('x2', -size * 3)
+        .attr('y1', d => y(d.x))
+        .attr('y2', d => y(d.x))
+        .attr('stroke', color)
+        .attr('stroke-width', size)
+        .attr('opacity', opacity);
+      
+      if (spec.axes !== false) {
+        const yAxis = g.append('g')
+          .call(d3.axisLeft(y));
+        
+        applyUnifiedAxisStyles(yAxis);
+        renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+      }
+    }
+  }
+  
+  /**
+   * Q-Q Plot con D3.js
+   */
+  function renderQqplotD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const dims = getChartDimensions(container, spec, 400, 350);
+    let width = dims.width;
+    let height = dims.height;
+    
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 20, right: 20, bottom: 35, left: 40 }
+      : { top: 25, right: 25, bottom: 45, left: 55 };
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
+    
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
+      .style('overflow', 'visible');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const options = spec.options || {};
+    const color = options.color || spec.color || '#4a90e2';
+    const strokeWidth = options.strokeWidth || spec.strokeWidth || 2;
+    const showLine = options.showLine !== undefined ? options.showLine : true;
+    
+    const x = d3.scaleLinear()
+      .domain(d3.extent(data, d => d.x) || [0, 100])
+      .nice()
+      .range([0, chartWidth]);
+    
+    const y = d3.scaleLinear()
+      .domain(d3.extent(data, d => d.y) || [0, 100])
+      .nice()
+      .range([chartHeight, 0]);
+    
+    // Línea de referencia (y = x)
+    if (showLine) {
+      const minVal = Math.min(d3.min(data, d => d.x), d3.min(data, d => d.y));
+      const maxVal = Math.max(d3.max(data, d => d.x), d3.max(data, d => d.y));
+      g.append('line')
+        .attr('x1', x(minVal))
+        .attr('x2', x(maxVal))
+        .attr('y1', y(minVal))
+        .attr('y2', y(maxVal))
+        .attr('stroke', '#999')
+        .attr('stroke-width', 1)
+        .attr('stroke-dasharray', '3,3')
+        .attr('opacity', 0.5);
+    }
+    
+    // Puntos
+    g.selectAll('.point')
+      .data(data)
+      .enter()
+      .append('circle')
+      .attr('class', 'bestlib-point')
+      .attr('cx', d => x(d.x))
+      .attr('cy', d => y(d.y))
+      .attr('r', 3)
+      .attr('fill', color)
+      .attr('opacity', 0.6);
+    
+    // Ejes
+    if (spec.axes !== false) {
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x));
+      
+      applyUnifiedAxisStyles(xAxis);
+      
+      const yAxis = g.append('g')
+        .call(d3.axisLeft(y));
+      
+      applyUnifiedAxisStyles(yAxis);
+      
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+    }
+  }
+  
+  /**
+   * ECDF (Empirical Cumulative Distribution Function) con D3.js
+   */
+  function renderEcdfD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const dims = getChartDimensions(container, spec, 400, 350);
+    let width = dims.width;
+    let height = dims.height;
+    
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 20, right: 20, bottom: 35, left: 40 }
+      : { top: 25, right: 25, bottom: 45, left: 55 };
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
+    
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
+      .style('overflow', 'visible');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const options = spec.options || {};
+    const color = options.color || spec.color || '#4a90e2';
+    const strokeWidth = options.strokeWidth || spec.strokeWidth || 2;
+    const step = options.step !== undefined ? options.step : true;
+    
+    const x = d3.scaleLinear()
+      .domain(d3.extent(data, d => d.x) || [0, 100])
+      .nice()
+      .range([0, chartWidth]);
+    
+    const y = d3.scaleLinear()
+      .domain([0, 1])
+      .range([chartHeight, 0]);
+    
+    // Línea ECDF
+    let line;
+    if (step) {
+      line = d3.line()
+        .x(d => x(d.x))
+        .y(d => y(d.y))
+        .curve(d3.curveStepBefore);
+    } else {
+      line = d3.line()
+        .x(d => x(d.x))
+        .y(d => y(d.y))
+        .curve(d3.curveMonotoneX);
+    }
+    
+    g.append('path')
+      .datum(data)
+      .attr('fill', 'none')
+      .attr('stroke', color)
+      .attr('stroke-width', strokeWidth)
+      .attr('d', line)
+      .attr('class', 'bestlib-line');
+    
+    // Ejes
+    if (spec.axes !== false) {
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x));
+      
+      applyUnifiedAxisStyles(xAxis);
+      
+      const yAxis = g.append('g')
+        .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.2f')));
+      
+      applyUnifiedAxisStyles(yAxis);
+      
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+    }
+  }
+  
+  /**
+   * Ridgeline Plot con D3.js
+   */
+  function renderRidgelineD3(container, spec, d3, divId) {
+    const series = spec.series || {};
+    const dims = getChartDimensions(container, spec, 400, 350);
+    let width = dims.width;
+    let height = dims.height;
+    
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 20, right: 20, bottom: 35, left: 40 }
+      : { top: 25, right: 25, bottom: 45, left: 55 };
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
+    
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
+      .style('overflow', 'visible');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const options = spec.options || {};
+    const overlap = options.overlap || 0.5;
+    const opacity = options.opacity || 0.7;
+    const colorMap = options.colorMap || spec.colorMap || {};
+    
+    const categories = Object.keys(series);
+    const numCategories = categories.length;
+    const spacing = chartHeight / (numCategories + (numCategories - 1) * overlap);
+    
+    // Calcular dominios
+    let xMin = Infinity, xMax = -Infinity, yMax = -Infinity;
+    Object.values(series).forEach(serie => {
+      serie.forEach(d => {
+        xMin = Math.min(xMin, d.x);
+        xMax = Math.max(xMax, d.x);
+        yMax = Math.max(yMax, d.y);
+      });
+    });
+    
+    const x = d3.scaleLinear()
+      .domain([xMin, xMax])
+      .nice()
+      .range([0, chartWidth]);
+    
+    const colorScale = d3.scaleOrdinal()
+      .domain(categories)
+      .range(d3.schemeCategory10);
+    
+    // Dibujar cada serie
+    categories.forEach((cat, idx) => {
+      const serie = series[cat];
+      const yOffset = idx * spacing * (1 + overlap);
+      const yScale = d3.scaleLinear()
+        .domain([0, yMax])
+        .range([spacing, 0]);
+      
+      const area = d3.area()
+        .x(d => x(d.x))
+        .y0(spacing)
+        .y1(d => yScale(d.y))
+        .curve(d3.curveMonotoneX);
+      
+      const line = d3.line()
+        .x(d => x(d.x))
+        .y(d => yScale(d.y))
+        .curve(d3.curveMonotoneX);
+      
+      const gSeries = g.append('g')
+        .attr('transform', `translate(0,${yOffset})`);
+      
+      const color = colorMap[cat] || colorScale(cat);
+      
+      // Área
+      gSeries.append('path')
+        .datum(serie)
+        .attr('fill', color)
+        .attr('fill-opacity', opacity)
+        .attr('d', area);
+      
+      // Línea
+      gSeries.append('path')
+        .datum(serie)
+        .attr('fill', 'none')
+        .attr('stroke', color)
+        .attr('stroke-width', 2)
+        .attr('d', line)
+        .attr('class', 'bestlib-line');
+      
+      // Etiqueta de categoría
+      gSeries.append('text')
+        .attr('x', -5)
+        .attr('y', spacing / 2)
+        .attr('text-anchor', 'end')
+        .attr('alignment-baseline', 'middle')
+        .style('font-size', '11px')
+        .style('font-weight', '600')
+        .text(cat);
+    });
+    
+    // Ejes
+    if (spec.axes !== false) {
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x));
+      
+      applyUnifiedAxisStyles(xAxis);
+      
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+    }
+  }
+  
+  /**
+   * Ribbon Plot con D3.js
+   */
+  function renderRibbonD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const dims = getChartDimensions(container, spec, 400, 350);
+    let width = dims.width;
+    let height = dims.height;
+    
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 20, right: 20, bottom: 35, left: 40 }
+      : { top: 25, right: 25, bottom: 45, left: 55 };
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
+    
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
+      .style('overflow', 'visible');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const options = spec.options || {};
+    const color1 = options.color1 || '#4a90e2';
+    const color2 = options.color2 || '#e24a4a';
+    const opacity = options.opacity || 0.4;
+    const showLines = options.showLines !== undefined ? options.showLines : true;
+    const gradient = options.gradient !== undefined ? options.gradient : true;
+    
+    const x = d3.scaleLinear()
+      .domain(d3.extent(data, d => d.x) || [0, 100])
+      .nice()
+      .range([0, chartWidth]);
+    
+    const y = d3.scaleLinear()
+      .domain([Math.min(d3.min(data, d => d.y1), d3.min(data, d => d.y2)), 
+               Math.max(d3.max(data, d => d.y1), d3.max(data, d => d.y2))])
+      .nice()
+      .range([chartHeight, 0]);
+    
+    // Gradiente si está habilitado
+    if (gradient) {
+      const gradientId = `ribbon-gradient-${divId}`;
+      const grad = svg.append('defs')
+        .append('linearGradient')
+        .attr('id', gradientId)
+        .attr('x1', '0%')
+        .attr('y1', '0%')
+        .attr('x2', '0%')
+        .attr('y2', '100%');
+      
+      grad.append('stop')
+        .attr('offset', '0%')
+        .attr('stop-color', color1)
+        .attr('stop-opacity', opacity);
+      
+      grad.append('stop')
+        .attr('offset', '100%')
+        .attr('stop-color', color2)
+        .attr('stop-opacity', opacity);
+      
+      // Área con gradiente
+      const area = d3.area()
+        .x(d => x(d.x))
+        .y0(d => y(d.y1))
+        .y1(d => y(d.y2))
+        .curve(d3.curveMonotoneX);
+      
+      g.append('path')
+        .datum(data)
+        .attr('fill', `url(#${gradientId})`)
+        .attr('d', area);
+    } else {
+      // Área sólida
+      const area = d3.area()
+        .x(d => x(d.x))
+        .y0(d => y(d.y1))
+        .y1(d => y(d.y2))
+        .curve(d3.curveMonotoneX);
+      
+      g.append('path')
+        .datum(data)
+        .attr('fill', color1)
+        .attr('fill-opacity', opacity)
+        .attr('d', area)
+        .attr('class', 'bestlib-area');
+    }
+    
+    // Líneas opcionales
+    if (showLines) {
+      const line1 = d3.line()
+        .x(d => x(d.x))
+        .y(d => y(d.y1))
+        .curve(d3.curveMonotoneX);
+      
+      const line2 = d3.line()
+        .x(d => x(d.x))
+        .y(d => y(d.y2))
+        .curve(d3.curveMonotoneX);
+      
+      g.append('path')
+        .datum(data)
+        .attr('fill', 'none')
+        .attr('stroke', color1)
+        .attr('stroke-width', 2)
+        .attr('d', line1)
+        .attr('class', 'bestlib-line');
+      
+      g.append('path')
+        .datum(data)
+        .attr('fill', 'none')
+        .attr('stroke', color2)
+        .attr('stroke-width', 2)
+        .attr('d', line2)
+        .attr('class', 'bestlib-line');
+    }
+    
+    // Ejes
+    if (spec.axes !== false) {
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x));
+      
+      applyUnifiedAxisStyles(xAxis);
+      
+      const yAxis = g.append('g')
+        .call(d3.axisLeft(y));
+      
+      applyUnifiedAxisStyles(yAxis);
+      
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+    }
+  }
+  
+  /**
+   * 2D Histogram con D3.js
+   */
+  function renderHist2dD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const dims = getChartDimensions(container, spec, 400, 350);
+    let width = dims.width;
+    let height = dims.height;
+    
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 20, right: 20, bottom: 35, left: 40 }
+      : { top: 25, right: 25, bottom: 45, left: 55 };
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
+    
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
+      .style('overflow', 'visible');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const options = spec.options || {};
+    const colorScale = options.colorScale || 'Blues';
+    
+    const x = d3.scaleLinear()
+      .domain(d3.extent(data, d => d.x) || [0, 100])
+      .nice()
+      .range([0, chartWidth]);
+    
+    const y = d3.scaleLinear()
+      .domain(d3.extent(data, d => d.y) || [0, 100])
+      .nice()
+      .range([chartHeight, 0]);
+    
+    const maxValue = d3.max(data, d => d.value) || 1;
+    const color = d3.scaleSequential(d3.interpolateBlues)
+      .domain([0, maxValue]);
+    
+    // Celdas del heatmap
+    g.selectAll('.cell')
+      .data(data)
+      .enter()
+      .append('rect')
+      .attr('class', 'bestlib-heatmap-cell')
+      .attr('x', d => x(d.x_bin_start))
+      .attr('y', d => y(d.y_bin_end))
+      .attr('width', d => x(d.x_bin_end) - x(d.x_bin_start))
+      .attr('height', d => y(d.y_bin_start) - y(d.y_bin_end))
+      .attr('fill', d => color(d.value))
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 0.5);
+    
+    // Ejes
+    if (spec.axes !== false) {
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x));
+      
+      applyUnifiedAxisStyles(xAxis);
+      
+      const yAxis = g.append('g')
+        .call(d3.axisLeft(y));
+      
+      applyUnifiedAxisStyles(yAxis);
+      
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+    }
+  }
+  
+  /**
+   * Polar Plot con D3.js
+   */
+  function renderPolarD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const dims = getChartDimensions(container, spec, 400, 350);
+    let width = dims.width;
+    let height = dims.height;
+    
+    const size = Math.min(width, height);
+    const radius = Math.min(size - 40, size - 40) / 2;
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${size} ${size}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
+      .style('overflow', 'visible');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${size/2},${size/2})`);
+    
+    const options = spec.options || {};
+    const color = options.color || spec.color || '#4a90e2';
+    const showGrid = options.showGrid !== undefined ? options.showGrid : true;
+    const showLabels = options.showLabels !== undefined ? options.showLabels : true;
+    
+    const maxRadius = d3.max(data, d => d.radius) || 1;
+    const r = d3.scaleLinear()
+      .domain([0, maxRadius])
+      .range([0, radius]);
+    
+    // Grid circular
+    if (showGrid) {
+      const gridCircles = [0.25, 0.5, 0.75, 1.0];
+      gridCircles.forEach(frac => {
+        g.append('circle')
+          .attr('r', radius * frac)
+          .attr('fill', 'none')
+          .attr('stroke', '#e0e0e0')
+          .attr('stroke-width', 1)
+          .attr('opacity', 0.5)
+          .attr('class', 'bestlib-grid');
+      });
+      
+      // Líneas radiales
+      const numLines = 8;
+      for (let i = 0; i < numLines; i++) {
+        const angle = (i / numLines) * 2 * Math.PI;
+        g.append('line')
+          .attr('x1', 0)
+          .attr('y1', 0)
+          .attr('x2', radius * Math.cos(angle))
+          .attr('y2', radius * Math.sin(angle))
+          .attr('stroke', '#e0e0e0')
+          .attr('stroke-width', 1)
+          .attr('opacity', 0.5)
+          .attr('class', 'bestlib-grid');
+      }
+    }
+    
+    // Puntos
+    g.selectAll('.point')
+      .data(data)
+      .enter()
+      .append('circle')
+      .attr('class', 'bestlib-point')
+      .attr('cx', d => d.x)
+      .attr('cy', d => d.y)
+      .attr('r', 3)
+      .attr('fill', color)
+      .attr('opacity', 0.6);
+    
+    // Líneas desde el centro (opcional)
+    g.selectAll('.line')
+      .data(data)
+      .enter()
+      .append('line')
+      .attr('x1', 0)
+      .attr('y1', 0)
+      .attr('x2', d => d.x)
+      .attr('y2', d => d.y)
+      .attr('stroke', color)
+      .attr('stroke-width', 1)
+      .attr('opacity', 0.3);
+  }
+  
+  /**
+   * Funnel Plot con D3.js
+   */
+  function renderFunnelD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const dims = getChartDimensions(container, spec, 400, 350);
+    let width = dims.width;
+    let height = dims.height;
+    
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 20, right: 20, bottom: 35, left: 40 }
+      : { top: 25, right: 25, bottom: 45, left: 55 };
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
+    
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
+      .style('overflow', 'visible');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const options = spec.options || {};
+    const orientation = options.orientation || 'vertical';
+    const color = options.color || spec.color || '#4a90e2';
+    const opacity = options.opacity || 0.7;
+    
+    const maxValue = d3.max(data, d => d.value) || 1;
+    const numStages = data.length;
+    const stageHeight = chartHeight / numStages;
+    const maxWidth = chartWidth * 0.8;
+    
+    if (orientation === 'vertical') {
+      const x = d3.scaleLinear()
+        .domain([0, maxValue])
+        .range([0, maxWidth]);
+      
+      data.forEach((d, i) => {
+        const yPos = i * stageHeight;
+        const barWidth = x(d.value);
+        const centerX = chartWidth / 2;
+        
+        // Trapecio (funnel shape)
+        const points = [
+          [centerX - barWidth/2, yPos],
+          [centerX + barWidth/2, yPos],
+          [centerX + (i < numStages - 1 ? x(data[i+1].value)/2 : 0), yPos + stageHeight],
+          [centerX - (i < numStages - 1 ? x(data[i+1].value)/2 : 0), yPos + stageHeight]
+        ];
+        
+        g.append('polygon')
+          .attr('points', points.map(p => p.join(',')).join(' '))
+          .attr('fill', color)
+          .attr('fill-opacity', opacity)
+          .attr('stroke', '#fff')
+          .attr('stroke-width', 1)
+          .attr('class', 'bestlib-bar');
+        
+        // Etiqueta
+        g.append('text')
+          .attr('x', centerX)
+          .attr('y', yPos + stageHeight / 2)
+          .attr('text-anchor', 'middle')
+          .attr('alignment-baseline', 'middle')
+          .style('font-size', '11px')
+          .style('font-weight', '600')
+          .text(d.stage);
+      });
+      
+      if (spec.axes !== false) {
+        const xAxis = d3.scaleLinear()
+          .domain([0, maxValue])
+          .range([0, maxWidth]);
+        
+        const axisG = g.append('g')
+          .attr('transform', `translate(${chartWidth/2 - maxWidth/2},${chartHeight})`)
+          .call(d3.axisBottom(x));
+        
+        applyUnifiedAxisStyles(axisG);
+        renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+      }
+    } else {
+      // Horizontal (similar pero rotado)
+      const y = d3.scaleLinear()
+        .domain([0, maxValue])
+        .range([0, maxWidth]);
+      
+      const stageWidth = chartWidth / numStages;
+      
+      data.forEach((d, i) => {
+        const xPos = i * stageWidth;
+        const barHeight = y(d.value);
+        const centerY = chartHeight / 2;
+        
+        const points = [
+          [xPos, centerY - barHeight/2],
+          [xPos, centerY + barHeight/2],
+          [xPos + stageWidth, centerY + (i < numStages - 1 ? y(data[i+1].value)/2 : 0)],
+          [xPos + stageWidth, centerY - (i < numStages - 1 ? y(data[i+1].value)/2 : 0)]
+        ];
+        
+        g.append('polygon')
+          .attr('points', points.map(p => p.join(',')).join(' '))
+          .attr('fill', color)
+          .attr('fill-opacity', opacity)
+          .attr('stroke', '#fff')
+          .attr('stroke-width', 1)
+          .attr('class', 'bestlib-bar');
+        
+        g.append('text')
+          .attr('x', xPos + stageWidth / 2)
+          .attr('y', centerY)
+          .attr('text-anchor', 'middle')
+          .attr('alignment-baseline', 'middle')
+          .style('font-size', '11px')
+          .style('font-weight', '600')
+          .text(d.stage);
+      });
     }
   }
 
