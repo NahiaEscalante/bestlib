@@ -3072,6 +3072,10 @@ class ReactiveMatrixLayout:
         El bar chart se actualiza automáticamente cuando seleccionas en el scatter plot,
         NO necesitas llamar display() nuevamente después de cada selección.
         """
+        # Cargar assets automáticamente en Colab
+        from ..render.assets import AssetManager
+        AssetManager.ensure_colab_assets_loaded()
+        
         if ascii_layout:
             self._layout.ascii_layout = ascii_layout
         

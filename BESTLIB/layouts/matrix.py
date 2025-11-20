@@ -382,6 +382,10 @@ class MatrixLayout:
     
     def _repr_mimebundle_(self, include=None, exclude=None):
         """Representación MIME bundle del layout (compatible con JupyterLab)"""
+        # Cargar assets automáticamente en Colab
+        from ..render.assets import AssetManager
+        AssetManager.ensure_colab_assets_loaded()
+        
         # Asegurar que el comm target está registrado
         CommManager.register_comm()
         
@@ -412,6 +416,10 @@ class MatrixLayout:
         """Muestra el layout usando IPython.display"""
         try:
             from IPython.display import display, HTML, Javascript
+            
+            # Cargar assets automáticamente en Colab
+            from ..render.assets import AssetManager
+            AssetManager.ensure_colab_assets_loaded()
             
             CommManager.register_comm()
             

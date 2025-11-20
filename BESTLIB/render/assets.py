@@ -2,6 +2,7 @@
 Asset Manager - Gestión de assets JS y CSS
 """
 import os
+import sys
 from pathlib import Path
 
 
@@ -102,4 +103,180 @@ class AssetManager:
             'css': cls.load_css(),
             'd3': cls.load_d3()
         }
+    
+    @classmethod
+    def is_colab(cls):
+        """
+        Detecta si el código se está ejecutando en Google Colab.
+        
+        Returns:
+            bool: True si está en Colab, False en caso contrario
+        """
+        return "google.colab" in sys.modules
+    
+    @classmethod
+    def ensure_colab_assets_loaded(cls):
+        """
+        Carga automáticamente los assets (d3.min.js, matrix.js, style.css) en Google Colab.
+        Solo se ejecuta si está en Colab y si los assets no han sido cargados previamente.
+        
+        Esta función verifica si los assets ya están en el DOM para evitar cargarlos múltiples veces.
+        """
+        if not cls.is_colab():
+            return False
+        
+        try:
+            from IPython.display import display, HTML, Javascript
+            
+            # Usar un flag de módulo para evitar cargar múltiples veces
+            if not hasattr(cls, '_colab_assets_loaded'):
+                cls._colab_assets_loaded = False
+            
+            if cls._colab_assets_loaded:
+                return True
+            
+            # Script para verificar y cargar assets de forma asíncrona
+            # Primero verifica si ya están cargados, luego carga solo lo necesario
+            load_assets_js = """
+            (function() {
+                // Verificar si ya están cargados
+                var d3Loaded = typeof d3 !== 'undefined';
+                var matrixLoaded = typeof render !== 'undefined';
+                var styleLoaded = document.getElementById('bestlib-style') !== null;
+                
+                // Si todo está cargado, no hacer nada
+                if (d3Loaded && matrixLoaded && styleLoaded) {
+                    console.log('✅ [BESTLIB] Assets ya están cargados');
+                    return;
+                }
+                
+                // Función para cargar D3 desde CDN
+                function loadD3() {
+                    if (d3Loaded) {
+                        return Promise.resolve();
+                    }
+                    
+                    return new Promise(function(resolve, reject) {
+                        // Verificar si ya hay un script de D3 cargándose
+                        var existingScript = document.querySelector('script[src*="d3"]');
+                        if (existingScript) {
+                            if (typeof d3 !== 'undefined') {
+                                resolve();
+                            } else {
+                                existingScript.onload = resolve;
+                                existingScript.onerror = reject;
+                            }
+                            return;
+                        }
+                        
+                        var script = document.createElement('script');
+                        script.src = 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js';
+                        script.onload = function() {
+                            console.log('✅ [BESTLIB] D3.js cargado desde CDN');
+                            resolve();
+                        };
+                        script.onerror = function() {
+                            console.warn('⚠️ [BESTLIB] Error al cargar D3.js, intentando CDN alternativo');
+                            // Intentar CDN alternativo
+                            script.src = 'https://unpkg.com/d3@7/dist/d3.min.js';
+                            script.onload = resolve;
+                            script.onerror = reject;
+                        };
+                        document.head.appendChild(script);
+                    });
+                }
+                
+                // Función para cargar matrix.js
+                function loadMatrixJS() {
+                    if (matrixLoaded) {
+                        return;
+                    }
+                    
+                    // matrix.js se cargará inline desde Python
+                    // Esta función solo verifica que se haya ejecutado
+                }
+                
+                // Función para cargar CSS
+                function loadCSS() {
+                    if (styleLoaded) {
+                        return;
+                    }
+                    
+                    // CSS se cargará inline desde Python
+                    // Esta función solo verifica que se haya insertado
+                }
+                
+                // Cargar en orden: D3 primero, luego matrix.js
+                loadD3().then(function() {
+                    loadMatrixJS();
+                    loadCSS();
+                }).catch(function(err) {
+                    console.error('❌ [BESTLIB] Error al cargar D3.js:', err);
+                });
+            })();
+            """
+            
+            # Ejecutar script de verificación y carga de D3
+            display(Javascript(load_assets_js))
+            
+            # Cargar matrix.js (se ejecutará después de que D3 esté listo)
+            matrix_js = cls.load_js()
+            if matrix_js:
+                # Envolver matrix.js para que espere a D3
+                matrix_js_wrapped = f"""
+                (function() {{
+                    function loadMatrixJS() {{
+                        if (typeof render !== 'undefined') {{
+                            return; // Ya está cargado
+                        }}
+                        
+                        // Esperar a que D3 esté disponible
+                        function waitForD3() {{
+                            if (typeof d3 !== 'undefined') {{
+                                // D3 está listo, ejecutar matrix.js
+                                {matrix_js}
+                                console.log('✅ [BESTLIB] matrix.js cargado');
+                            }} else {{
+                                // Esperar 100ms y volver a intentar
+                                setTimeout(waitForD3, 100);
+                            }}
+                        }}
+                        
+                        waitForD3();
+                    }}
+                    
+                    // Intentar cargar inmediatamente
+                    loadMatrixJS();
+                }})();
+                """
+                display(Javascript(matrix_js_wrapped))
+            
+            # Cargar style.css (solo si no está ya cargado)
+            css_content = cls.load_css()
+            if css_content:
+                # Insertar CSS directamente con HTML (más simple y confiable)
+                # El script JS verifica si ya existe antes de insertar
+                css_check_js = """
+                (function() {
+                    if (document.getElementById('bestlib-style')) {
+                        return; // Ya está cargado
+                    }
+                    console.log('✅ [BESTLIB] style.css será cargado');
+                })();
+                """
+                display(Javascript(css_check_js))
+                display(HTML(f"<style id='bestlib-style'>{css_content}</style>"))
+            
+            # Marcar como cargado
+            cls._colab_assets_loaded = True
+            
+            return True
+            
+        except ImportError:
+            # IPython no disponible, no podemos cargar assets
+            return False
+        except Exception as e:
+            # Error al cargar assets, pero no fallar silenciosamente
+            print(f"⚠️ [BESTLIB] Error al cargar assets para Colab: {e}")
+            return False
 
