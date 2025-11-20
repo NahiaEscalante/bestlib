@@ -4087,7 +4087,7 @@
             // Actualizar visualización
             updateLineVisualization();
             
-            // Enviar evento de selección
+            // 🔒 CORRECCIÓN: Enviar evento de selección con identificador de vista
             const selected = Array.from(selectedLineIndices).map(i => {
               const item = {
                 ...validData[i],
@@ -4100,10 +4100,21 @@
               return item;
             });
             
+            // 🔒 Obtener letra de la vista desde el spec o el contenedor
+            let viewLetter = spec.__view_letter__ || null;
+            if (!viewLetter && container) {
+              const letterAttr = container.getAttribute('data-letter');
+              if (letterAttr) {
+                viewLetter = letterAttr;
+              }
+            }
+            
             sendEvent(divId, 'select', {
               type: 'select',
               items: selected,
-              count: selected.length
+              count: selected.length,
+              __view_letter__: viewLetter,  // 🔒 Incluir identificador de vista
+              __is_primary_view__: spec.__is_primary_view__ || false
             });
           });
         

@@ -393,6 +393,11 @@ class MatrixLayout:
             if hasattr(self, '_has_custom_select_handler') and self._has_custom_select_handler:
                 return
             
+            # 🔒 CORRECCIÓN: No ejecutar si el evento tiene __view_letter__ (probablemente hay handler específico)
+            # Esto evita que se muestre información duplicada o incorrecta
+            if payload.get('__view_letter__') is not None:
+                return
+            
             items = payload.get('items', [])
             count = payload.get('count', len(items))
             
@@ -407,9 +412,22 @@ class MatrixLayout:
             display_count = min(count, 10)
             for i, item in enumerate(items[:display_count]):
                 print(f"\n[{i+1}]")
+                # 🔒 CORRECCIÓN: Filtrar campos para mostrar solo datos relevantes
+                # Excluir campos internos, índices, y valores que parecen escalas/rangos
+                excluded_keys = {'index', '_original_row', '_original_rows', '__scatter_letter__', 
+                                 '__is_primary_view__', '__view_letter__', 'type'}
                 for key, value in item.items():
-                    if key != 'index' and key != '_original_row' and key != '_original_rows':
-                        print(f"   {key}: {value}")
+                    # Excluir campos internos
+                    if key in excluded_keys:
+                        continue
+                    # Excluir valores que son listas/arrays (probablemente escalas o rangos)
+                    if isinstance(value, (list, tuple, set)):
+                        continue
+                    # Excluir valores que son diccionarios (datos anidados)
+                    if isinstance(value, dict):
+                        continue
+                    # Mostrar solo valores simples (números, strings, booleanos)
+                    print(f"   {key}: {value}")
             
             if count > display_count:
                 print(f"\n... y {count - display_count} elemento(s) más")

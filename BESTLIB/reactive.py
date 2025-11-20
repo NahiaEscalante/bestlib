@@ -417,9 +417,11 @@ class ReactiveMatrixLayout:
             """Handler que actualiza el SelectionModel de este scatter plot Y el modelo principal"""
             # Filtrar eventos: solo procesar si viene de este scatter plot
             event_scatter_letter = payload.get('__scatter_letter__')
+            # 🔒 CORRECCIÓN: Solo mostrar mensaje de debug si el evento tiene __scatter_letter__ definido
+            # Si es None, probablemente viene de otro tipo de gráfico (parallel coordinates, etc.) y es normal ignorarlo
             if event_scatter_letter != scatter_letter_capture:
                 # Este evento no es para este scatter plot, ignorar
-                if MatrixLayout._debug:
+                if MatrixLayout._debug and event_scatter_letter is not None:
                     print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{scatter_letter_capture}', recibido '{event_scatter_letter}'")
                 return
             
@@ -3409,7 +3411,61 @@ class ReactiveMatrixLayout:
         MatrixLayout = _get_matrix_layout()
         if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
             raise ValueError("add_parallel_coordinates requiere DataFrame")
+        
+        # 🔒 CORRECCIÓN: Agregar identificador para que el evento se maneje correctamente
+        kwargs['__view_letter__'] = letter
+        kwargs['__is_primary_view__'] = False  # Parallel coordinates no es vista principal por defecto
+        
         MatrixLayout.map_parallel_coordinates(letter, self._data, dimensions=dimensions, category_col=category_col, **kwargs)
+        
+        # 🔒 CORRECCIÓN: Registrar handler específico para parallel coordinates que formatee los datos correctamente
+        def parallel_coords_handler(payload):
+            """Handler específico para parallel coordinates que formatea los datos de manera clara"""
+            event_letter = payload.get('__view_letter__')
+            # Solo procesar si el evento viene de este parallel coordinates
+            if event_letter and event_letter != letter:
+                return
+            
+            items = payload.get('items', [])
+            count = payload.get('count', len(items))
+            
+            if count == 0:
+                print("📊 No hay elementos seleccionados")
+                return
+            
+            # 🔒 CORRECCIÓN: Formatear datos de manera clara y legible
+            print(f"\n📊 Selección: {count} elemento(s)")
+            print("=" * 60)
+            
+            # Mostrar los primeros elementos (máximo 5 para parallel coordinates)
+            display_count = min(count, 5)
+            for i, item in enumerate(items[:display_count]):
+                print(f"\n[{i+1}]")
+                # Filtrar y mostrar solo las dimensiones y categoría
+                excluded_keys = {'index', '_original_row', '_original_rows', '__scatter_letter__', 
+                                 '__is_primary_view__', '__view_letter__', 'type'}
+                
+                # Ordenar las claves para mostrar dimensiones primero, luego categoría
+                sorted_keys = sorted([k for k in item.keys() if k not in excluded_keys and not isinstance(item[k], (list, tuple, set, dict))])
+                
+                # Mostrar dimensiones primero
+                for key in sorted_keys:
+                    value = item[key]
+                    # Formatear valores numéricos con 2 decimales
+                    if isinstance(value, (int, float)):
+                        if isinstance(value, float):
+                            print(f"   - {key}: {value:.2f}")
+                        else:
+                            print(f"   - {key}: {value}")
+                    else:
+                        print(f"   - {key}: {value}")
+            
+            if count > display_count:
+                print(f"\n... y {count - display_count} elemento(s) más")
+            print("=" * 60)
+        
+        # Registrar el handler específico para parallel coordinates
+        self._layout.on('select', parallel_coords_handler)
         
         # Solo registrar callback si linked_to está especificado explícitamente
         if linked_to is None:
