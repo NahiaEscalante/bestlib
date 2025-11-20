@@ -11,7 +11,7 @@ class JSBuilder:
     """
     
     @staticmethod
-    def build_render_call(div_id, layout_ascii, mapping):
+    def build_render_call(div_id, layout_ascii, mapping, wait_for_d3=False):
         """
         Construye la llamada a render() en JavaScript.
         
@@ -19,6 +19,7 @@ class JSBuilder:
             div_id (str): ID del contenedor
             layout_ascii (str): Layout ASCII
             mapping (dict): Mapping de letras a specs
+            wait_for_d3 (bool): Si True, espera a que D3 esté disponible antes de renderizar
         
         Returns:
             str: Código JavaScript
@@ -29,7 +30,52 @@ class JSBuilder:
         # Generar mapping como JSON
         mapping_js = json.dumps(sanitize_for_json(mapping))
         
-        return f"""
+        if wait_for_d3:
+            # Versión que espera a D3 (para Colab)
+            return f"""
+(function() {{
+  const mapping = {mapping_js};
+  const container = document.getElementById("{div_id}");
+  if (container) {{
+    container.__mapping__ = mapping;
+  }}
+  
+  // Timeout máximo: 10 segundos
+  const maxWaitTime = 10000;
+  const startTime = Date.now();
+  
+  // Función para esperar a D3 y luego renderizar
+  function waitForD3AndRender() {{
+    const elapsed = Date.now() - startTime;
+    
+    if (elapsed > maxWaitTime) {{
+      console.error('❌ [BESTLIB] Timeout esperando D3.js. El gráfico no se renderizará.');
+      if (container) {{
+        container.innerHTML = '<div style="padding: 20px; color: red; border: 2px solid red; background: #ffeeee;">Error: No se pudo cargar D3.js. Por favor, recarga la página.</div>';
+      }}
+      return;
+    }}
+    
+    if (typeof d3 !== 'undefined' && typeof render !== 'undefined') {{
+      // D3 y render están disponibles, ejecutar render
+      render("{div_id}", `{escaped_layout}`, mapping);
+    }} else {{
+      // Esperar 100ms y volver a intentar
+      setTimeout(waitForD3AndRender, 100);
+    }}
+  }}
+  
+  // Intentar renderizar inmediatamente, o esperar si es necesario
+  if (typeof d3 !== 'undefined' && typeof render !== 'undefined') {{
+    render("{div_id}", `{escaped_layout}`, mapping);
+  }} else {{
+    waitForD3AndRender();
+  }}
+}})();
+"""
+        else:
+            # Versión normal (para Jupyter)
+            return f"""
 (function() {{
   const mapping = {mapping_js};
   const container = document.getElementById("{div_id}");
@@ -41,7 +87,7 @@ class JSBuilder:
 """
     
     @staticmethod
-    def build_full_js(js_lib_code, div_id, layout_ascii, mapping):
+    def build_full_js(js_lib_code, div_id, layout_ascii, mapping, wait_for_d3=False):
         """
         Construye código JavaScript completo incluyendo la librería.
         
@@ -50,11 +96,12 @@ class JSBuilder:
             div_id (str): ID del contenedor
             layout_ascii (str): Layout ASCII
             mapping (dict): Mapping de letras a specs
+            wait_for_d3 (bool): Si True, espera a que D3 esté disponible antes de renderizar
         
         Returns:
             str: Código JavaScript completo
         """
-        render_call = JSBuilder.build_render_call(div_id, layout_ascii, mapping)
+        render_call = JSBuilder.build_render_call(div_id, layout_ascii, mapping, wait_for_d3=wait_for_d3)
         return f"{js_lib_code}\n{render_call}"
     
     @staticmethod

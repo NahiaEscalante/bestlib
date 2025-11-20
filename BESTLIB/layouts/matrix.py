@@ -382,9 +382,15 @@ class MatrixLayout:
     
     def _repr_mimebundle_(self, include=None, exclude=None):
         """Representación MIME bundle del layout (compatible con JupyterLab)"""
+        import sys
+        
+        # Detectar si estamos en Colab
+        is_colab = "google.colab" in sys.modules
+        
         # Cargar assets automáticamente en Colab
         from ..render.assets import AssetManager
-        AssetManager.ensure_colab_assets_loaded()
+        if is_colab:
+            AssetManager.ensure_colab_assets_loaded()
         
         # Asegurar que el comm target está registrado
         CommManager.register_comm()
@@ -400,11 +406,13 @@ class MatrixLayout:
         )
         
         # Generar JavaScript completo usando JSBuilder
+        # En Colab, esperar a que D3 esté disponible antes de renderizar
         js = JSBuilder.build_full_js(
             data['js_code'],
             self.div_id,
             data['escaped_layout'],
-            data['mapping_merged']
+            data['mapping_merged'],
+            wait_for_d3=is_colab  # Esperar D3 solo en Colab
         )
         
         return {
@@ -416,10 +424,15 @@ class MatrixLayout:
         """Muestra el layout usando IPython.display"""
         try:
             from IPython.display import display, HTML, Javascript
+            import sys
+            
+            # Detectar si estamos en Colab
+            is_colab = "google.colab" in sys.modules
             
             # Cargar assets automáticamente en Colab
             from ..render.assets import AssetManager
-            AssetManager.ensure_colab_assets_loaded()
+            if is_colab:
+                AssetManager.ensure_colab_assets_loaded()
             
             CommManager.register_comm()
             
@@ -430,11 +443,13 @@ class MatrixLayout:
             html_content = HTMLGenerator.generate_style_tag(data['css_code']) + "\n" + html_content
             
             # Generar JavaScript usando JSBuilder
+            # En Colab, esperar a que D3 esté disponible antes de renderizar
             js_content = JSBuilder.build_full_js(
                 data['js_code'],
                 self.div_id,
                 data['escaped_layout'],
-                data['mapping_merged']
+                data['mapping_merged'],
+                wait_for_d3=is_colab  # Esperar D3 solo en Colab
             )
             
             display(HTML(html_content))
