@@ -1629,7 +1629,7 @@ class MatrixLayout:
             dict: Especificación del line plot para usar en map()
         """
         try:
-            from ..charts import ChartRegistry
+            from .charts import ChartRegistry
             chart = ChartRegistry.get('line_plot')
             spec = chart.get_spec(data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
         except Exception:
@@ -1658,7 +1658,7 @@ class MatrixLayout:
             dict: Especificación del horizontal bar chart para usar en map()
         """
         try:
-            from ..charts import ChartRegistry
+            from .charts import ChartRegistry
             chart = ChartRegistry.get('horizontal_bar')
             spec = chart.get_spec(data, category_col=category_col, value_col=value_col, **kwargs)
         except Exception:
@@ -1706,7 +1706,7 @@ class MatrixLayout:
             dict: Especificación del hexbin chart para usar en map()
         """
         try:
-            from ..charts import ChartRegistry
+            from .charts import ChartRegistry
             chart = ChartRegistry.get('hexbin')
             spec = chart.get_spec(data, x_col=x_col, y_col=y_col, **kwargs)
         except Exception:
@@ -1737,7 +1737,7 @@ class MatrixLayout:
             dict: Especificación del errorbars chart para usar en map()
         """
         try:
-            from ..charts import ChartRegistry
+            from .charts import ChartRegistry
             chart = ChartRegistry.get('errorbars')
             spec = chart.get_spec(data, x_col=x_col, y_col=y_col, yerr=yerr, xerr=xerr, **kwargs)
         except Exception:
@@ -1777,7 +1777,7 @@ class MatrixLayout:
             dict: Especificación del fill_between chart para usar en map()
         """
         try:
-            from ..charts import ChartRegistry
+            from .charts import ChartRegistry
             chart = ChartRegistry.get('fill_between')
             spec = chart.get_spec(data, x_col=x_col, y1=y1, y2=y2, **kwargs)
         except Exception:
@@ -1814,7 +1814,7 @@ class MatrixLayout:
             dict: Especificación del step plot para usar en map()
         """
         try:
-            from ..charts import ChartRegistry
+            from .charts import ChartRegistry
             chart = ChartRegistry.get('step_plot')
             spec = chart.get_spec(data, x_col=x_col, y_col=y_col, **kwargs)
         except Exception:
