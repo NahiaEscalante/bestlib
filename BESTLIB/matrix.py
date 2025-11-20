@@ -380,7 +380,48 @@ class MatrixLayout:
             self._handlers[event] = [self._handlers[event]]
         
         self._handlers[event].append(func)
+        # Si se registra un handler personalizado para 'select', marcar que hay uno personalizado
+        if event == 'select':
+            self._has_custom_select_handler = True
         return self
+    
+    def _register_default_select_handler(self):
+        """Registra un handler por defecto para eventos 'select' que muestre los datos seleccionados"""
+        def default_select_handler(payload):
+            """Handler por defecto que muestra los datos seleccionados (solo si no hay handlers personalizados)"""
+            # Solo ejecutar si no hay handlers personalizados
+            if hasattr(self, '_has_custom_select_handler') and self._has_custom_select_handler:
+                return
+            
+            items = payload.get('items', [])
+            count = payload.get('count', len(items))
+            
+            if count == 0:
+                print("📊 No hay elementos seleccionados")
+                return
+            
+            print(f"\n📊 Elementos seleccionados: {count}")
+            print("=" * 60)
+            
+            # Mostrar los primeros elementos (máximo 10 para no saturar)
+            display_count = min(count, 10)
+            for i, item in enumerate(items[:display_count]):
+                print(f"\n[{i+1}]")
+                for key, value in item.items():
+                    if key != 'index' and key != '_original_row' and key != '_original_rows':
+                        print(f"   {key}: {value}")
+            
+            if count > display_count:
+                print(f"\n... y {count - display_count} elemento(s) más")
+            print("=" * 60)
+            print(f"\n💡 Tip: Usa layout.on('select', tu_funcion) para personalizar el manejo de selecciones")
+        
+        # Registrar el handler por defecto (pero no marcar como personalizado)
+        if not hasattr(self, "_handlers"):
+            self._handlers = {}
+        if 'select' not in self._handlers:
+            self._handlers['select'] = []
+        self._handlers['select'].append(default_select_handler)
 
     @classmethod
     def map(cls, mapping):
@@ -1595,8 +1636,12 @@ class MatrixLayout:
         self.div_id = "matrix-" + str(uuid.uuid4())
         MatrixLayout._instances[self.div_id] = weakref.ref(self)
         self._handlers = {}
+        self._has_custom_select_handler = False  # Flag para rastrear handlers personalizados
         self._reactive_model = None  # Para modelo reactivo
         self._merge_opt = None  # Merge explícito por instancia (True | False | [letras])
+        
+        # Registrar handler por defecto para eventos 'select' que muestre los datos seleccionados
+        self._register_default_select_handler()
         self._figsize = figsize  # Tamaño global de gráficos
         self._row_heights = row_heights
         self._col_widths = col_widths
@@ -1685,6 +1730,8 @@ class MatrixLayout:
         
         # Registrar el handler
         self.on('select', update_model)
+        # Marcar que hay un handler personalizado (connect_selection también cuenta como personalizado)
+        self._has_custom_select_handler = True
         
         return self
     

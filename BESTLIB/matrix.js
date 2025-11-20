@@ -5025,25 +5025,35 @@
       .attr('y', d => y(d.count))
       .attr('height', d => chartHeight - y(d.count));
 
-    // Ejes
+    // 🔒 CORRECCIÓN: Ejes - Asegurar que se muestren correctamente con valores visibles
     if (spec.axes !== false) {
-      // 🔒 MEJORA ESTÉTICA: Detectar si necesitamos rotar etiquetas del eje X
+      // Detectar si necesitamos rotar etiquetas del eje X
       const numBins = data.length;
       const maxBinLabelLength = Math.max(...data.map(d => String(d.bin).length), 0);
       const needsRotation = spec._autoRotateXTicks || numBins > 8 || maxBinLabelLength > 8;
       const rotationAngle = needsRotation ? -45 : 0;
       
+      // 🔒 CORRECCIÓN: Eje X - Asegurar que se muestre con valores y formato correcto
       const xAxis = g.append('g')
-        .attr('transform', `translate(0,${chartHeight})`)
-        .call(d3.axisBottom(x).ticks(Math.min(numBins, 10)).tickFormat(d => {
+        .attr('class', 'x-axis')
+        .attr('transform', `translate(0,${chartHeight})`);
+      
+      // Calcular número de ticks apropiado (máximo 10 para no saturar)
+      const numXTicks = Math.min(numBins, 10);
+      const xAxisGenerator = d3.axisBottom(x)
+        .ticks(numXTicks)
+        .tickFormat(d => {
           // Formato más corto para números largos
           if (typeof d === 'number') {
             if (d % 1 === 0) return d.toString();
             return d.toFixed(maxBinLabelLength > 6 ? 1 : 2);
           }
           return String(d);
-        }));
+        });
       
+      xAxis.call(xAxisGenerator);
+      
+      // Estilizar etiquetas del eje X
       xAxis.selectAll('text')
         .style('font-size', needsRotation ? '10px' : '11px')
         .style('font-weight', '600')
@@ -5052,24 +5062,38 @@
         .attr('transform', rotationAngle !== 0 ? `rotate(${rotationAngle})` : null)
         .style('text-anchor', rotationAngle !== 0 ? 'end' : 'middle')
         .attr('dx', rotationAngle !== 0 ? '-0.5em' : '0')
-        .attr('dy', rotationAngle !== 0 ? '0.5em' : '0.7em');
+        .attr('dy', rotationAngle !== 0 ? '0.5em' : '0.7em')
+        .style('opacity', 1);  // Asegurar que sean visibles
       
+      // Estilizar líneas del eje X
       xAxis.selectAll('line, path')
         .style('stroke', '#000000')
-        .style('stroke-width', '1.5px');
+        .style('stroke-width', '1.5px')
+        .style('opacity', 1);  // Asegurar que sean visibles
       
+      // 🔒 CORRECCIÓN: Eje Y - Asegurar que se muestre con valores y formato correcto
       const yAxis = g.append('g')
-        .call(d3.axisLeft(y).ticks(5));
+        .attr('class', 'y-axis');
       
+      const yAxisGenerator = d3.axisLeft(y)
+        .ticks(5)
+        .tickFormat(d3.format('d'));  // Formato numérico para el eje Y
+      
+      yAxis.call(yAxisGenerator);
+      
+      // Estilizar etiquetas del eje Y
       yAxis.selectAll('text')
         .style('font-size', '12px')
         .style('font-weight', '600')
         .style('fill', '#000000')
-        .style('font-family', 'Arial, sans-serif');
+        .style('font-family', 'Arial, sans-serif')
+        .style('opacity', 1);  // Asegurar que sean visibles
       
+      // Estilizar líneas del eje Y
       yAxis.selectAll('line, path')
         .style('stroke', '#000000')
-        .style('stroke-width', '1.5px');
+        .style('stroke-width', '1.5px')
+        .style('opacity', 1);  // Asegurar que sean visibles
       
       // Renderizar etiquetas de ejes usando función helper
       renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
