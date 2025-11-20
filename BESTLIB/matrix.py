@@ -2134,10 +2134,20 @@ class MatrixLayout:
         is_colab = "google.colab" in sys.modules
         if is_colab:
             try:
-                from ..render.assets import AssetManager
-                AssetManager.ensure_colab_assets_loaded()
-            except ImportError:
-                # Si no está disponible el módulo render, continuar sin carga automática
+                # Intentar importar desde módulo render (versión modular)
+                try:
+                    from ..render.assets import AssetManager
+                    AssetManager.ensure_colab_assets_loaded()
+                except (ImportError, ValueError):
+                    # Si falla, intentar import absoluto
+                    try:
+                        from BESTLIB.render.assets import AssetManager
+                        AssetManager.ensure_colab_assets_loaded()
+                    except ImportError:
+                        # Si no está disponible, continuar sin carga automática
+                        pass
+            except Exception:
+                # Cualquier otro error, continuar sin carga automática
                 pass
         
         # Asegurar que el comm target está registrado
@@ -2215,10 +2225,20 @@ class MatrixLayout:
             is_colab = "google.colab" in sys.modules
             if is_colab:
                 try:
-                    from ..render.assets import AssetManager
-                    AssetManager.ensure_colab_assets_loaded()
-                except ImportError:
-                    # Si no está disponible el módulo render, intentar carga manual
+                    # Intentar importar desde módulo render (versión modular)
+                    try:
+                        from ..render.assets import AssetManager
+                        AssetManager.ensure_colab_assets_loaded()
+                    except (ImportError, ValueError):
+                        # Si falla, intentar import absoluto
+                        try:
+                            from BESTLIB.render.assets import AssetManager
+                            AssetManager.ensure_colab_assets_loaded()
+                        except ImportError:
+                            # Si no está disponible, continuar sin carga automática
+                            pass
+                except Exception:
+                    # Cualquier otro error, continuar sin carga automática
                     pass
             
             MatrixLayout._ensure_comm_target()
