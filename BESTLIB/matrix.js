@@ -211,19 +211,7 @@
   
   function render(divId, asciiLayout, mapping) {
     const container = document.getElementById(divId);
-    if (!container) {
-      console.error('[BESTLIB] render: Contenedor no encontrado:', divId);
-      return;
-    }
-    
-    // Diagnóstico: verificar mapping (siempre activo)
-    console.log('[BESTLIB] render llamado:', {
-      divId: divId,
-      asciiLayout: asciiLayout,
-      mappingKeys: Object.keys(mapping || {}),
-      mappingSize: JSON.stringify(mapping || {}).length,
-      hasSpecs: Object.keys(mapping || {}).filter(k => !k.startsWith('__')).length
-    });
+    if (!container) return;
 
     const rows = asciiLayout.trim().split("\n");
     const R = rows.length;
@@ -407,21 +395,6 @@
         
         // Crear celda
         const spec = mapping[letter];
-        
-        // Diagnóstico: verificar spec (siempre activo)
-        console.log(`[BESTLIB] Creando celda '${letter}':`, {
-          hasSpec: !!spec,
-          specType: spec ? spec.type : 'undefined',
-          specKeys: spec ? Object.keys(spec) : [],
-          hasData: spec ? ('data' in spec || 'series' in spec) : false,
-          dataLength: spec && spec.data ? (Array.isArray(spec.data) ? spec.data.length : Object.keys(spec.data).length) : 0
-        });
-        
-        if (!spec) {
-          console.error(`[BESTLIB] ❌ No hay spec para letra '${letter}' en mapping`);
-          console.error(`[BESTLIB] Mapping keys disponibles:`, Object.keys(mapping || {}));
-        }
-        
         const cell = document.createElement("div");
         cell.className = "matrix-cell";
         // Agregar ID único basado en letra y posición para LinkedViews

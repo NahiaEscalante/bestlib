@@ -2198,25 +2198,12 @@ class MatrixLayout:
                 meta["__figsize__"] = figsize_px
         
         # Combinar mapping con metadata
-        # CRÍTICO: Todos los métodos map_* guardan en MatrixLayout._map (clase), no en self._map
-        # Por lo tanto, siempre usar MatrixLayout._map directamente
+        # Usar MatrixLayout._map (todos los map_* son @classmethod y guardan ahí)
         mapping_merged = {**MatrixLayout._map, **meta}
         if self._merge_opt is not None:
             mapping_merged["__merge__"] = self._merge_opt
         
         mapping_js = json.dumps(_sanitize_for_json(mapping_merged))
-        
-        # Diagnóstico: verificar que el mapping tenga datos (siempre activo para debugging)
-        print(f"🔍 [MatrixLayout] _prepare_repr_data:")
-        print(f"   - MatrixLayout._map keys: {list(MatrixLayout._map.keys())}")
-        print(f"   - mapping_merged keys: {list(mapping_merged.keys())}")
-        print(f"   - mapping_js length: {len(mapping_js)} chars")
-        for key in MatrixLayout._map.keys():
-            if key not in ['__safe_html__', '__div_id__', '__row_count__', '__col_count__', '__gap__', '__cell_padding__', '__max_width__', '__figsize__']:
-                spec = MatrixLayout._map[key]
-                data_info = 'data' in spec and len(spec.get('data', [])) > 0
-                series_info = 'series' in spec and len(spec.get('series', {})) > 0
-                print(f"   - Spec '{key}': type={spec.get('type')}, has_data={data_info}, has_series={series_info}, data_length={len(spec.get('data', [])) if 'data' in spec else 0}")
         
         # Generar estilo inline para el contenedor si hay max_width
         inline_style = ""
@@ -2242,99 +2229,15 @@ class MatrixLayout:
         Returns:
             str: Código JavaScript para renderizar
         """
-        import sys
-        is_colab = "google.colab" in sys.modules
-        
-        if is_colab:
-            # En Colab, usar ensureD3() que ya está en matrix.js
-            return f"""
+        return f"""
         (function() {{
           {data['js_code']}
-          
-          // Función para renderizar después de que D3 esté disponible
-          function executeRender() {{
-            const mapping = {data['mapping_js']};
-            const container = document.getElementById("{self.div_id}");
-            if (!container) {{
-              console.error('[BESTLIB] Contenedor no encontrado: {self.div_id}');
-              return;
-            }}
+          const mapping = {data['mapping_js']};
+          const container = document.getElementById("{self.div_id}");
+          if (container) {{
             container.__mapping__ = mapping;
-            
-            // Usar ensureD3() que ya está definido en matrix.js
-            if (typeof ensureD3 === 'function') {{
-              ensureD3().then(function(d3) {{
-                render("{self.div_id}", `{data['escaped_layout']}`, mapping);
-              }}).catch(function(err) {{
-                console.error('[BESTLIB] Error al cargar D3.js:', err);
-                const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;"><strong>Error: No se pudo cargar D3.js</strong><br/><small>Por favor, recarga la página.</small></div>';
-                container.innerHTML = errorMsg;
-              }});
-            }} else {{
-              // Si ensureD3 no está disponible, intentar renderizar directamente
-              // (puede que D3 ya esté cargado)
-              if (typeof d3 !== 'undefined') {{
-                render("{self.div_id}", `{data['escaped_layout']}`, mapping);
-              }} else {{
-                console.error('[BESTLIB] D3.js no está disponible y ensureD3() no está definido');
-                const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;"><strong>Error: D3.js no está disponible</strong><br/><small>Por favor, recarga la página.</small></div>';
-                container.innerHTML = errorMsg;
-              }}
-            }}
           }}
-          
-          // Esperar a que el DOM esté listo
-          if (document.readyState === 'loading') {{
-            document.addEventListener('DOMContentLoaded', executeRender);
-          }} else {{
-            // DOM ya está listo, ejecutar después de un pequeño delay para asegurar que matrix.js se cargó
-            setTimeout(executeRender, 50);
-          }}
-        }})();
-        """
-        else:
-            # En Jupyter normal, usar ensureD3() que ya está en matrix.js
-            return f"""
-        (function() {{
-          {data['js_code']}
-          
-          function executeRender() {{
-            const mapping = {data['mapping_js']};
-            const container = document.getElementById("{self.div_id}");
-            if (!container) {{
-              console.error('[BESTLIB] Contenedor no encontrado: {self.div_id}');
-              return;
-            }}
-            container.__mapping__ = mapping;
-            
-            // Usar ensureD3() que ya está definido en matrix.js
-            if (typeof ensureD3 === 'function') {{
-              ensureD3().then(function(d3) {{
-                render("{self.div_id}", `{data['escaped_layout']}`, mapping);
-              }}).catch(function(err) {{
-                console.error('[BESTLIB] Error al cargar D3.js:', err);
-                const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;"><strong>Error: No se pudo cargar D3.js</strong><br/><small>Por favor, recarga la página.</small></div>';
-                container.innerHTML = errorMsg;
-              }});
-            }} else {{
-              // Si ensureD3 no está disponible, intentar renderizar directamente
-              if (typeof d3 !== 'undefined') {{
-                render("{self.div_id}", `{data['escaped_layout']}`, mapping);
-              }} else {{
-                console.error('[BESTLIB] D3.js no está disponible y ensureD3() no está definido');
-                const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;"><strong>Error: D3.js no está disponible</strong><br/><small>Por favor, recarga la página.</small></div>';
-                container.innerHTML = errorMsg;
-              }}
-            }}
-          }}
-          
-          // Esperar a que el DOM esté listo
-          if (document.readyState === 'loading') {{
-            document.addEventListener('DOMContentLoaded', executeRender);
-          }} else {{
-            // Pequeño delay para asegurar que matrix.js se haya cargado completamente
-            setTimeout(executeRender, 50);
-          }}
+          render("{self.div_id}", `{data['escaped_layout']}`, mapping);
         }})();
         """
     
