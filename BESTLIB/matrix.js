@@ -4883,11 +4883,16 @@
     const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
     
-    // Escalas D3
-    const x = d3.scaleBand()
-      .domain(data.map(d => d.bin))
-      .range([0, chartWidth])
-      .padding(0.1);
+    // Escalas D3 - Usar scaleLinear para histograma (los bins son valores numéricos continuos)
+    const binValues = data.map(d => d.bin).sort((a, b) => a - b);
+    const minBin = binValues[0];
+    const maxBin = binValues[binValues.length - 1];
+    // Calcular el ancho de cada bin basado en la diferencia entre bins consecutivos
+    const binSpacing = binValues.length > 1 ? (binValues[1] - binValues[0]) : (maxBin - minBin) / data.length || 1;
+    
+    const x = d3.scaleLinear()
+      .domain([minBin - binSpacing / 2, maxBin + binSpacing / 2])
+      .range([0, chartWidth]);
     
     const y = d3.scaleLinear()
       .domain([0, d3.max(data, d => d.count) || 100])
@@ -4924,9 +4929,9 @@
       .enter()
       .append('rect')
       .attr('class', 'bar')
-      .attr('x', d => x(d.bin))
+      .attr('x', d => x(d.bin) - binSpacing / 2)
       .attr('y', chartHeight)
-      .attr('width', x.bandwidth())
+      .attr('width', x(minBin + binSpacing) - x(minBin))
       .attr('height', 0)
       .attr('fill', spec.color || '#4a90e2')
       .style('cursor', spec.interactive ? 'pointer' : 'default')
@@ -5014,7 +5019,7 @@
       
       const xAxis = g.append('g')
         .attr('transform', `translate(0,${chartHeight})`)
-        .call(d3.axisBottom(x).tickFormat(d => {
+        .call(d3.axisBottom(x).ticks(Math.min(numBins, 10)).tickFormat(d => {
           // Formato más corto para números largos
           if (typeof d === 'number') {
             if (d % 1 === 0) return d.toString();

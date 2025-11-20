@@ -1606,10 +1606,16 @@ class ReactiveMatrixLayout:
                         const g = svg.append('g')
                             .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
                         
-                        const x = window.d3.scaleBand()
-                            .domain(data.map(d => d.bin))
-                            .range([0, chartWidth])
-                            .padding(0.1);
+                        // Usar scaleLinear para histograma (los bins son valores numéricos continuos)
+                        const binValues = data.map(d => d.bin).sort((a, b) => a - b);
+                        const minBin = binValues[0];
+                        const maxBin = binValues[binValues.length - 1];
+                        // Calcular el ancho de cada bin basado en la diferencia entre bins consecutivos
+                        const binSpacing = binValues.length > 1 ? (binValues[1] - binValues[0]) : (maxBin - minBin) / data.length || 1;
+                        
+                        const x = window.d3.scaleLinear()
+                            .domain([minBin - binSpacing / 2, maxBin + binSpacing / 2])
+                            .range([0, chartWidth]);
                         
                         const y = window.d3.scaleLinear()
                             .domain([0, window.d3.max(data, d => d.count) || 100])
@@ -1622,9 +1628,9 @@ class ReactiveMatrixLayout:
                             .enter()
                             .append('rect')
                             .attr('class', 'bar')
-                            .attr('x', d => x(d.bin))
+                            .attr('x', d => x(d.bin) - binSpacing / 2)
                             .attr('y', chartHeight)
-                            .attr('width', x.bandwidth())
+                            .attr('width', x(minBin + binSpacing) - x(minBin))
                             .attr('height', 0)
                             .attr('fill', '{default_color}')
                             .style('cursor', 'pointer')
@@ -1669,7 +1675,7 @@ class ReactiveMatrixLayout:
                             
                             const xAxis = g.append('g')
                                 .attr('transform', `translate(0,${{chartHeight}})`)
-                                .call(window.d3.axisBottom(x).tickFormat(d => {{
+                                .call(window.d3.axisBottom(x).ticks(Math.min(numBins, 10)).tickFormat(d => {{
                                     // Formato más corto para números largos
                                     if (typeof d === 'number') {{
                                         if (d % 1 === 0) return d.toString();
@@ -1972,6 +1978,8 @@ class ReactiveMatrixLayout:
                 box_data_json = json.dumps(_sanitize_for_json(box_data))
                 default_color = kwargs.get('color', '#4a90e2')
                 show_axes = kwargs.get('axes', True)
+                x_label = json.dumps(kwargs.get('xLabel', 'Category'))
+                y_label = json.dumps(kwargs.get('yLabel', 'Value'))
                 
                 js_update = f"""
                 (function() {{
@@ -2129,8 +2137,60 @@ class ReactiveMatrixLayout:
                                 .attr('transform', `translate(0,${{chartHeight}})`)
                                 .call(window.d3.axisBottom(x));
                             
+                            xAxis.selectAll('text')
+                                .style('font-size', '12px')
+                                .style('font-weight', '600')
+                                .style('fill', '#000000')
+                                .style('font-family', 'Arial, sans-serif');
+                            
+                            xAxis.selectAll('line, path')
+                                .style('stroke', '#000000')
+                                .style('stroke-width', '1.5px');
+                            
                             const yAxis = g.append('g')
-                                .call(window.d3.axisLeft(y));
+                                .call(window.d3.axisLeft(y).ticks(5));
+                            
+                            yAxis.selectAll('text')
+                                .style('font-size', '12px')
+                                .style('font-weight', '600')
+                                .style('fill', '#000000')
+                                .style('font-family', 'Arial, sans-serif');
+                            
+                            yAxis.selectAll('line, path')
+                                .style('stroke', '#000000')
+                                .style('stroke-width', '1.5px');
+                            
+                            // Renderizar etiquetas de ejes
+                            // Etiqueta del eje X (debajo del gráfico)
+                            const xLabelX = chartWidth / 2;
+                            const xLabelY = chartHeight + margin.bottom - 10;
+                            
+                            const xLabelText = g.append('text')
+                                .attr('x', xLabelX)
+                                .attr('y', xLabelY)
+                                .attr('text-anchor', 'middle')
+                                .style('font-size', '13px')
+                                .style('font-weight', '700')
+                                .style('fill', '#000000')
+                                .style('font-family', 'Arial, sans-serif')
+                                .text({x_label});
+                            
+                            // Etiqueta del eje Y (a la izquierda del gráfico, rotada -90 grados)
+                            const yLabelX = margin.left / 2;
+                            const yLabelY = margin.top + chartHeight / 2;
+                            
+                            const yLabelText = svg.append('text')
+                                .attr('x', yLabelX)
+                                .attr('y', yLabelY)
+                                .attr('text-anchor', 'middle')
+                                .attr('dominant-baseline', 'central')
+                                .style('font-size', '13px')
+                                .style('font-weight', '700')
+                                .style('fill', '#000000')
+                                .style('font-family', 'Arial, sans-serif')
+                                .style('pointer-events', 'none')
+                                .attr('transform', `rotate(-90 ${{yLabelX}} ${{yLabelY}})`)
+                                .text({y_label});
                         }}
                         
                         // IMPORTANTE: Marcar que esta celda ya no necesita ResizeObserver
