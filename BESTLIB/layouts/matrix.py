@@ -303,19 +303,7 @@ class MatrixLayout:
         return html
     
     def _repr_mimebundle_(self, include=None, exclude=None):
-        """
-        Representación MIME bundle del layout (compatible con JupyterLab y DeepNote).
-        
-        En DeepNote, esto es crucial para el renderizado correcto.
-        """
-        # 🔒 CORRECCIÓN: Inicializar DeepNote si es necesario
-        try:
-            from ..core.deepnote import ensure_deepnote_ready, is_deepnote
-            if is_deepnote():
-                ensure_deepnote_ready()
-        except ImportError:
-            pass  # Módulo deepnote no disponible
-        
+        """Representación MIME bundle del layout (compatible con JupyterLab)"""
         # Asegurar que el comm target está registrado
         CommManager.register_comm()
         
@@ -343,21 +331,9 @@ class MatrixLayout:
         }
     
     def display(self, ascii_layout=None):
-        """
-        Muestra el layout usando IPython.display.
-        
-        En DeepNote, también usa display(layout) para asegurar renderizado correcto.
-        """
+        """Muestra el layout usando IPython.display"""
         try:
             from IPython.display import display, HTML, Javascript
-            
-            # 🔒 CORRECCIÓN: Inicializar DeepNote si es necesario
-            try:
-                from ..core.deepnote import ensure_deepnote_ready, is_deepnote
-                if is_deepnote():
-                    ensure_deepnote_ready()
-            except ImportError:
-                pass  # Módulo deepnote no disponible
             
             CommManager.register_comm()
             
@@ -374,17 +350,6 @@ class MatrixLayout:
                 data['escaped_layout'],
                 data['mapping_merged']
             )
-            
-            # 🔒 CORRECCIÓN: En DeepNote, usar display(layout) además de display(HTML/JS)
-            # Esto asegura que el renderizado funcione correctamente
-            try:
-                from ..core.deepnote import is_deepnote
-                if is_deepnote():
-                    # En DeepNote, también mostrar el layout directamente
-                    # Esto activa el renderizado MIME bundle
-                    display(self)
-            except (ImportError, Exception):
-                pass  # Si falla, continuar con método normal
             
             display(HTML(html_content))
             display(Javascript(js_content))

@@ -2858,33 +2858,12 @@ class ReactiveMatrixLayout:
         
         El bar chart se actualiza automáticamente cuando seleccionas en el scatter plot,
         NO necesitas llamar display() nuevamente después de cada selección.
-        
-        En DeepNote, también usa display(layout) para asegurar renderizado correcto.
         """
-        # 🔒 CORRECCIÓN: Inicializar DeepNote si es necesario
-        try:
-            from ..core.deepnote import ensure_deepnote_ready, is_deepnote
-            if is_deepnote():
-                ensure_deepnote_ready()
-        except ImportError:
-            pass  # Módulo deepnote no disponible
-        
         if ascii_layout:
             self._layout.ascii_layout = ascii_layout
         
         # Solo mostrar una vez - el bar chart se actualiza automáticamente vía JavaScript
         self._layout.display()
-        
-        # 🔒 CORRECCIÓN: En DeepNote, también mostrar el layout directamente
-        # Esto asegura que el renderizado funcione correctamente
-        try:
-            from ..core.deepnote import is_deepnote
-            from IPython.display import display
-            if is_deepnote():
-                display(self)
-        except (ImportError, Exception):
-            pass  # Si falla, continuar con método normal
-        
         return self
 
     # ==========================
