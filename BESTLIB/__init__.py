@@ -14,7 +14,7 @@ except (ImportError, ModuleNotFoundError, AttributeError):
         # Fallback a versión legacy (siempre disponible)
         try:
             from .matrix import MatrixLayout
-except ImportError:
+        except ImportError:
             # Si incluso esto falla, crear un stub para evitar errores
             MatrixLayout = None
 
@@ -460,7 +460,7 @@ try:
     # También registrar en MatrixLayout para compatibilidad (solo si está disponible)
     if MatrixLayout is not None:
         try:
-    MatrixLayout.register_comm()
+            MatrixLayout.register_comm()
         except Exception:
             # Silenciar errores si no estamos en Jupyter
             pass
