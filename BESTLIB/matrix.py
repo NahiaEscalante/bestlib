@@ -2034,10 +2034,10 @@ class MatrixLayout:
         self._reactive_model = None  # Para modelo reactivo
         self._merge_opt = None  # Merge explícito por instancia (True | False | [letras])
         
-        # CRÍTICO: Inicializar self._map copiando desde cls._map para que los specs estén disponibles
+        # CRÍTICO: Inicializar self._map copiando desde MatrixLayout._map para que los specs estén disponibles
         # Los métodos map_* guardan en cls._map, pero _prepare_repr_data usa self._map
         import copy
-        self._map = copy.deepcopy(cls._map) if cls._map else {}
+        self._map = copy.deepcopy(MatrixLayout._map) if MatrixLayout._map else {}
         
         # Registrar handler por defecto para eventos 'select' que muestre los datos seleccionados
         self._register_default_select_handler()
