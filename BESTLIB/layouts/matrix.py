@@ -54,6 +54,12 @@ class MatrixLayout:
         # Usar EventManager para gestión de eventos
         self._event_manager = EventManager()
         
+        # Flag para rastrear si hay handlers personalizados
+        self._has_custom_select_handler = False
+        
+        # Registrar handler por defecto para eventos 'select' que muestre los datos
+        self._register_default_select_handler()
+        
         # Configuración del layout
         self._reactive_model = None
         self._merge_opt = None
@@ -87,7 +93,43 @@ class MatrixLayout:
     def on(self, event, func):
         """Registra un callback específico para esta instancia"""
         self._event_manager.on(event, func)
+        # Si se registra un handler personalizado para 'select', marcar que hay uno personalizado
+        if event == 'select':
+            self._has_custom_select_handler = True
         return self
+    
+    def _register_default_select_handler(self):
+        """Registra un handler por defecto para eventos 'select' que muestre los datos seleccionados"""
+        def default_select_handler(payload):
+            """Handler por defecto que muestra los datos seleccionados (solo si no hay handlers personalizados)"""
+            # Solo ejecutar si no hay handlers personalizados
+            if self._has_custom_select_handler:
+                return
+            
+            items = payload.get('items', [])
+            count = payload.get('count', len(items))
+            
+            if count == 0:
+                print("📊 No hay elementos seleccionados")
+                return
+            
+            print(f"\n📊 Elementos seleccionados: {count}")
+            print("=" * 60)
+            
+            # Mostrar los primeros elementos (máximo 10 para no saturar)
+            display_count = min(count, 10)
+            for i, item in enumerate(items[:display_count]):
+                print(f"\n[{i+1}]")
+                for key, value in item.items():
+                    if key != 'index' and key != '_original_row':
+                        print(f"   {key}: {value}")
+            
+            if count > display_count:
+                print(f"\n... y {count - display_count} elemento(s) más")
+            print("=" * 60)
+            print(f"\n💡 Tip: Usa layout.on('select', tu_funcion) para personalizar el manejo de selecciones")
+        
+        self._event_manager.on('select', default_select_handler)
     
     @classmethod
     def register_comm(cls, force=False):
@@ -124,6 +166,8 @@ class MatrixLayout:
             reactive_model.update(original_rows)
         
         self._event_manager.on('select', update_model)
+        # Marcar que hay un handler personalizado (connect_selection también cuenta como personalizado)
+        self._has_custom_select_handler = True
         return self
     
     def __del__(self):
