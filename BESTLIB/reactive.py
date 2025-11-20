@@ -1652,13 +1652,15 @@ class ReactiveMatrixLayout:
                             return;
                         }}
                         
-                        // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
+                        // 🔒 CORRECCIÓN: Establecer dimensiones fijas en el SVG con viewBox para mejor escalado
                         // IMPORTANTE: Usar overflow: visible para que las etiquetas de ejes se vean
                         // El SVG debe caber dentro de la celda sin cambiar su tamaño
                         const svg = window.d3.select(targetCell)
                             .append('svg')
-                            .attr('width', width)
-                            .attr('height', svgHeight)
+                            .attr('width', '100%')
+                            .attr('height', '100%')
+                            .attr('viewBox', `0 0 ${{width}} ${{svgHeight}}`)
+                            .attr('preserveAspectRatio', 'xMidYMid meet')
                             .style('max-width', '100%')
                             .style('max-height', '100%')
                             .style('overflow', 'visible')
@@ -1744,21 +1746,31 @@ class ReactiveMatrixLayout:
                             .attr('height', d => chartHeight - y(d.count));
                         
                         if ({str(show_axes).lower()}) {{
-                            // Detectar si necesitamos rotar etiquetas del eje X (ya calculado arriba)
+                            // 🔒 CORRECCIÓN: Detectar si necesitamos rotar etiquetas del eje X (ya calculado arriba)
                             const rotationAngle = needsRotation ? -45 : 0;
                             const numBins = data.length;
                             
+                            // 🔒 CORRECCIÓN: Eje X - Asegurar que se muestre con valores y formato correcto
                             const xAxis = g.append('g')
-                                .attr('transform', `translate(0,${{chartHeight}})`)
-                                .call(window.d3.axisBottom(x).ticks(Math.min(numBins, 10)).tickFormat(d => {{
+                                .attr('class', 'x-axis')
+                                .attr('transform', `translate(0,${{chartHeight}})`);
+                            
+                            // Calcular número de ticks apropiado (máximo 10 para no saturar)
+                            const numXTicks = Math.min(numBins, 10);
+                            const xAxisGenerator = window.d3.axisBottom(x)
+                                .ticks(numXTicks)
+                                .tickFormat(d => {{
                                     // Formato más corto para números largos
                                     if (typeof d === 'number') {{
                                         if (d % 1 === 0) return d.toString();
                                         return d.toFixed(maxBinLabelLength > 6 ? 1 : 2);
                                     }}
                                     return String(d);
-                                }}));
+                                }});
                             
+                            xAxis.call(xAxisGenerator);
+                            
+                            // Estilizar etiquetas del eje X
                             xAxis.selectAll('text')
                                 .style('font-size', needsRotation ? '10px' : '11px')
                                 .style('font-weight', '600')
@@ -1767,24 +1779,38 @@ class ReactiveMatrixLayout:
                                 .attr('transform', rotationAngle !== 0 ? `rotate(${{rotationAngle}})` : null)
                                 .style('text-anchor', rotationAngle !== 0 ? 'end' : 'middle')
                                 .attr('dx', rotationAngle !== 0 ? '-0.5em' : '0')
-                                .attr('dy', rotationAngle !== 0 ? '0.5em' : '0.7em');
+                                .attr('dy', rotationAngle !== 0 ? '0.5em' : '0.7em')
+                                .style('opacity', 1);  // 🔒 Asegurar que sean visibles
                             
+                            // Estilizar líneas del eje X
                             xAxis.selectAll('line, path')
                                 .style('stroke', '#000000')
-                                .style('stroke-width', '1.5px');
+                                .style('stroke-width', '1.5px')
+                                .style('opacity', 1);  // 🔒 Asegurar que sean visibles
                             
+                            // 🔒 CORRECCIÓN: Eje Y - Asegurar que se muestre con valores y formato correcto
                             const yAxis = g.append('g')
-                                .call(window.d3.axisLeft(y).ticks(5));
+                                .attr('class', 'y-axis');
                             
+                            const yAxisGenerator = window.d3.axisLeft(y)
+                                .ticks(5)
+                                .tickFormat(window.d3.format('d'));  // Formato numérico para el eje Y
+                            
+                            yAxis.call(yAxisGenerator);
+                            
+                            // Estilizar etiquetas del eje Y
                             yAxis.selectAll('text')
                                 .style('font-size', '12px')
                                 .style('font-weight', '600')
                                 .style('fill', '#000000')
-                                .style('font-family', 'Arial, sans-serif');
+                                .style('font-family', 'Arial, sans-serif')
+                                .style('opacity', 1);  // 🔒 Asegurar que sean visibles
                             
+                            // Estilizar líneas del eje Y
                             yAxis.selectAll('line, path')
                                 .style('stroke', '#000000')
-                                .style('stroke-width', '1.5px');
+                                .style('stroke-width', '1.5px')
+                                .style('opacity', 1);  // 🔒 Asegurar que sean visibles
                             
                             // Renderizar etiquetas de ejes
                             // Etiqueta del eje X (debajo del gráfico)
