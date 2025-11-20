@@ -2211,16 +2211,19 @@ class ReactiveMatrixLayout:
                         let width = targetCell._fixedDimensions.width || cellWidth;
                         let height = targetCell._fixedDimensions.height || cellHeight;
                         
-                        // Usar la misma lógica de márgenes que el renderizado inicial
+                        // 🔒 CORRECCIÓN: Usar márgenes con padding adicional para el eje Y (evitar superposición)
                         const isLargeDashboard = targetCell.closest('.matrix-layout') && 
                                                  targetCell.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+                        // Aumentar margen izquierdo para separar el eje Y de los datos
                         const defaultMargin = isLargeDashboard 
-                            ? {{ top: 15, right: 15, bottom: 30, left: 35 }}
-                            : {{ top: 20, right: 20, bottom: 40, left: 50 }};
+                            ? {{ top: 15, right: 15, bottom: 30, left: 50 }}  // Aumentado de 35 a 50
+                            : {{ top: 20, right: 20, bottom: 40, left: 60 }}; // Aumentado de 50 a 60
                         const specForMargins = {{ xLabel: {x_label}, yLabel: {y_label} }};
                         const margin = window.calculateAxisMargins ? 
                             window.calculateAxisMargins(specForMargins, defaultMargin, width, height) :
                             defaultMargin;
+                        // 🔒 Asegurar que el margen izquierdo tenga mínimo suficiente para evitar superposición
+                        margin.left = Math.max(margin.left, isLargeDashboard ? 50 : 60);
                         
                         // IMPORTANTE: Calcular espacio necesario para etiquetas del eje X ANTES de limpiar
                         // Necesitamos saber si las etiquetas estarán rotadas para calcular el espacio
@@ -2308,14 +2311,19 @@ class ReactiveMatrixLayout:
                             .range([0, chartWidth])
                             .padding(0.2);
                         
-                        // 🔒 CORRECCIÓN: Calcular dominio Y asegurando que siempre sea válido
+                        // 🔒 CORRECCIÓN: Calcular dominio Y con padding para evitar que se pegue al eje
                         const yMin = window.d3.min(data, d => d.lower);
                         const yMax = window.d3.max(data, d => d.upper);
                         // Asegurar que el dominio sea válido (no NaN, no infinito)
                         const yDomainMin = (isFinite(yMin) && !isNaN(yMin)) ? yMin : 0;
                         const yDomainMax = (isFinite(yMax) && !isNaN(yMax)) ? yMax : (yDomainMin + 1);
+                        // 🔒 Agregar padding al dominio Y (5% arriba y abajo) para separar de los bordes
+                        const yRange = yDomainMax - yDomainMin;
+                        const yPadding = yRange * 0.05; // 5% de padding
+                        const yPaddedMin = yDomainMin - yPadding;
+                        const yPaddedMax = yDomainMax + yPadding;
                         const y = window.d3.scaleLinear()
-                            .domain([yDomainMin, yDomainMax])
+                            .domain([yPaddedMin, yPaddedMax])
                             .nice()
                             .range([chartHeight, 0]);
                         

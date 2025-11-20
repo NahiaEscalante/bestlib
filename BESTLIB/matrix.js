@@ -5506,13 +5506,29 @@
     let width = dims.width;
     let height = dims.height;
     
-    // 🔒 OPTIMIZACIÓN: Reducir márgenes para dashboards grandes
+    // 🔒 CORRECCIÓN: Márgenes equilibrados para centrado visual del scatter plot
     const isLargeDashboard = container.closest('.matrix-layout') && 
                              container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    // Ajustar márgenes para centrado visual: equilibrar izquierda/derecha y arriba/abajo
     const defaultMargin = isLargeDashboard 
-      ? { top: 15, right: 15, bottom: 30, left: 35 }  // Márgenes reducidos para dashboards grandes
-      : { top: 20, right: 20, bottom: 40, left: 50 }; // Márgenes normales
+      ? { top: 20, right: 20, bottom: 35, left: 40 }  // Márgenes equilibrados para dashboards grandes
+      : { top: 25, right: 25, bottom: 45, left: 55 }; // Márgenes equilibrados normales (más espacio izquierdo para eje Y)
     const margin = calculateAxisMargins(spec, defaultMargin, width, height);
+    // 🔒 Asegurar que los márgenes estén equilibrados para centrado visual
+    // Balancear márgenes horizontales y verticales
+    const horizontalBalance = Math.abs(margin.left - margin.right);
+    const verticalBalance = Math.abs(margin.top - margin.bottom);
+    // Si hay desbalance significativo (>10px), ajustar para equilibrar
+    if (horizontalBalance > 10) {
+      const avgHorizontal = (margin.left + margin.right) / 2;
+      margin.left = avgHorizontal;
+      margin.right = avgHorizontal;
+    }
+    if (verticalBalance > 15) {
+      const avgVertical = (margin.top + margin.bottom) / 2;
+      margin.top = avgVertical;
+      margin.bottom = avgVertical;
+    }
     
     // 🔒 MEJORA ESTÉTICA: Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
     // Calcular dimensiones del gráfico después de calcular márgenes
@@ -5549,11 +5565,13 @@
       }
     }
     
-    // Crear SVG con D3
+    // 🔒 CORRECCIÓN: Crear SVG con viewBox para mejor centrado y escalado responsivo
     const svg = d3.select(container)
       .append('svg')
-      .attr('width', width)
-      .attr('height', height)
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet')
       .style('overflow', 'visible');  // Permitir que el contenido se muestre fuera del área del SVG
 
     const g = svg.append('g')
