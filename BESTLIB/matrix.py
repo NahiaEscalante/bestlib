@@ -2248,7 +2248,60 @@ class MatrixLayout:
         Returns:
             str: Código JavaScript para renderizar
         """
-        return f"""
+        import sys
+        is_colab = "google.colab" in sys.modules
+        
+        if is_colab:
+            # En Colab, esperar a que D3 esté disponible antes de renderizar
+            return f"""
+        (function() {{
+          {data['js_code']}
+          
+          // Función para esperar a que D3 esté disponible
+          function waitForD3AndRender() {{
+            const mapping = {data['mapping_js']};
+            const container = document.getElementById("{self.div_id}");
+            if (!container) {{
+              console.error('[BESTLIB] Contenedor no encontrado: {self.div_id}');
+              return;
+            }}
+            container.__mapping__ = mapping;
+            
+            // Verificar si D3 está disponible
+            if (typeof d3 !== 'undefined') {{
+              // D3 ya está disponible, renderizar inmediatamente
+              render("{self.div_id}", `{data['escaped_layout']}`, mapping);
+            }} else {{
+              // Esperar a que D3 se cargue (máximo 10 segundos)
+              let attempts = 0;
+              const maxAttempts = 100; // 10 segundos (100 * 100ms)
+              const checkD3 = setInterval(function() {{
+                attempts++;
+                if (typeof d3 !== 'undefined') {{
+                  clearInterval(checkD3);
+                  render("{self.div_id}", `{data['escaped_layout']}`, mapping);
+                }} else if (attempts >= maxAttempts) {{
+                  clearInterval(checkD3);
+                  const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;"><strong>Error: No se pudo cargar D3.js</strong><br/><small>Por favor, recarga la página.</small></div>';
+                  container.innerHTML = errorMsg;
+                  console.error('[BESTLIB] Timeout esperando D3.js');
+                }}
+              }}, 100);
+            }}
+          }}
+          
+          // Esperar a que el DOM esté listo
+          if (document.readyState === 'loading') {{
+            document.addEventListener('DOMContentLoaded', waitForD3AndRender);
+          }} else {{
+            // DOM ya está listo, ejecutar inmediatamente
+            waitForD3AndRender();
+          }}
+        }})();
+        """
+        else:
+            # En Jupyter normal, ejecutar directamente (D3 se carga de forma síncrona)
+            return f"""
         (function() {{
           {data['js_code']}
           const mapping = {data['mapping_js']};
@@ -2267,6 +2320,29 @@ class MatrixLayout:
         Returns:
             str: HTML con CSS, contenedor y JavaScript inline
         """
+        import sys
+        
+        # Detectar si estamos en Colab y cargar assets automáticamente
+        is_colab = "google.colab" in sys.modules
+        if is_colab:
+            try:
+                AssetManager = None
+                try:
+                    from ..render.assets import AssetManager
+                except (ImportError, ValueError, AttributeError):
+                    try:
+                        from BESTLIB.render.assets import AssetManager
+                    except (ImportError, AttributeError):
+                        pass
+                
+                if AssetManager is not None:
+                    try:
+                        AssetManager.ensure_colab_assets_loaded()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        
         # Preparar datos comunes
         data = self._prepare_repr_data()
 
