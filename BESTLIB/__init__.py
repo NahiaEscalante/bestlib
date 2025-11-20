@@ -445,6 +445,14 @@ def __getattr__(name):
 # Registrar automáticamente el comm al importar
 # Esto asegura que la comunicación bidireccional funcione sin configuración extra
 try:
+    # 🔒 CORRECCIÓN: Inicializar DeepNote si es necesario
+    try:
+        from .core.deepnote import ensure_deepnote_ready, is_deepnote
+        if is_deepnote():
+            ensure_deepnote_ready()
+    except ImportError:
+        pass  # Módulo deepnote no disponible
+    
     if HAS_CORE and CommManager is not None:
         CommManager.register_comm()
     # También registrar en MatrixLayout para compatibilidad
