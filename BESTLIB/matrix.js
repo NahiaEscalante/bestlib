@@ -805,6 +805,57 @@
   // ==========================================
   
   /**
+   * Aplica estilos unificados a ejes D3
+   * @param {object} axisSelection - Selección D3 del eje
+   */
+  function applyUnifiedAxisStyles(axisSelection) {
+    axisSelection.selectAll('text')
+      .style('font-size', '11px')
+      .style('font-weight', '600')
+      .style('fill', '#000000')
+      .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
+      .attr('class', 'bestlib-axis-text');
+    
+    axisSelection.selectAll('line, path')
+      .style('stroke', '#000000')
+      .style('stroke-width', '2px')
+      .attr('class', 'bestlib-axis');
+  }
+  
+  /**
+   * Obtiene valores de estilo unificados
+   * @returns {object} Objeto con valores de estilo estándar
+   */
+  function getUnifiedStyles() {
+    return {
+      primaryColor: '#4a90e2',
+      primaryHover: '#357abd',
+      selectionColor: '#ff6b35',
+      textColor: '#000000',
+      textSecondary: '#666666',
+      lineWidth: 2,
+      lineWidthThick: 2.5,
+      lineWidthThin: 1.5,
+      axisWidth: 2,
+      pointRadius: 4,
+      pointRadiusHover: 6,
+      pointRadiusSelected: 6,
+      pointStrokeWidth: 1.5,
+      opacityDefault: 1,
+      opacityHover: 0.85,
+      opacitySelected: 1,
+      opacityUnselected: 0.3,
+      opacityFill: 0.3,
+      labelFontSize: 13,
+      labelFontWeight: 700,
+      tickFontSize: 11,
+      tickFontWeight: 600,
+      transitionDuration: 300,
+      transitionDurationSlow: 500
+    };
+  }
+  
+  /**
    * Renderiza etiquetas de ejes con soporte para personalización
    */
   function renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg) {
@@ -817,14 +868,16 @@
       const xLabelX = chartWidth / 2;
       const xLabelY = chartHeight + margin.bottom - 10;
       
+      const styles = getUnifiedStyles();
       const xLabelText = g.append('text')
         .attr('x', xLabelX)
         .attr('y', xLabelY)
         .attr('text-anchor', 'middle')
-        .style('font-size', `${xLabelFontSize}px`)
-        .style('font-weight', '700')
-        .style('fill', '#000000')
-        .style('font-family', 'Arial, sans-serif')
+        .attr('class', 'bestlib-axis-label bestlib-axis-label-x')
+        .style('font-size', `${spec.xLabelFontSize || styles.labelFontSize}px`)
+        .style('font-weight', `${styles.labelFontWeight}`)
+        .style('fill', styles.textColor)
+        .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
         .text(spec.xLabel);
       
       if (xLabelRotation !== 0) {
@@ -858,15 +911,17 @@
       
       // Crear texto en el SVG principal (no en el grupo g) para que sea visible
       // El texto se renderiza primero sin rotar, luego se rota
+      const styles = getUnifiedStyles();
       const yLabelText = svg.append('text')
         .attr('x', yLabelX)
         .attr('y', yLabelY)
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'central')  // Usar 'central' en lugar de 'middle' para mejor alineación
-        .style('font-size', `${yLabelFontSize}px`)
-        .style('font-weight', '700')
-        .style('fill', '#000000')
-        .style('font-family', 'Arial, sans-serif')
+        .attr('class', 'bestlib-axis-label bestlib-axis-label-y')
+        .style('font-size', `${spec.yLabelFontSize || styles.labelFontSize}px`)
+        .style('font-weight', `${styles.labelFontWeight}`)
+        .style('fill', styles.textColor)
+        .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
         .style('pointer-events', 'none')  // No interferir con eventos del gráfico
         .text(spec.yLabel);
       
@@ -4647,6 +4702,7 @@
    * Boxplot con D3.js
    */
   function renderBoxplotD3(container, spec, d3, divId) {
+    const styles = getUnifiedStyles();
     const data = spec.data || [];
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
@@ -4802,9 +4858,10 @@
         .attr('y', y(d.q3))
         .attr('width', boxWidth)
         .attr('height', y(d.q1) - y(d.q3))
-      .attr('fill', spec.color || '#4a90e2')
-        .attr('stroke', '#000')
-        .attr('stroke-width', 2);
+        .attr('fill', spec.color || styles.primaryColor)
+        .attr('stroke', styles.textColor)
+        .attr('stroke-width', styles.axisWidth)
+        .attr('class', 'bestlib-box');
       
       // Mediana (median line)
       group.append('line')
@@ -4812,8 +4869,9 @@
         .attr('x2', xPos + boxWidth)
         .attr('y1', y(d.median))
         .attr('y2', y(d.median))
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 2);
+        .attr('stroke', styles.selectionColor)
+        .attr('stroke-width', styles.lineWidthThick)
+        .attr('class', 'bestlib-median');
     });
     
     // Ejes
@@ -4822,28 +4880,12 @@
         .attr('transform', `translate(0,${chartHeight})`)
         .call(d3.axisBottom(x));
       
-      xAxis.selectAll('text')
-      .style('font-size', '12px')
-        .style('font-weight', '600')
-        .style('fill', '#000000')
-        .style('font-family', 'Arial, sans-serif');
-      
-      xAxis.selectAll('line, path')
-        .style('stroke', '#000000')
-        .style('stroke-width', '1.5px');
+      applyUnifiedAxisStyles(xAxis);
       
       const yAxis = g.append('g')
         .call(d3.axisLeft(y).ticks(5));
       
-      yAxis.selectAll('text')
-        .style('font-size', '12px')
-        .style('font-weight', '600')
-        .style('fill', '#000000')
-        .style('font-family', 'Arial, sans-serif');
-      
-      yAxis.selectAll('line, path')
-        .style('stroke', '#000000')
-        .style('stroke-width', '1.5px');
+      applyUnifiedAxisStyles(yAxis);
       
       // Renderizar etiquetas de ejes usando función helper
       renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
@@ -5094,11 +5136,7 @@
         .attr('dy', rotationAngle !== 0 ? '0.5em' : '0.7em')
         .style('opacity', 1);  // Asegurar que sean visibles
       
-      // Estilizar líneas del eje X
-      xAxis.selectAll('line, path')
-        .style('stroke', '#000000')
-        .style('stroke-width', '1.5px')
-        .style('opacity', 1);  // Asegurar que sean visibles
+      applyUnifiedAxisStyles(xAxis);
       
       // 🔒 CORRECCIÓN: Eje Y - Asegurar que se muestre con valores y formato correcto
       const yAxis = g.append('g')
@@ -5110,19 +5148,7 @@
       
       yAxis.call(yAxisGenerator);
       
-      // Estilizar etiquetas del eje Y
-      yAxis.selectAll('text')
-        .style('font-size', '12px')
-        .style('font-weight', '600')
-        .style('fill', '#000000')
-        .style('font-family', 'Arial, sans-serif')
-        .style('opacity', 1);  // Asegurar que sean visibles
-      
-      // Estilizar líneas del eje Y
-      yAxis.selectAll('line, path')
-        .style('stroke', '#000000')
-        .style('stroke-width', '1.5px')
-        .style('opacity', 1);  // Asegurar que sean visibles
+      applyUnifiedAxisStyles(yAxis);
       
       // Renderizar etiquetas de ejes usando función helper
       renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
@@ -5628,7 +5654,7 @@
       : null;
     const getRadius = d => {
       if (sizeScale) return sizeScale(+d.size);
-      return spec.pointRadius || 4;
+      return spec.pointRadius || styles.pointRadius;
     };
 
     // Estado de selección persistente
@@ -5636,13 +5662,16 @@
     let selectedIndices = new Set();
     let isBrushing = false;
     
+    // Obtener estilos unificados
+    const styles = getUnifiedStyles();
+    
     // Función para obtener el color base de un punto
     const getBaseColor = (d) => {
       if (d.color) return d.color;
       if (spec.colorMap && d.category) {
-        return spec.colorMap[d.category] || spec.color || '#4a90e2';
+        return spec.colorMap[d.category] || spec.color || styles.primaryColor;
       }
-      return spec.color || '#4a90e2';
+      return spec.color || styles.primaryColor;
     };
     
     // Función para actualizar la visualización de puntos según su estado de selección
@@ -5656,26 +5685,29 @@
         if (isSelected) {
           // Punto seleccionado: más grande, opacidad completa, borde destacado
           dot
+            .attr('class', 'dot bestlib-point bestlib-point-selected')
             .attr('r', baseRadius * 1.5)
             .attr('fill', baseColor)
-            .attr('stroke', '#ff6b35')
+            .attr('stroke', styles.selectionColor)
             .attr('stroke-width', 2)
-            .attr('opacity', 1);
+            .attr('opacity', styles.opacitySelected);
         } else if (isHighlighting) {
           // Durante el brush: puntos no seleccionados más tenues
           dot
+            .attr('class', 'dot bestlib-point')
             .attr('r', baseRadius)
             .attr('fill', baseColor)
             .attr('stroke', 'none')
             .attr('stroke-width', 0)
-            .attr('opacity', 0.15);
+            .attr('opacity', styles.opacityUnselected);
         } else {
           // Estado normal: puntos no seleccionados
           dot
+            .attr('class', 'dot bestlib-point')
             .attr('r', baseRadius)
             .attr('fill', baseColor)
-            .attr('stroke', 'none')
-            .attr('stroke-width', 0)
+            .attr('stroke', '#ffffff')
+            .attr('stroke-width', styles.pointStrokeWidth)
             .attr('opacity', 0.6);
         }
       });
@@ -5730,11 +5762,13 @@
       .data(data)
       .enter()
       .append('circle')
-      .attr('class', 'dot')
+      .attr('class', 'dot bestlib-point')
       .attr('cx', d => x(d.x))
       .attr('cy', d => y(d.y))
       .attr('r', d => getRadius(d))
       .attr('fill', d => getBaseColor(d))
+      .attr('stroke', '#ffffff')
+      .attr('stroke-width', styles.pointStrokeWidth)
       .attr('opacity', 0.6)
       .attr('stroke', 'none')
       .attr('stroke-width', 0)
@@ -6103,32 +6137,17 @@
     // Ejes con texto NEGRO y visible (renderizar por defecto a menos que axes === false)
     // IMPORTANTE: Renderizar ejes DESPUÉS del brush para que estén debajo visualmente
     if (spec.axes !== false) {
+      const styles = getUnifiedStyles();
       const xAxis = g.append('g')
         .attr('transform', `translate(0,${chartHeight})`)
         .call(d3.axisBottom(x).ticks(6));
       
-      xAxis.selectAll('text')
-        .style('font-size', '12px')
-        .style('font-weight', '600')
-        .style('fill', '#000000')
-        .style('font-family', 'Arial, sans-serif');
-      
-      xAxis.selectAll('line, path')
-        .style('stroke', '#000000')
-        .style('stroke-width', '1.5px');
+      applyUnifiedAxisStyles(xAxis);
       
       const yAxis = g.append('g')
         .call(d3.axisLeft(y).ticks(6));
       
-      yAxis.selectAll('text')
-      .style('font-size', '12px')
-        .style('font-weight', '600')
-        .style('fill', '#000000')
-        .style('font-family', 'Arial, sans-serif');
-      
-      yAxis.selectAll('line, path')
-        .style('stroke', '#000000')
-        .style('stroke-width', '1.5px');
+      applyUnifiedAxisStyles(yAxis);
       
       // Renderizar etiquetas de ejes usando función helper
       renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
