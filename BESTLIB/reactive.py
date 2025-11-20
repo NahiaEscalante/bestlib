@@ -1593,15 +1593,16 @@ class ReactiveMatrixLayout:
                             window.calculateAxisMargins(specForMargins, defaultMargin, width, height) :
                             defaultMargin;
                         
-                        // IMPORTANTE: Calcular espacio necesario para etiquetas del eje X ANTES de limpiar
+                        // 🔒 CORRECCIÓN: Calcular espacio necesario para etiquetas del eje X ANTES de limpiar
                         // Necesitamos saber si las etiquetas estarán rotadas para calcular el espacio
                         const data = {hist_data_json};
                         let needsRotation = false;
                         let extraHeightForXAxis = 50; // Valor por defecto seguro
+                        let maxBinLabelLength = 0; // 🔒 Inicializar para evitar undefined
                         
                         if (data.length > 0) {{
                             const numBins = data.length;
-                            const maxBinLabelLength = Math.max(...data.map(d => String(d.bin).length), 0);
+                            maxBinLabelLength = Math.max(...data.map(d => String(d.bin).length), 0);
                             needsRotation = numBins > 8 || maxBinLabelLength > 8;
                             
                             // Calcular espacio adicional basado en si hay rotación
@@ -1669,10 +1670,12 @@ class ReactiveMatrixLayout:
                         const g = svg.append('g')
                             .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
                         
-                        // Usar scaleLinear para histograma (los bins son valores numéricos continuos)
+                        // 🔒 CORRECCIÓN: Usar scaleLinear para histograma (los bins son valores numéricos continuos)
+                        // Asegurar que los dominios se calculen correctamente incluso con datos extremos
                         const binValues = data.map(d => d.bin).sort((a, b) => a - b);
-                        const minBin = binValues[0];
-                        const maxBin = binValues[binValues.length - 1];
+                        const minBin = binValues.length > 0 ? binValues[0] : 0;
+                        const maxBin = binValues.length > 0 ? binValues[binValues.length - 1] : 1;
+                        
                         // Calcular el ancho de cada bin basado en la diferencia entre bins consecutivos
                         // Si hay múltiples bins, usar la diferencia promedio; si no, calcular basado en el rango
                         let binSpacing;
@@ -1683,22 +1686,42 @@ class ReactiveMatrixLayout:
                                 diffs.push(binValues[i] - binValues[i-1]);
                             }}
                             binSpacing = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+                        }} else if (binValues.length === 1) {{
+                            // Si solo hay un bin, usar un ancho razonable basado en el valor
+                            binSpacing = Math.max(Math.abs(minBin) * 0.1, 1);
                         }} else {{
-                            binSpacing = (maxBin - minBin) / Math.max(data.length, 1) || 1;
+                            // Si no hay bins, usar un valor por defecto
+                            binSpacing = 1;
                         }}
                         
+                        // 🔒 CORRECCIÓN: Calcular dominio X asegurando que siempre sea válido
+                        const xDomainMin = binValues.length > 0 ? minBin - binSpacing / 2 : 0;
+                        const xDomainMax = binValues.length > 0 ? maxBin + binSpacing / 2 : 1;
                         const x = window.d3.scaleLinear()
-                            .domain([minBin - binSpacing / 2, maxBin + binSpacing / 2])
+                            .domain([xDomainMin, xDomainMax])
                             .range([0, chartWidth]);
                         
+                        // 🔒 CORRECCIÓN: Calcular dominio Y asegurando que siempre sea válido y visible
+                        const maxCount = window.d3.max(data, d => d.count) || 0;
+                        // Si maxCount es 0, usar un valor mínimo para que el eje se muestre
+                        const yDomainMax = maxCount > 0 ? maxCount : 1;
                         const y = window.d3.scaleLinear()
-                            .domain([0, window.d3.max(data, d => d.count) || 100])
+                            .domain([0, yDomainMax])
                             .nice()
                             .range([chartHeight, 0]);
                         
-                        // Calcular el ancho de cada barra en píxeles
+                        // 🔒 CORRECCIÓN: Calcular el ancho de cada barra en píxeles
                         // Usar el 90% del espaciado para dejar un pequeño gap entre barras
-                        const barWidthPixels = x(minBin + binSpacing) - x(minBin);
+                        // Asegurar que el cálculo no falle incluso con datos extremos
+                        let barWidthPixels;
+                        if (binValues.length > 0 && binSpacing > 0) {{
+                            const nextBinPos = x(minBin + binSpacing);
+                            const currentBinPos = x(minBin);
+                            barWidthPixels = Math.abs(nextBinPos - currentBinPos);
+                        }} else {{
+                            // Fallback: usar un ancho basado en el chartWidth
+                            barWidthPixels = chartWidth / Math.max(data.length, 1);
+                        }}
                         const barWidth = Math.max(barWidthPixels * 0.9, 1); // 90% del ancho para dejar espacio
                         
                         // IMPORTANTE: Agregar event listeners a las barras para interactividad
@@ -1755,15 +1778,17 @@ class ReactiveMatrixLayout:
                                 .attr('class', 'x-axis')
                                 .attr('transform', `translate(0,${{chartHeight}})`);
                             
-                            // Calcular número de ticks apropiado (máximo 10 para no saturar)
+                            // 🔒 CORRECCIÓN: Calcular número de ticks apropiado (máximo 10 para no saturar)
                             const numXTicks = Math.min(numBins, 10);
+                            // Asegurar que maxBinLabelLength esté definido
+                            const safeMaxBinLabelLength = maxBinLabelLength || 6;
                             const xAxisGenerator = window.d3.axisBottom(x)
                                 .ticks(numXTicks)
                                 .tickFormat(d => {{
                                     // Formato más corto para números largos
                                     if (typeof d === 'number') {{
                                         if (d % 1 === 0) return d.toString();
-                                        return d.toFixed(maxBinLabelLength > 6 ? 1 : 2);
+                                        return d.toFixed(safeMaxBinLabelLength > 6 ? 1 : 2);
                                     }}
                                     return String(d);
                                 }});
