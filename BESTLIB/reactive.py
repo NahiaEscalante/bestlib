@@ -1571,11 +1571,37 @@ class ReactiveMatrixLayout:
                         const dims = window.getChartDimensions ? 
                             window.getChartDimensions(targetCell, {{ type: 'histogram' }}, 400, 350) :
                             {{ width: Math.max(targetCell.clientWidth || 400, 200), height: 350 }};
-                        const width = dims.width;
-                        const height = dims.height;
-                        const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
-                        const chartWidth = width - margin.left - margin.right;
-                        const chartHeight = height - margin.top - margin.bottom;
+                        let width = dims.width;
+                        let height = dims.height;
+                        
+                        // Usar la misma lógica de márgenes que el renderizado inicial
+                        const isLargeDashboard = targetCell.closest('.matrix-layout') && 
+                                                 targetCell.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+                        const defaultMargin = isLargeDashboard 
+                            ? {{ top: 15, right: 15, bottom: 30, left: 35 }}
+                            : {{ top: 20, right: 20, bottom: 40, left: 50 }};
+                        const specForMargins = {{ xLabel: {x_label}, yLabel: {y_label} }};
+                        const margin = window.calculateAxisMargins ? 
+                            window.calculateAxisMargins(specForMargins, defaultMargin, width, height) :
+                            defaultMargin;
+                        
+                        let chartWidth = width - margin.left - margin.right;
+                        let chartHeight = height - margin.top - margin.bottom;
+                        
+                        // Ajustar dimensiones si es necesario
+                        const minChartWidth = 200;
+                        const minWidth = margin.left + margin.right + minChartWidth;
+                        if (width < minWidth) {{
+                            width = minWidth;
+                            chartWidth = width - margin.left - margin.right;
+                        }}
+                        
+                        const minChartHeight = 200;
+                        const minHeight = margin.top + margin.bottom + minChartHeight;
+                        if (height < minHeight) {{
+                            height = minHeight;
+                            chartHeight = height - margin.top - margin.bottom;
+                        }}
                         
                         // CRÍTICO: Establecer altura mínima y máxima explícitamente en la celda
                         // ANTES de limpiar el innerHTML para prevenir expansión infinita
@@ -1595,12 +1621,13 @@ class ReactiveMatrixLayout:
                         }}
                         
                         // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
+                        // IMPORTANTE: Usar overflow: visible para que las etiquetas de ejes se vean
                         const svg = window.d3.select(targetCell)
                             .append('svg')
                             .attr('width', width)
                             .attr('height', height)
                             .style('max-height', height + 'px')
-                            .style('overflow', 'hidden')
+                            .style('overflow', 'visible')
                             .style('display', 'block');
                         
                         const g = svg.append('g')
@@ -1634,8 +1661,9 @@ class ReactiveMatrixLayout:
                             .range([chartHeight, 0]);
                         
                         // Calcular el ancho de cada barra en píxeles
-                        // Asegurar que el ancho sea positivo y razonable
-                        const barWidth = Math.max(x(minBin + binSpacing) - x(minBin), 1);
+                        // Usar el 90% del espaciado para dejar un pequeño gap entre barras
+                        const barWidthPixels = x(minBin + binSpacing) - x(minBin);
+                        const barWidth = Math.max(barWidthPixels * 0.9, 1); // 90% del ancho para dejar espacio
                         
                         // IMPORTANTE: Agregar event listeners a las barras para interactividad
                         const bars = g.selectAll('.bar')
@@ -1757,6 +1785,24 @@ class ReactiveMatrixLayout:
                                 .style('pointer-events', 'none')
                                 .attr('transform', `rotate(-90 ${{yLabelX}} ${{yLabelY}})`)
                                 .text({y_label});
+                        }}
+                        
+                        // Renderizar título del gráfico si está especificado
+                        const title = '{kwargs.get("title", "")}';
+                        if (title && title.trim() !== '') {{
+                            const titleFontSize = {kwargs.get("titleFontSize", 16)};
+                            const titleY = margin.top - 10;
+                            const titleX = chartWidth / 2;
+                            
+                            svg.append('text')
+                                .attr('x', titleX + margin.left)
+                                .attr('y', titleY)
+                                .attr('text-anchor', 'middle')
+                                .style('font-size', titleFontSize + 'px')
+                                .style('font-weight', '700')
+                                .style('fill', '#000000')
+                                .style('font-family', 'Arial, sans-serif')
+                                .text(title);
                         }}
                     }}
                     
@@ -2061,11 +2107,34 @@ class ReactiveMatrixLayout:
                         const dims = window.getChartDimensions ? 
                             window.getChartDimensions(targetCell, {{ type: 'boxplot' }}, 400, 350) :
                             {{ width: Math.max(targetCell.clientWidth || 400, 200), height: 350 }};
-                        const width = dims.width;
-                        const height = dims.height;
-                        const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
-                        const chartWidth = width - margin.left - margin.right;
-                        const chartHeight = height - margin.top - margin.bottom;
+                        let width = dims.width;
+                        let height = dims.height;
+                        
+                        // Usar la misma lógica de márgenes que el renderizado inicial
+                        const isLargeDashboard = targetCell.closest('.matrix-layout') && 
+                                                 targetCell.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+                        const defaultMargin = isLargeDashboard 
+                            ? {{ top: 15, right: 15, bottom: 30, left: 35 }}
+                            : {{ top: 20, right: 20, bottom: 40, left: 50 }};
+                        const specForMargins = {{ xLabel: {x_label}, yLabel: {y_label} }};
+                        const margin = window.calculateAxisMargins ? 
+                            window.calculateAxisMargins(specForMargins, defaultMargin, width, height) :
+                            defaultMargin;
+                        
+                        let chartWidth = width - margin.left - margin.right;
+                        let chartHeight = height - margin.top - margin.bottom;
+                        
+                        // Ajustar dimensiones si es necesario
+                        const maxAvailableWidth = targetCell.clientWidth || width;
+                        const maxAvailableHeight = targetCell.clientHeight || height;
+                        if (width > maxAvailableWidth) {{
+                            width = maxAvailableWidth;
+                            chartWidth = Math.max(width - margin.left - margin.right, 200);
+                        }}
+                        if (height > maxAvailableHeight) {{
+                            height = maxAvailableHeight;
+                            chartHeight = Math.max(height - margin.top - margin.bottom, 150);
+                        }}
                         
                         // CRÍTICO: Establecer altura mínima y máxima explícitamente en la celda
                         // para prevenir expansión infinita
@@ -2083,12 +2152,13 @@ class ReactiveMatrixLayout:
                         }}
                         
                         // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
+                        // IMPORTANTE: Usar overflow: visible para que las etiquetas de ejes se vean
                         const svg = window.d3.select(targetCell)
                             .append('svg')
                             .attr('width', width)
                             .attr('height', height)
                             .style('max-height', height + 'px')
-                            .style('overflow', 'hidden')
+                            .style('overflow', 'visible')
                             .style('display', 'block');
                         
                         const g = svg.append('g')
@@ -2206,6 +2276,24 @@ class ReactiveMatrixLayout:
                                 .style('pointer-events', 'none')
                                 .attr('transform', `rotate(-90 ${{yLabelX}} ${{yLabelY}})`)
                                 .text({y_label});
+                        }}
+                        
+                        // Renderizar título del gráfico si está especificado
+                        const title = '{kwargs.get("title", "")}';
+                        if (title && title.trim() !== '') {{
+                            const titleFontSize = {kwargs.get("titleFontSize", 16)};
+                            const titleY = margin.top - 10;
+                            const titleX = chartWidth / 2;
+                            
+                            svg.append('text')
+                                .attr('x', titleX + margin.left)
+                                .attr('y', titleY)
+                                .attr('text-anchor', 'middle')
+                                .style('font-size', titleFontSize + 'px')
+                                .style('font-weight', '700')
+                                .style('fill', '#000000')
+                                .style('font-family', 'Arial, sans-serif')
+                                .text(title);
                         }}
                         
                         // IMPORTANTE: Marcar que esta celda ya no necesita ResizeObserver

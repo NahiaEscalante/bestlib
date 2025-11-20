@@ -4911,8 +4911,9 @@
       .range([chartHeight, 0]);
     
     // Calcular el ancho de cada barra en píxeles
-    // Asegurar que el ancho sea positivo y razonable
-    const barWidth = Math.max(x(minBin + binSpacing) - x(minBin), 1);
+    // Usar el 90% del espaciado para dejar un pequeño gap entre barras
+    const barWidthPixels = x(minBin + binSpacing) - x(minBin);
+    const barWidth = Math.max(barWidthPixels * 0.9, 1); // 90% del ancho para dejar espacio
     
     // Crear tooltip para histograma
     const tooltipId = `histogram-tooltip-${divId}`;
