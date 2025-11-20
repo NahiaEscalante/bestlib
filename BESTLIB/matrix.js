@@ -1094,8 +1094,12 @@
     
     // 🔒 CRÍTICO: Asegurar dimensiones mínimas razonables
     // Pero NO reducir si el contenedor es más grande - usar TODO el espacio
-    width = Math.max(width, 200);
-    height = Math.max(height, 150);
+    // Para dashboards grandes (9+ celdas), usar dimensiones mínimas más pequeñas
+    const isLargeDashboard = parentContainer && parentContainer.querySelectorAll('.matrix-cell').length >= 9;
+    const minWidth = isLargeDashboard ? 150 : 200;
+    const minHeight = isLargeDashboard ? 120 : 150;
+    width = Math.max(width, minWidth);
+    height = Math.max(height, minHeight);
     
     // 🔒 MEJORA ESTÉTICA: NO ajustar aspect ratio - usar TODO el espacio del contenedor
     // El viewBox con preserveAspectRatio mantendrá las proporciones correctamente
@@ -1152,17 +1156,22 @@
       let estimatedMaxCellWidth = availableWidth / numColumns;
       
       // Para dashboards grandes (9+ celdas), permitir que los gráficos usen más espacio
-      // reduciendo el factor de reducción
+      // reduciendo el factor de reducción y ajustando padding/gap
       if (totalCells >= 9) {
-        // En dashboards grandes, usar 95% del ancho calculado para mejor visualización
-        estimatedMaxCellWidth = estimatedMaxCellWidth * 0.95;
+        // En dashboards grandes, reducir padding y gap para maximizar espacio
+        const adjustedGap = gap * 0.7; // Reducir gap en 30%
+        const adjustedPadding = cellPadding * 0.6; // Reducir padding en 40%
+        const adjustedTotalGaps = adjustedGap * (numColumns - 1);
+        const adjustedTotalPadding = adjustedPadding * 2 * numColumns;
+        const adjustedAvailableWidth = containerMaxWidth - adjustedTotalGaps - adjustedTotalPadding;
+        estimatedMaxCellWidth = (adjustedAvailableWidth / numColumns) * 0.98; // Usar 98% del espacio
       } else {
         // En dashboards pequeños, usar 90% para mantener márgenes cómodos
         estimatedMaxCellWidth = estimatedMaxCellWidth * 0.90;
       }
       
-      // Asegurar un mínimo razonable (200px para dashboards grandes, 250px para pequeños)
-      const minWidth = totalCells >= 9 ? 200 : 250;
+      // Asegurar un mínimo razonable (150px para dashboards grandes, 200px para pequeños)
+      const minWidth = totalCells >= 9 ? 150 : 200;
       estimatedMaxCellWidth = Math.max(minWidth, estimatedMaxCellWidth);
       
       // 🔒 APLICAR EL LÍMITE

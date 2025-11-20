@@ -181,9 +181,23 @@
 .matrix-layout:has(> div:nth-child(9)) {
   /* Cuando hay 9 o más celdas, optimizar tamaños */
   --matrix-cell-min-height: 280px;
-  --matrix-cell-padding: 12px;
-  --matrix-gap: 10px;
+  --matrix-cell-padding: 10px;
+  --matrix-gap: 8px;
   /* Mejor espaciado para dashboards grandes */
+  /* Asegurar que los gráficos se vean bien incluso con max-width pequeño */
+}
+
+/* Optimización especial para matrices 3x3 con max-width pequeño */
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell {
+  min-height: 260px !important;
+  padding: 8px !important;
+}
+
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell svg {
+  min-width: 180px !important;
+  min-height: 140px !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
 }
 
 .matrix-layout:has(> div:nth-child(9)) > div {
