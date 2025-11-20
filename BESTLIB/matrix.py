@@ -2130,7 +2130,7 @@ class MatrixLayout:
         """
         import sys
         
-        # Detectar si estamos en Colab y cargar assets automáticamente
+        # Detectar si estamos en Colab y cargar assets automáticamente (solo carga, sin espera)
         is_colab = "google.colab" in sys.modules
         if is_colab:
             try:
@@ -2161,48 +2161,9 @@ class MatrixLayout:
         <div id="{self.div_id}" class="matrix-layout"{data['inline_style']}></div>
         """
         
-        # Generar JavaScript con espera a D3 si estamos en Colab
-        if is_colab:
-            render_js = f"""
-            (function() {{
-                const mapping = {data['mapping_js']};
-                const container = document.getElementById("{self.div_id}");
-                if (container) {{
-                    container.__mapping__ = mapping;
-                }}
-                
-                // Función para esperar a D3 y luego renderizar (Colab)
-                function waitForD3AndRender() {{
-                    const elapsed = Date.now() - (waitForD3AndRender.startTime || Date.now());
-                    waitForD3AndRender.startTime = waitForD3AndRender.startTime || Date.now();
-                    
-                    if (elapsed > 10000) {{
-                        console.error('❌ [BESTLIB] Timeout esperando D3.js');
-                        if (container) {{
-                            container.innerHTML = '<div style="padding: 20px; color: red; border: 2px solid red; background: #ffeeee;">Error: No se pudo cargar D3.js. Por favor, recarga la página.</div>';
-                        }}
-                        return;
-                    }}
-                    
-                    if (typeof d3 !== 'undefined' && typeof render !== 'undefined') {{
-                        render("{self.div_id}", `{data['escaped_layout']}`, mapping);
-                    }} else {{
-                        setTimeout(waitForD3AndRender, 100);
-                    }}
-                }}
-                
-                // Intentar renderizar inmediatamente, o esperar si es necesario
-                if (typeof d3 !== 'undefined' && typeof render !== 'undefined') {{
-                    render("{self.div_id}", `{data['escaped_layout']}`, mapping);
-                }} else {{
-                    waitForD3AndRender();
-                }}
-            }})();
-            """
-        else:
-            # Versión normal para Jupyter
-            render_js = self._generate_render_js(data).strip()
-        
+        # Usar el método original que siempre funcionó
+        # matrix.js ya maneja la carga de D3.js internamente con ensureD3()
+        render_js = self._generate_render_js(data).strip()
         js = data['js_code'] + "\n" + render_js
 
         return {
@@ -2221,7 +2182,7 @@ class MatrixLayout:
             from IPython.display import display, HTML, Javascript
             import sys
             
-            # Detectar si estamos en Colab y cargar assets automáticamente
+            # Detectar si estamos en Colab y cargar assets automáticamente (solo carga, sin espera)
             is_colab = "google.colab" in sys.modules
             if is_colab:
                 try:
@@ -2251,58 +2212,9 @@ class MatrixLayout:
             <div id="{self.div_id}" class="matrix-layout"{data['inline_style']}></div>
             """
             
-            # Generar JavaScript con espera a D3 si estamos en Colab
-            if is_colab:
-                js_content = f"""
-                (function() {{
-                    {data['js_code']}
-                    const mapping = {data['mapping_js']};
-                    const container = document.getElementById("{self.div_id}");
-                    if (container) {{
-                        container.__mapping__ = mapping;
-                    }}
-                    
-                    // Función para esperar a D3 y luego renderizar (Colab)
-                    function waitForD3AndRender() {{
-                        const elapsed = Date.now() - (waitForD3AndRender.startTime || Date.now());
-                        waitForD3AndRender.startTime = waitForD3AndRender.startTime || Date.now();
-                        
-                        if (elapsed > 10000) {{
-                            console.error('❌ [BESTLIB] Timeout esperando D3.js');
-                            if (container) {{
-                                container.innerHTML = '<div style="padding: 20px; color: red; border: 2px solid red; background: #ffeeee;">Error: No se pudo cargar D3.js. Por favor, recarga la página.</div>';
-                            }}
-                            return;
-                        }}
-                        
-                        if (typeof d3 !== 'undefined' && typeof render !== 'undefined') {{
-                            render("{self.div_id}", `{data['escaped_layout']}`, mapping);
-                        }} else {{
-                            setTimeout(waitForD3AndRender, 100);
-                        }}
-                    }}
-                    
-                    // Intentar renderizar inmediatamente, o esperar si es necesario
-                    if (typeof d3 !== 'undefined' && typeof render !== 'undefined') {{
-                        render("{self.div_id}", `{data['escaped_layout']}`, mapping);
-                    }} else {{
-                        waitForD3AndRender();
-                    }}
-                }})();
-                """
-            else:
-                # Versión normal para Jupyter
-                js_content = f"""
-                (function() {{
-                    {data['js_code']}
-                    const mapping = {data['mapping_js']};
-                    const container = document.getElementById("{self.div_id}");
-                    if (container) {{
-                        container.__mapping__ = mapping;
-                    }}
-                    render("{self.div_id}", `{data['escaped_layout']}`, mapping);
-                }})();
-                """
+            # Usar el método original que siempre funcionó
+            # matrix.js ya maneja la carga de D3.js internamente con ensureD3()
+            js_content = self._generate_render_js(data).strip()
             
             display(HTML(html_content))
             display(Javascript(js_content))
