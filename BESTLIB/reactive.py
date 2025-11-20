@@ -1566,13 +1566,21 @@ class ReactiveMatrixLayout:
                         
                         if (!targetCell) return;
                         
-                        // CRÍTICO: Calcular dimensiones ANTES de limpiar el innerHTML
-                        // para evitar que la celda pierda sus dimensiones
-                        const dims = window.getChartDimensions ? 
-                            window.getChartDimensions(targetCell, {{ type: 'histogram' }}, 400, 350) :
-                            {{ width: Math.max(targetCell.clientWidth || 400, 200), height: 350 }};
-                        let width = dims.width;
-                        let height = dims.height;
+                        // CRÍTICO: Obtener dimensiones FIJAS de la celda (definidas por CSS/grid)
+                        // NO usar getChartDimensions porque es reactivo y puede cambiar
+                        // Usar getBoundingClientRect para obtener el tamaño real del contenedor
+                        const cellRect = targetCell.getBoundingClientRect();
+                        const cellWidth = cellRect.width || targetCell.clientWidth || 400;
+                        const cellHeight = cellRect.height || targetCell.clientHeight || 350;
+                        
+                        // Guardar dimensiones fijas en la celda para reutilizar en futuras actualizaciones
+                        if (!targetCell._fixedDimensions) {{
+                            targetCell._fixedDimensions = {{ width: cellWidth, height: cellHeight }};
+                        }}
+                        
+                        // Usar dimensiones fijas guardadas o las actuales
+                        let width = targetCell._fixedDimensions.width || cellWidth;
+                        let height = targetCell._fixedDimensions.height || cellHeight;
                         
                         // Usar la misma lógica de márgenes que el renderizado inicial
                         const isLargeDashboard = targetCell.closest('.matrix-layout') && 
@@ -1584,24 +1592,6 @@ class ReactiveMatrixLayout:
                         const margin = window.calculateAxisMargins ? 
                             window.calculateAxisMargins(specForMargins, defaultMargin, width, height) :
                             defaultMargin;
-                        
-                        let chartWidth = width - margin.left - margin.right;
-                        let chartHeight = height - margin.top - margin.bottom;
-                        
-                        // Ajustar dimensiones si es necesario
-                        const minChartWidth = 200;
-                        const minWidth = margin.left + margin.right + minChartWidth;
-                        if (width < minWidth) {{
-                            width = minWidth;
-                            chartWidth = width - margin.left - margin.right;
-                        }}
-                        
-                        const minChartHeight = 200;
-                        const minHeight = margin.top + margin.bottom + minChartHeight;
-                        if (height < minHeight) {{
-                            height = minHeight;
-                            chartHeight = height - margin.top - margin.bottom;
-                        }}
                         
                         // IMPORTANTE: Calcular espacio necesario para etiquetas del eje X ANTES de limpiar
                         // Necesitamos saber si las etiquetas estarán rotadas para calcular el espacio
@@ -1623,17 +1613,36 @@ class ReactiveMatrixLayout:
                             extraHeightForXAxis = extraHeightForRotatedLabels + extraHeightForXAxisLabel;
                         }}
                         
-                        const svgHeight = height + extraHeightForXAxis;
+                        // CRÍTICO: El SVG debe caber dentro de la celda sin cambiar su tamaño
+                        // Usar la altura de la celda como altura máxima del SVG
+                        const svgHeight = Math.min(height, cellHeight);
                         
-                        // CRÍTICO: Establecer altura mínima y máxima explícitamente en la celda
-                        // ANTES de limpiar el innerHTML para prevenir expansión infinita
-                        // Usar svgHeight para el contenedor para que las etiquetas se vean
-                        targetCell.style.minHeight = svgHeight + 'px';
-                        targetCell.style.maxHeight = svgHeight + 'px';
-                        targetCell.style.height = svgHeight + 'px';
-                        targetCell.style.overflow = 'hidden';
+                        // Ajustar chartHeight para que el eje X quepa dentro del SVG
+                        // Reducir chartHeight para dejar espacio para el eje X y sus etiquetas
+                        let chartHeight = svgHeight - margin.top - margin.bottom - extraHeightForXAxis;
+                        let chartWidth = width - margin.left - margin.right;
                         
-                        // CRÍTICO: Limpiar solo después de establecer dimensiones
+                        // Asegurar dimensiones mínimas
+                        const minChartWidth = 200;
+                        const minChartHeight = 150;
+                        if (chartWidth < minChartWidth) {{
+                            chartWidth = minChartWidth;
+                            width = chartWidth + margin.left + margin.right;
+                        }}
+                        if (chartHeight < minChartHeight) {{
+                            // Si no cabe, reducir el espacio extra del eje X
+                            const minRequiredHeight = margin.top + margin.bottom + minChartHeight;
+                            if (svgHeight >= minRequiredHeight) {{
+                                chartHeight = svgHeight - margin.top - margin.bottom;
+                                // Ajustar extraHeightForXAxis para que quepa
+                                extraHeightForXAxis = Math.max(20, svgHeight - margin.top - margin.bottom - chartHeight);
+                            }} else {{
+                                chartHeight = minChartHeight;
+                            }}
+                        }}
+                        
+                        // CRÍTICO: NO modificar estilos de la celda - mantener tamaño fijo del grid
+                        // Limpiar solo el contenido, no cambiar dimensiones
                         targetCell.innerHTML = '';
                         
                         // data ya fue definido arriba para calcular needsRotation
@@ -1645,12 +1654,13 @@ class ReactiveMatrixLayout:
                         
                         // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
                         // IMPORTANTE: Usar overflow: visible para que las etiquetas de ejes se vean
-                        // Usar svgHeight para incluir espacio para las etiquetas del eje X
+                        // El SVG debe caber dentro de la celda sin cambiar su tamaño
                         const svg = window.d3.select(targetCell)
                             .append('svg')
                             .attr('width', width)
                             .attr('height', svgHeight)
-                            .style('max-height', svgHeight + 'px')
+                            .style('max-width', '100%')
+                            .style('max-height', '100%')
                             .style('overflow', 'visible')
                             .style('display', 'block');
                         
@@ -1778,13 +1788,18 @@ class ReactiveMatrixLayout:
                             
                             // Renderizar etiquetas de ejes
                             // Etiqueta del eje X (debajo del gráfico)
-                            // Ajustar posición Y para que esté dentro del espacio adicional del SVG
+                            // CRÍTICO: Asegurar que la etiqueta quede dentro del SVG
                             const xLabelX = chartWidth / 2;
-                            // Posicionar la etiqueta dentro del espacio adicional calculado
+                            // Posicionar la etiqueta dentro del espacio disponible del SVG
                             // chartHeight + margin.bottom es donde termina el área del gráfico
-                            // Agregar espacio para las etiquetas rotadas si las hay (45px para -45 grados), luego la etiqueta (15px)
+                            // Usar el espacio calculado en extraHeightForXAxis
                             const spaceForRotatedLabels = needsRotation ? 45 : 0;
-                            const xLabelY = chartHeight + margin.bottom + spaceForRotatedLabels + 15;
+                            // Asegurar que xLabelY no exceda svgHeight - margin.top
+                            const maxYLabelPosition = svgHeight - margin.top - 5; // 5px de margen de seguridad
+                            const xLabelY = Math.min(
+                                chartHeight + margin.bottom + spaceForRotatedLabels + 15,
+                                maxYLabelPosition
+                            );
                             
                             const xLabelText = g.append('text')
                                 .attr('x', xLabelX)
@@ -2129,13 +2144,21 @@ class ReactiveMatrixLayout:
                         
                         // NO reconectar el ResizeObserver aquí - se reconectará después de renderizar si es necesario
                         
-                        // CRÍTICO: Usar getChartDimensions() para calcular dimensiones de manera consistente
-                        // Esto asegura que respeta max_width y usa la misma lógica que el render inicial
-                        const dims = window.getChartDimensions ? 
-                            window.getChartDimensions(targetCell, {{ type: 'boxplot' }}, 400, 350) :
-                            {{ width: Math.max(targetCell.clientWidth || 400, 200), height: 350 }};
-                        let width = dims.width;
-                        let height = dims.height;
+                        // CRÍTICO: Obtener dimensiones FIJAS de la celda (definidas por CSS/grid)
+                        // NO usar getChartDimensions porque es reactivo y puede cambiar
+                        // Usar getBoundingClientRect para obtener el tamaño real del contenedor
+                        const cellRect = targetCell.getBoundingClientRect();
+                        const cellWidth = cellRect.width || targetCell.clientWidth || 400;
+                        const cellHeight = cellRect.height || targetCell.clientHeight || 350;
+                        
+                        // Guardar dimensiones fijas en la celda para reutilizar en futuras actualizaciones
+                        if (!targetCell._fixedDimensions) {{
+                            targetCell._fixedDimensions = {{ width: cellWidth, height: cellHeight }};
+                        }}
+                        
+                        // Usar dimensiones fijas guardadas o las actuales
+                        let width = targetCell._fixedDimensions.width || cellWidth;
+                        let height = targetCell._fixedDimensions.height || cellHeight;
                         
                         // Usar la misma lógica de márgenes que el renderizado inicial
                         const isLargeDashboard = targetCell.closest('.matrix-layout') && 
@@ -2148,22 +2171,7 @@ class ReactiveMatrixLayout:
                             window.calculateAxisMargins(specForMargins, defaultMargin, width, height) :
                             defaultMargin;
                         
-                        let chartWidth = width - margin.left - margin.right;
-                        let chartHeight = height - margin.top - margin.bottom;
-                        
-                        // Ajustar dimensiones si es necesario
-                        const maxAvailableWidth = targetCell.clientWidth || width;
-                        const maxAvailableHeight = targetCell.clientHeight || height;
-                        if (width > maxAvailableWidth) {{
-                            width = maxAvailableWidth;
-                            chartWidth = Math.max(width - margin.left - margin.right, 200);
-                        }}
-                        if (height > maxAvailableHeight) {{
-                            height = maxAvailableHeight;
-                            chartHeight = Math.max(height - margin.top - margin.bottom, 150);
-                        }}
-                        
-                        // IMPORTANTE: Calcular espacio necesario para etiquetas del eje X
+                        // IMPORTANTE: Calcular espacio necesario para etiquetas del eje X ANTES de limpiar
                         // Necesitamos saber si las etiquetas estarán rotadas para calcular el espacio
                         const data = {box_data_json};
                         let needsRotation = false;
@@ -2183,16 +2191,35 @@ class ReactiveMatrixLayout:
                             extraHeightForXAxis = extraHeightForRotatedLabels + extraHeightForXAxisLabel;
                         }}
                         
-                        const svgHeight = height + extraHeightForXAxis;
+                        // CRÍTICO: El SVG debe caber dentro de la celda sin cambiar su tamaño
+                        // Usar la altura de la celda como altura máxima del SVG
+                        const svgHeight = Math.min(height, cellHeight);
                         
-                        // CRÍTICO: Establecer altura mínima y máxima explícitamente en la celda
-                        // para prevenir expansión infinita
-                        // Usar svgHeight para el contenedor para que las etiquetas se vean
-                        targetCell.style.minHeight = svgHeight + 'px';
-                        targetCell.style.maxHeight = svgHeight + 'px';
-                        targetCell.style.height = svgHeight + 'px';
-                        targetCell.style.overflow = 'hidden';
+                        // Ajustar chartHeight para que el eje X quepa dentro del SVG
+                        // Reducir chartHeight para dejar espacio para el eje X y sus etiquetas
+                        let chartHeight = svgHeight - margin.top - margin.bottom - extraHeightForXAxis;
+                        let chartWidth = width - margin.left - margin.right;
                         
+                        // Asegurar dimensiones mínimas
+                        const minChartWidth = 200;
+                        const minChartHeight = 150;
+                        if (chartWidth < minChartWidth) {{
+                            chartWidth = minChartWidth;
+                            width = chartWidth + margin.left + margin.right;
+                        }}
+                        if (chartHeight < minChartHeight) {{
+                            // Si no cabe, reducir el espacio extra del eje X
+                            const minRequiredHeight = margin.top + margin.bottom + minChartHeight;
+                            if (svgHeight >= minRequiredHeight) {{
+                                chartHeight = svgHeight - margin.top - margin.bottom;
+                                // Ajustar extraHeightForXAxis para que quepa
+                                extraHeightForXAxis = Math.max(20, svgHeight - margin.top - margin.bottom - chartHeight);
+                            }} else {{
+                                chartHeight = minChartHeight;
+                            }}
+                        }}
+                        
+                        // CRÍTICO: NO modificar estilos de la celda - mantener tamaño fijo del grid
                         // data ya fue definido arriba para calcular needsRotation
                         
                         if (data.length === 0) {{
@@ -2203,12 +2230,13 @@ class ReactiveMatrixLayout:
                         
                         // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
                         // IMPORTANTE: Usar overflow: visible para que las etiquetas de ejes se vean
-                        // Usar svgHeight para incluir espacio para las etiquetas del eje X
+                        // El SVG debe caber dentro de la celda sin cambiar su tamaño
                         const svg = window.d3.select(targetCell)
                             .append('svg')
                             .attr('width', width)
                             .attr('height', svgHeight)
-                            .style('max-height', svgHeight + 'px')
+                            .style('max-width', '100%')
+                            .style('max-height', '100%')
                             .style('overflow', 'visible')
                             .style('display', 'block');
                         
@@ -2298,13 +2326,18 @@ class ReactiveMatrixLayout:
                             
                             // Renderizar etiquetas de ejes
                             // Etiqueta del eje X (debajo del gráfico)
-                            // Ajustar posición Y para que esté dentro del espacio adicional del SVG
+                            // CRÍTICO: Asegurar que la etiqueta quede dentro del SVG
                             const xLabelX = chartWidth / 2;
-                            // Posicionar la etiqueta dentro del espacio adicional calculado
+                            // Posicionar la etiqueta dentro del espacio disponible del SVG
                             // chartHeight + margin.bottom es donde termina el área del gráfico
-                            // Agregar espacio para las etiquetas rotadas si las hay (45px para -45 grados), luego la etiqueta (15px)
+                            // Usar el espacio calculado en extraHeightForXAxis
                             const spaceForRotatedLabels = needsRotation ? 45 : 0;
-                            const xLabelY = chartHeight + margin.bottom + spaceForRotatedLabels + 15;
+                            // Asegurar que xLabelY no exceda svgHeight - margin.top
+                            const maxYLabelPosition = svgHeight - margin.top - 5; // 5px de margen de seguridad
+                            const xLabelY = Math.min(
+                                chartHeight + margin.bottom + spaceForRotatedLabels + 15,
+                                maxYLabelPosition
+                            );
                             
                             const xLabelText = g.append('text')
                                 .attr('x', xLabelX)
