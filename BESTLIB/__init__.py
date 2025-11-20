@@ -6,7 +6,13 @@
 try:
     from .layouts.matrix import MatrixLayout
 except ImportError:
-    from .matrix import MatrixLayout  # Fallback a versión legacy
+    try:
+        # Intentar importar desde layouts directamente
+        from . import layouts
+        MatrixLayout = layouts.MatrixLayout
+    except (ImportError, AttributeError):
+        # Fallback a versión legacy
+        from .matrix import MatrixLayout
 
 # Intentar importar módulo reactivo (opcional)
 # Estructura modular: reactive/ (SelectionModel, ReactiveEngine, etc.) y layouts/reactive.py (ReactiveMatrixLayout)
