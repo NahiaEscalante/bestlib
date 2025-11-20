@@ -321,7 +321,13 @@
         value.type === 'violin' ||
         value.type === 'radviz' ||
         value.type === 'star_coordinates' ||
-        value.type === 'parallel_coordinates'
+        value.type === 'parallel_coordinates' ||
+        value.type === 'line_plot' ||
+        value.type === 'horizontal_bar' ||
+        value.type === 'hexbin' ||
+        value.type === 'errorbars' ||
+        value.type === 'fill_between' ||
+        value.type === 'step_plot'
       );
     }
     

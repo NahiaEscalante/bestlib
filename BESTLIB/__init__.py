@@ -5,14 +5,18 @@
 # Intentar usar versión refactorizada, fallback a original
 try:
     from .layouts.matrix import MatrixLayout
-except ImportError:
+except (ImportError, ModuleNotFoundError, AttributeError):
     try:
         # Intentar importar desde layouts directamente
         from . import layouts
         MatrixLayout = layouts.MatrixLayout
-    except (ImportError, AttributeError):
-        # Fallback a versión legacy
-        from .matrix import MatrixLayout
+    except (ImportError, ModuleNotFoundError, AttributeError):
+        # Fallback a versión legacy (siempre disponible)
+        try:
+            from .matrix import MatrixLayout
+        except ImportError:
+            # Si incluso esto falla, crear un stub para evitar errores
+            MatrixLayout = None
 
 # Intentar importar módulo reactivo (opcional)
 # Estructura modular: reactive/ (SelectionModel, ReactiveEngine, etc.) y layouts/reactive.py (ReactiveMatrixLayout)
@@ -72,7 +76,7 @@ try:
     from .layouts.reactive import ReactiveMatrixLayout
     if ReactiveMatrixLayout is not None:
         HAS_REACTIVE = True
-except ImportError:
+except (ImportError, ModuleNotFoundError, AttributeError):
     # Fallback: intentar desde reactive.py legacy (si existe)
     try:
         import importlib.util
@@ -453,8 +457,13 @@ def __getattr__(name):
 try:
     if HAS_CORE and CommManager is not None:
         CommManager.register_comm()
-    # También registrar en MatrixLayout para compatibilidad
-    MatrixLayout.register_comm()
+    # También registrar en MatrixLayout para compatibilidad (solo si está disponible)
+    if MatrixLayout is not None:
+        try:
+            MatrixLayout.register_comm()
+        except Exception:
+            # Silenciar errores si no estamos en Jupyter
+            pass
 except Exception:
     # Silenciar errores si no estamos en Jupyter
     # (ej: al importar en scripts, tests, etc.)

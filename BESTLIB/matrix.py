@@ -2134,17 +2134,28 @@ class MatrixLayout:
         is_colab = "google.colab" in sys.modules
         if is_colab:
             try:
-                # Intentar importar desde módulo render (versión modular)
+                # Intentar importar AssetManager de forma segura
+                AssetManager = None
+                
+                # Intentar import relativo (versión modular)
                 try:
                     from ..render.assets import AssetManager
-                    AssetManager.ensure_colab_assets_loaded()
-                except (ImportError, ValueError):
-                    # Si falla, intentar import absoluto
+                except (ImportError, ValueError, AttributeError):
+                    pass
+                
+                # Si falla, intentar import absoluto
+                if AssetManager is None:
                     try:
                         from BESTLIB.render.assets import AssetManager
+                    except (ImportError, AttributeError):
+                        pass
+                
+                # Si tenemos AssetManager, usarlo
+                if AssetManager is not None:
+                    try:
                         AssetManager.ensure_colab_assets_loaded()
-                    except ImportError:
-                        # Si no está disponible, continuar sin carga automática
+                    except Exception:
+                        # Si falla, continuar sin carga automática
                         pass
             except Exception:
                 # Cualquier otro error, continuar sin carga automática
@@ -2186,17 +2197,28 @@ class MatrixLayout:
             is_colab = "google.colab" in sys.modules
             if is_colab:
                 try:
-                    # Intentar importar desde módulo render (versión modular)
+                    # Intentar importar AssetManager de forma segura
+                    AssetManager = None
+                    
+                    # Intentar import relativo (versión modular)
                     try:
                         from ..render.assets import AssetManager
-                        AssetManager.ensure_colab_assets_loaded()
-                    except (ImportError, ValueError):
-                        # Si falla, intentar import absoluto
+                    except (ImportError, ValueError, AttributeError):
+                        pass
+                    
+                    # Si falla, intentar import absoluto
+                    if AssetManager is None:
                         try:
                             from BESTLIB.render.assets import AssetManager
+                        except (ImportError, AttributeError):
+                            pass
+                    
+                    # Si tenemos AssetManager, usarlo
+                    if AssetManager is not None:
+                        try:
                             AssetManager.ensure_colab_assets_loaded()
-                        except ImportError:
-                            # Si no está disponible, continuar sin carga automática
+                        except Exception:
+                            # Si falla, continuar sin carga automática
                             pass
                 except Exception:
                     # Cualquier otro error, continuar sin carga automática
