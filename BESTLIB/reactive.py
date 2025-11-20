@@ -1611,7 +1611,18 @@ class ReactiveMatrixLayout:
                         const minBin = binValues[0];
                         const maxBin = binValues[binValues.length - 1];
                         // Calcular el ancho de cada bin basado en la diferencia entre bins consecutivos
-                        const binSpacing = binValues.length > 1 ? (binValues[1] - binValues[0]) : (maxBin - minBin) / data.length || 1;
+                        // Si hay múltiples bins, usar la diferencia promedio; si no, calcular basado en el rango
+                        let binSpacing;
+                        if (binValues.length > 1) {{
+                            // Calcular diferencias entre bins consecutivos y usar el promedio
+                            const diffs = [];
+                            for (let i = 1; i < binValues.length; i++) {{
+                                diffs.push(binValues[i] - binValues[i-1]);
+                            }}
+                            binSpacing = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+                        }} else {{
+                            binSpacing = (maxBin - minBin) / Math.max(data.length, 1) || 1;
+                        }}
                         
                         const x = window.d3.scaleLinear()
                             .domain([minBin - binSpacing / 2, maxBin + binSpacing / 2])
@@ -1622,15 +1633,19 @@ class ReactiveMatrixLayout:
                             .nice()
                             .range([chartHeight, 0]);
                         
+                        // Calcular el ancho de cada barra en píxeles
+                        // Asegurar que el ancho sea positivo y razonable
+                        const barWidth = Math.max(x(minBin + binSpacing) - x(minBin), 1);
+                        
                         // IMPORTANTE: Agregar event listeners a las barras para interactividad
                         const bars = g.selectAll('.bar')
                             .data(data)
                             .enter()
                             .append('rect')
                             .attr('class', 'bar')
-                            .attr('x', d => x(d.bin) - binSpacing / 2)
+                            .attr('x', d => x(d.bin) - barWidth / 2)
                             .attr('y', chartHeight)
-                            .attr('width', x(minBin + binSpacing) - x(minBin))
+                            .attr('width', barWidth)
                             .attr('height', 0)
                             .attr('fill', '{default_color}')
                             .style('cursor', 'pointer')
