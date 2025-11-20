@@ -1602,6 +1602,30 @@ class MatrixLayout:
         self._col_widths = col_widths
         self._gap = gap
         self._cell_padding = cell_padding
+        
+        # 🔒 OPTIMIZACIÓN: Ajustar max_width automáticamente para dashboards grandes
+        # Calcular número de celdas en el layout
+        if ascii_layout:
+            rows = ascii_layout.strip().split('\n')
+            num_rows = len(rows)
+            num_cols = len(rows[0]) if rows else 1
+            total_cells = num_rows * num_cols
+            
+            # Si es un dashboard grande (9+ celdas) y max_width es muy pequeño, ajustarlo
+            if total_cells >= 9 and max_width is not None and max_width < 1000:
+                # Calcular ancho mínimo recomendado: ~300px por columna para dashboards grandes
+                recommended_width = num_cols * 300
+                # Asegurar mínimo de 1000px para 3x3, 1200px para 4x4
+                if total_cells >= 16:  # 4x4 o mayor
+                    recommended_width = max(recommended_width, 1600)
+                else:  # 3x3
+                    recommended_width = max(recommended_width, 1200)
+                
+                if max_width < recommended_width:
+                    if MatrixLayout._debug:
+                        print(f"ℹ️ [MatrixLayout] Ajustando max_width de {max_width}px a {recommended_width}px para dashboard {num_rows}x{num_cols} ({total_cells} celdas)")
+                    max_width = recommended_width
+        
         self._max_width = max_width
         
         # Asegurar que el comm esté registrado

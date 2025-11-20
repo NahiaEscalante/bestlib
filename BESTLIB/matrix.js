@@ -879,10 +879,28 @@
   function calculateAxisMargins(spec, defaultMargin, containerWidth, containerHeight) {
     const margin = { ...defaultMargin };
     
-    // 🔒 MEJORA ESTÉTICA: Ajustar márgenes según el tamaño del contenedor
-    // En dashboards grandes (contenedores pequeños), usar márgenes más conservadores
+    // 🔒 OPTIMIZACIÓN: Detectar dashboards grandes y reducir márgenes automáticamente
+    // Buscar el contenedor matrix-layout padre
+    let isLargeDashboard = false;
+    if (containerWidth && containerWidth < 400) {
+      // Si el contenedor es pequeño, probablemente es un dashboard grande
+      // Intentar encontrar el layout padre
+      try {
+        const layoutContainer = document.querySelector('.matrix-layout');
+        if (layoutContainer) {
+          const cellCount = layoutContainer.querySelectorAll('.matrix-cell').length;
+          isLargeDashboard = cellCount >= 9;
+        }
+      } catch (e) {
+        // Si falla, usar heurística basada en tamaño
+        isLargeDashboard = containerWidth < 300;
+      }
+    }
+    
+    // 🔒 MEJORA ESTÉTICA: Ajustar márgenes según el tamaño del contenedor y tipo de dashboard
+    // En dashboards grandes (contenedores pequeños), reducir márgenes para maximizar espacio
     const isSmallContainer = containerWidth && containerWidth < 350;
-    const marginMultiplier = isSmallContainer ? 1.2 : 1.0; // Aumentar márgenes en contenedores pequeños
+    const marginMultiplier = isLargeDashboard ? 0.7 : (isSmallContainer ? 1.0 : 1.0); // Reducir márgenes en dashboards grandes
     
     // Calcular espacio necesario para etiqueta X
     if (spec.xLabel) {
@@ -1187,8 +1205,11 @@
     
     // 🔒 MEJORA ESTÉTICA: Asegurar dimensiones mínimas razonables para el viewBox
     // El SVG ocupará 100% del contenedor, pero el viewBox necesita dimensiones válidas
-    width = Math.max(width, 200); // Mínimo razonable para viewBox
-    height = Math.max(height, 150); // Mínimo razonable para viewBox
+    // Para dashboards grandes, usar mínimos más pequeños para aprovechar mejor el espacio
+    const finalMinWidth = isLargeDashboard ? 180 : 200;
+    const finalMinHeight = isLargeDashboard ? 130 : 150;
+    width = Math.max(width, finalMinWidth);
+    height = Math.max(height, finalMinHeight);
     
     return { width, height };
   }
@@ -1251,7 +1272,13 @@
     const dims = getChartDimensions(container, spec, 500, 400);
     let width = dims.width;
     let height = dims.height;
-    const defaultMargin = { top: 30, right: 20, bottom: 60, left: 70 };
+    
+    // 🔒 OPTIMIZACIÓN: Reducir márgenes para dashboards grandes
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 20, right: 15, bottom: 40, left: 50 }  // Márgenes reducidos para dashboards grandes
+      : { top: 30, right: 20, bottom: 60, left: 70 }; // Márgenes normales
     const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
     // Para correlation heatmap, necesitamos espacio para el colorbar
@@ -1532,7 +1559,14 @@
     const dims = getChartDimensions(container, spec, 520, 380);
     let width = dims.width;
     let height = dims.height;
-    const defaultMargin = { top: 20, right: 150, bottom: 40, left: 50 }; // Más espacio a la derecha para leyenda
+    
+    // 🔒 OPTIMIZACIÓN: Reducir márgenes para dashboards grandes
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    // Line chart necesita más espacio a la derecha para leyenda
+    const defaultMargin = isLargeDashboard 
+      ? { top: 15, right: 100, bottom: 30, left: 35 }  // Márgenes reducidos, pero mantener espacio para leyenda
+      : { top: 20, right: 150, bottom: 40, left: 50 }; // Márgenes normales
     const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
     // Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
@@ -2171,7 +2205,13 @@
     const dims = getChartDimensions(container, spec, 520, 380);
     let width = dims.width;
     let height = dims.height;
-    const defaultMargin = { top: 20, right: 20, bottom: 60, left: 60 };
+    
+    // 🔒 OPTIMIZACIÓN: Reducir márgenes para dashboards grandes
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 15, right: 15, bottom: 40, left: 40 }  // Márgenes reducidos para dashboards grandes
+      : { top: 20, right: 20, bottom: 60, left: 60 }; // Márgenes normales
     const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
     // 🔒 MEJORA ESTÉTICA: Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
@@ -2502,7 +2542,13 @@
     const dims = getChartDimensions(container, spec, 520, 380);
     let width = dims.width;
     let height = dims.height;
-    const defaultMargin = { top: 60, right: 60, bottom: 60, left: 60 };
+    
+    // 🔒 OPTIMIZACIÓN: Reducir márgenes para dashboards grandes
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 40, right: 40, bottom: 40, left: 40 }  // Márgenes reducidos para dashboards grandes
+      : { top: 60, right: 60, bottom: 60, left: 60 }; // Márgenes normales
     const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
     // 🔒 MEJORA ESTÉTICA: Calcular dimensiones del gráfico considerando límites del contenedor
@@ -3028,7 +3074,13 @@
     const dims = getChartDimensions(container, spec, 520, 380);
     let width = dims.width;
     let height = dims.height;
-    const defaultMargin = { top: 60, right: 60, bottom: 60, left: 60 };
+    
+    // 🔒 OPTIMIZACIÓN: Reducir márgenes para dashboards grandes
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 40, right: 40, bottom: 40, left: 40 }  // Márgenes reducidos para dashboards grandes
+      : { top: 60, right: 60, bottom: 60, left: 60 }; // Márgenes normales
     const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
     // 🔒 MEJORA ESTÉTICA: Calcular dimensiones respetando límites del contenedor
@@ -3680,7 +3732,13 @@
     const dims = getChartDimensions(container, spec, 600, 400);
     let width = dims.width;
     let height = dims.height;
-    const defaultMargin = { top: 30, right: 20, bottom: 30, left: 20 };
+    
+    // 🔒 OPTIMIZACIÓN: Reducir márgenes para dashboards grandes
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 20, right: 15, bottom: 25, left: 15 }  // Márgenes reducidos para dashboards grandes
+      : { top: 30, right: 20, bottom: 30, left: 20 }; // Márgenes normales
     const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
     // 🔒 MEJORA ESTÉTICA: Asegurar que las dimensiones respeten el contenedor
@@ -4564,7 +4622,13 @@
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
-    const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
+    
+    // 🔒 OPTIMIZACIÓN: Reducir márgenes para dashboards grandes
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 15, right: 15, bottom: 30, left: 35 }  // Márgenes reducidos para dashboards grandes
+      : { top: 20, right: 20, bottom: 40, left: 50 }; // Márgenes normales
     const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
     // 🔒 MEJORA ESTÉTICA: Asegurar que las dimensiones respeten el contenedor
@@ -4765,7 +4829,13 @@
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
-    const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
+    
+    // 🔒 OPTIMIZACIÓN: Reducir márgenes para dashboards grandes
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 15, right: 15, bottom: 30, left: 35 }  // Márgenes reducidos para dashboards grandes
+      : { top: 20, right: 20, bottom: 40, left: 50 }; // Márgenes normales
     const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
     // 🔒 MEJORA ESTÉTICA: Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
@@ -5010,7 +5080,13 @@
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
-    const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
+    
+    // 🔒 OPTIMIZACIÓN: Reducir márgenes para dashboards grandes
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 15, right: 15, bottom: 30, left: 35 }  // Márgenes reducidos para dashboards grandes
+      : { top: 20, right: 20, bottom: 40, left: 50 }; // Márgenes normales
     const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
     // 🔒 MEJORA ESTÉTICA: Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
@@ -5384,7 +5460,13 @@
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
-    const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
+    
+    // 🔒 OPTIMIZACIÓN: Reducir márgenes para dashboards grandes
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 15, right: 15, bottom: 30, left: 35 }  // Márgenes reducidos para dashboards grandes
+      : { top: 20, right: 20, bottom: 40, left: 50 }; // Márgenes normales
     const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
     // 🔒 MEJORA ESTÉTICA: Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes

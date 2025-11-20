@@ -181,16 +181,17 @@
 .matrix-layout:has(> div:nth-child(9)) {
   /* Cuando hay 9 o más celdas, optimizar tamaños */
   --matrix-cell-min-height: 280px;
-  --matrix-cell-padding: 10px;
-  --matrix-gap: 8px;
-  /* Mejor espaciado para dashboards grandes */
+  --matrix-cell-padding: 8px;
+  --matrix-gap: 6px;
+  /* Mejor espaciado para dashboards grandes - reducir padding y gap */
   /* Asegurar que los gráficos se vean bien incluso con max-width pequeño */
 }
 
 /* Optimización especial para matrices 3x3 con max-width pequeño */
 .matrix-layout:has(> div:nth-child(9)) .matrix-cell {
   min-height: 260px !important;
-  padding: 8px !important;
+  padding: 6px !important;
+  /* Reducir padding para maximizar espacio del gráfico */
 }
 
 .matrix-layout:has(> div:nth-child(9)) .matrix-cell svg {
@@ -198,6 +199,19 @@
   min-height: 140px !important;
   max-width: 100% !important;
   max-height: 100% !important;
+  /* Asegurar que los SVGs se adapten al contenedor */
+}
+
+/* Mejorar legibilidad de etiquetas en dashboards grandes */
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell svg text {
+  font-size: 10px !important;
+  /* Reducir tamaño de fuente para que quepa mejor */
+}
+
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell svg .x-axis text,
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell svg .y-axis text {
+  font-size: 9px !important;
+  /* Etiquetas de ejes más pequeñas pero legibles */
 }
 
 .matrix-layout:has(> div:nth-child(9)) > div {
