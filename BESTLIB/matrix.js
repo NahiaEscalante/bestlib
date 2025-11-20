@@ -6255,7 +6255,7 @@
    * Versión mejorada del line chart con más opciones
    */
   function renderLinePlotD3(container, spec, d3, divId) {
-    const data = spec.data || [];
+    // line_plot usa 'series' directamente en el spec, no 'data'
     const series = spec.series || {};
     
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -6321,10 +6321,30 @@
       .y(d => y(d.y))
       .curve(d3.curveLinear);
     
+    // Validar que haya series
     const seriesNames = Object.keys(series);
+    if (seriesNames.length === 0) {
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error: No hay series para mostrar</strong><br/>' +
+        '<small>Verifica que los datos contengan valores válidos</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('renderLinePlotD3: No hay series', { spec, series });
+      return;
+    }
+    
+    // Obtener opciones del spec (pueden estar en spec.options o directamente en spec)
+    const options = spec.options || {};
+    const strokeWidth = options.strokeWidth || spec.strokeWidth || 2;
+    const markers = options.markers !== undefined ? options.markers : (spec.markers !== undefined ? spec.markers : false);
+    const colorMap = options.colorMap || spec.colorMap;
+    const axes = options.axes !== undefined ? options.axes : (spec.axes !== undefined ? spec.axes : true);
+    const xLabel = options.xLabel || spec.xLabel;
+    const yLabel = options.yLabel || spec.yLabel;
+    
     const colorScale = d3.scaleOrdinal()
       .domain(seriesNames)
-      .range(spec.colorMap ? Object.values(spec.colorMap) : d3.schemeCategory10);
+      .range(colorMap ? Object.values(colorMap) : d3.schemeCategory10);
     
     seriesNames.forEach((name, idx) => {
       const serieData = series[name];
@@ -6336,11 +6356,11 @@
         .datum(sortedData)
         .attr('fill', 'none')
         .attr('stroke', colorScale(name))
-        .attr('stroke-width', spec.strokeWidth || 2)
+        .attr('stroke-width', strokeWidth)
         .attr('d', line);
       
       // Marcadores opcionales
-      if (spec.markers) {
+      if (markers) {
         g.selectAll(`.marker-${idx}`)
           .data(sortedData)
           .enter()
@@ -6354,7 +6374,7 @@
     });
     
     // Ejes
-    if (spec.axes !== false) {
+    if (axes !== false) {
       const xAxis = d3.axisBottom(x);
       const yAxis = d3.axisLeft(y);
       
@@ -6368,22 +6388,22 @@
         .style('opacity', 1);
       
       // Etiquetas
-      if (spec.xLabel) {
+      if (xLabel) {
         g.append('text')
           .attr('transform', `translate(${chartWidth / 2}, ${chartHeight + margin.bottom - 5})`)
           .style('text-anchor', 'middle')
           .style('font-size', '12px')
-          .text(spec.xLabel);
+          .text(xLabel);
       }
       
-      if (spec.yLabel) {
+      if (yLabel) {
         g.append('text')
           .attr('transform', 'rotate(-90)')
           .attr('y', -margin.left + 15)
           .attr('x', -chartHeight / 2)
           .style('text-anchor', 'middle')
           .style('font-size', '12px')
-          .text(spec.yLabel);
+          .text(yLabel);
       }
     }
   }
@@ -6393,6 +6413,17 @@
    */
   function renderHorizontalBarD3(container, spec, d3, divId) {
     const data = spec.data || [];
+    
+    // Validar datos
+    if (!data || data.length === 0) {
+      const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error: No hay datos para mostrar</strong><br/>' +
+        '<small>Verifica que los datos contengan valores válidos</small>' +
+        '</div>';
+      container.innerHTML = errorMsg;
+      console.error('renderHorizontalBarD3: No hay datos', { spec, data });
+      return;
+    }
     
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
@@ -6419,6 +6450,13 @@
     const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
     
+    // Obtener opciones del spec (pueden estar en spec.options o directamente en spec)
+    const options = spec.options || {};
+    const color = options.color || spec.color || '#4a90e2';
+    const axes = options.axes !== undefined ? options.axes : (spec.axes !== undefined ? spec.axes : true);
+    const xLabel = options.xLabel || spec.xLabel;
+    const yLabel = options.yLabel || spec.yLabel;
+    
     // Escalas (invertidas para horizontal)
     const y = d3.scaleBand()
       .domain(data.map(d => d.category))
@@ -6440,13 +6478,13 @@
       .attr('y', d => y(d.category))
       .attr('width', 0)
       .attr('height', y.bandwidth())
-      .attr('fill', spec.color || '#4a90e2')
+      .attr('fill', color)
       .transition()
       .duration(500)
       .attr('width', d => x(d.value));
     
     // Ejes
-    if (spec.axes !== false) {
+    if (axes !== false) {
       const xAxis = d3.axisBottom(x);
       const yAxis = d3.axisLeft(y);
       
@@ -6460,22 +6498,22 @@
         .style('opacity', 1);
       
       // Etiquetas
-      if (spec.xLabel) {
+      if (xLabel) {
         g.append('text')
           .attr('transform', `translate(${chartWidth / 2}, ${chartHeight + margin.bottom - 5})`)
           .style('text-anchor', 'middle')
           .style('font-size', '12px')
-          .text(spec.xLabel);
+          .text(xLabel);
       }
       
-      if (spec.yLabel) {
+      if (yLabel) {
         g.append('text')
           .attr('transform', 'rotate(-90)')
           .attr('y', -margin.left + 15)
           .attr('x', -chartHeight / 2)
           .style('text-anchor', 'middle')
           .style('font-size', '12px')
-          .text(spec.yLabel);
+          .text(yLabel);
       }
     }
   }
@@ -6523,8 +6561,15 @@
       .nice()
       .range([chartHeight, 0]);
     
+    // Obtener opciones del spec (pueden estar en spec.options o directamente en spec)
+    const options = spec.options || {};
+    const bins = options.bins !== undefined ? options.bins : (spec.bins !== undefined ? spec.bins : 20);
+    const colorScale = options.colorScale || spec.colorScale || 'Blues';
+    const axes = options.axes !== undefined ? options.axes : (spec.axes !== undefined ? spec.axes : true);
+    const xLabel = options.xLabel || spec.xLabel;
+    const yLabel = options.yLabel || spec.yLabel;
+    
     // Hexbin - Implementación manual (D3 v7 no incluye hexbin por defecto)
-    const bins = spec.options?.bins || 20;
     const hexRadius = Math.min(chartWidth, chartHeight) / (bins * 2);
     
     // Función para crear path de hexágono
@@ -6565,7 +6610,6 @@
       bin.y = hexRadius * (Math.sqrt(3) * (bin.q/2 + bin.r));
     });
     
-    const colorScale = spec.options?.colorScale || 'Blues';
     let color;
     if (colorScale === 'Blues') {
       color = d3.scaleSequential(d3.interpolateBlues)
@@ -6591,7 +6635,7 @@
       .attr('stroke-width', 0.5);
     
     // Ejes
-    if (spec.axes !== false) {
+    if (axes !== false) {
       const xAxis = d3.axisBottom(x);
       const yAxis = d3.axisLeft(y);
       
@@ -6605,22 +6649,22 @@
         .style('opacity', 1);
       
       // Etiquetas
-      if (spec.xLabel) {
+      if (xLabel) {
         g.append('text')
           .attr('transform', `translate(${chartWidth / 2}, ${chartHeight + margin.bottom - 5})`)
           .style('text-anchor', 'middle')
           .style('font-size', '12px')
-          .text(spec.xLabel);
+          .text(xLabel);
       }
       
-      if (spec.yLabel) {
+      if (yLabel) {
         g.append('text')
           .attr('transform', 'rotate(-90)')
           .attr('y', -margin.left + 15)
           .attr('x', -chartHeight / 2)
           .style('text-anchor', 'middle')
           .style('font-size', '12px')
-          .text(spec.yLabel);
+          .text(yLabel);
       }
     }
   }
@@ -6672,9 +6716,14 @@
       .nice()
       .range([chartHeight, 0]);
     
-    const capSize = spec.capSize || 5;
-    const strokeWidth = spec.strokeWidth || 2;
-    const color = spec.color || '#333';
+    // Obtener opciones del spec (pueden estar en spec.options o directamente en spec)
+    const options = spec.options || {};
+    const capSize = options.capSize || spec.capSize || 5;
+    const strokeWidth = options.strokeWidth || spec.strokeWidth || 2;
+    const color = options.color || spec.color || '#333';
+    const axes = options.axes !== undefined ? options.axes : (spec.axes !== undefined ? spec.axes : true);
+    const xLabel = options.xLabel || spec.xLabel;
+    const yLabel = options.yLabel || spec.yLabel;
     
     // Dibujar errorbars
     data.forEach(d => {
@@ -6756,7 +6805,7 @@
     });
     
     // Ejes
-    if (spec.axes !== false) {
+    if (axes !== false) {
       const xAxis = d3.axisBottom(x);
       const yAxis = d3.axisLeft(y);
       
@@ -6770,22 +6819,22 @@
         .style('opacity', 1);
       
       // Etiquetas
-      if (spec.xLabel) {
+      if (xLabel) {
         g.append('text')
           .attr('transform', `translate(${chartWidth / 2}, ${chartHeight + margin.bottom - 5})`)
           .style('text-anchor', 'middle')
           .style('font-size', '12px')
-          .text(spec.xLabel);
+          .text(xLabel);
       }
       
-      if (spec.yLabel) {
+      if (yLabel) {
         g.append('text')
           .attr('transform', 'rotate(-90)')
           .attr('y', -margin.left + 15)
           .attr('x', -chartHeight / 2)
           .style('text-anchor', 'middle')
           .style('font-size', '12px')
-          .text(spec.yLabel);
+          .text(yLabel);
       }
     }
   }
@@ -6845,15 +6894,24 @@
       .y1(d => y(d.y2 || d.y))
       .curve(d3.curveLinear);
     
+    // Obtener opciones del spec (pueden estar en spec.options o directamente en spec)
+    const options = spec.options || {};
+    const color = options.color || spec.color || '#4a90e2';
+    const opacity = options.opacity !== undefined ? options.opacity : (spec.opacity !== undefined ? spec.opacity : 0.3);
+    const showLines = options.showLines !== undefined ? options.showLines : (spec.showLines !== undefined ? spec.showLines : true);
+    const axes = options.axes !== undefined ? options.axes : (spec.axes !== undefined ? spec.axes : true);
+    const xLabel = options.xLabel || spec.xLabel;
+    const yLabel = options.yLabel || spec.yLabel;
+    
     // Dibujar área
     g.append('path')
       .datum(sortedData)
-      .attr('fill', spec.color || '#4a90e2')
-      .attr('opacity', spec.opacity || 0.3)
+      .attr('fill', color)
+      .attr('opacity', opacity)
       .attr('d', area);
     
     // Dibujar líneas opcionales
-    if (spec.showLines !== false) {
+    if (showLines !== false) {
       const line1 = d3.line()
         .x(d => x(d.x))
         .y(d => y(d.y1 || d.y))
@@ -6867,20 +6925,20 @@
       g.append('path')
         .datum(sortedData)
         .attr('fill', 'none')
-        .attr('stroke', spec.color || '#4a90e2')
+        .attr('stroke', color)
         .attr('stroke-width', 1.5)
         .attr('d', line1);
       
       g.append('path')
         .datum(sortedData)
         .attr('fill', 'none')
-        .attr('stroke', spec.color || '#4a90e2')
+        .attr('stroke', color)
         .attr('stroke-width', 1.5)
         .attr('d', line2);
     }
     
     // Ejes
-    if (spec.axes !== false) {
+    if (axes !== false) {
       const xAxis = d3.axisBottom(x);
       const yAxis = d3.axisLeft(y);
       
@@ -6894,22 +6952,22 @@
         .style('opacity', 1);
       
       // Etiquetas
-      if (spec.xLabel) {
+      if (xLabel) {
         g.append('text')
           .attr('transform', `translate(${chartWidth / 2}, ${chartHeight + margin.bottom - 5})`)
           .style('text-anchor', 'middle')
           .style('font-size', '12px')
-          .text(spec.xLabel);
+          .text(xLabel);
       }
       
-      if (spec.yLabel) {
+      if (yLabel) {
         g.append('text')
           .attr('transform', 'rotate(-90)')
           .attr('y', -margin.left + 15)
           .attr('x', -chartHeight / 2)
           .style('text-anchor', 'middle')
           .style('font-size', '12px')
-          .text(spec.yLabel);
+          .text(yLabel);
       }
     }
   }
@@ -6960,8 +7018,16 @@
       .nice()
       .range([chartHeight, 0]);
     
+    // Obtener opciones del spec (pueden estar en spec.options o directamente en spec)
+    const options = spec.options || {};
+    const stepType = options.stepType || spec.stepType || 'step';
+    const color = options.color || spec.color || '#4a90e2';
+    const strokeWidth = options.strokeWidth || spec.strokeWidth || 2;
+    const axes = options.axes !== undefined ? options.axes : (spec.axes !== undefined ? spec.axes : true);
+    const xLabel = options.xLabel || spec.xLabel;
+    const yLabel = options.yLabel || spec.yLabel;
+    
     // Crear línea escalonada
-    const stepType = spec.stepType || 'step';
     let line;
     
     if (stepType === 'stepBefore') {
@@ -6986,12 +7052,12 @@
     g.append('path')
       .datum(sortedData)
       .attr('fill', 'none')
-      .attr('stroke', spec.color || '#4a90e2')
-      .attr('stroke-width', spec.strokeWidth || 2)
+      .attr('stroke', color)
+      .attr('stroke-width', strokeWidth)
       .attr('d', line);
     
     // Ejes
-    if (spec.axes !== false) {
+    if (axes !== false) {
       const xAxis = d3.axisBottom(x);
       const yAxis = d3.axisLeft(y);
       
@@ -7005,22 +7071,22 @@
         .style('opacity', 1);
       
       // Etiquetas
-      if (spec.xLabel) {
+      if (xLabel) {
         g.append('text')
           .attr('transform', `translate(${chartWidth / 2}, ${chartHeight + margin.bottom - 5})`)
           .style('text-anchor', 'middle')
           .style('font-size', '12px')
-          .text(spec.xLabel);
+          .text(xLabel);
       }
       
-      if (spec.yLabel) {
+      if (yLabel) {
         g.append('text')
           .attr('transform', 'rotate(-90)')
           .attr('y', -margin.left + 15)
           .attr('x', -chartHeight / 2)
           .style('text-anchor', 'middle')
           .style('font-size', '12px')
-          .text(spec.yLabel);
+          .text(yLabel);
       }
     }
   }

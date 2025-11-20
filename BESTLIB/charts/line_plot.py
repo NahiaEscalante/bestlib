@@ -56,16 +56,18 @@ class LinePlotChart(ChartBase):
             **kwargs: Otros parámetros
         
         Returns:
-            tuple: (datos_procesados, datos_originales)
+            dict: Datos preparados con 'series' (prepare_line_data devuelve dict, no tuple)
         """
-        processed_data, original_data = prepare_line_data(
+        # prepare_line_data devuelve {'series': {...}}, no una tupla
+        line_data = prepare_line_data(
             data,
             x_col=x_col,
             y_col=y_col,
             series_col=series_col
         )
         
-        return processed_data, original_data
+        # Retornar el diccionario directamente (contiene 'series')
+        return line_data
     
     def get_spec(self, data, x_col=None, y_col=None, series_col=None, **kwargs):
         """
@@ -84,8 +86,8 @@ class LinePlotChart(ChartBase):
         # Validar datos
         self.validate_data(data, x_col=x_col, y_col=y_col, **kwargs)
         
-        # Preparar datos
-        processed_data, original_data = self.prepare_data(
+        # Preparar datos (devuelve dict con 'series')
+        line_data = self.prepare_data(
             data,
             x_col=x_col,
             y_col=y_col,
@@ -103,10 +105,11 @@ class LinePlotChart(ChartBase):
             kwargs['yLabel'] = y_col
         
         # Construir spec
+        # line_data ya contiene 'series', así que lo desempacamos directamente
         spec = {
             'type': self.chart_type,
-            'data': processed_data,
         }
+        spec.update(line_data)  # Agregar 'series' al spec
         
         # Agregar encoding
         encoding = {}
