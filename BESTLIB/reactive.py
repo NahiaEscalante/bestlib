@@ -1603,17 +1603,40 @@ class ReactiveMatrixLayout:
                             chartHeight = height - margin.top - margin.bottom;
                         }}
                         
+                        // IMPORTANTE: Calcular espacio necesario para etiquetas del eje X ANTES de limpiar
+                        // Necesitamos saber si las etiquetas estarán rotadas para calcular el espacio
+                        const data = {hist_data_json};
+                        let needsRotation = false;
+                        let extraHeightForXAxis = 50; // Valor por defecto seguro
+                        
+                        if (data.length > 0) {{
+                            const numBins = data.length;
+                            const maxBinLabelLength = Math.max(...data.map(d => String(d.bin).length), 0);
+                            needsRotation = numBins > 8 || maxBinLabelLength > 8;
+                            
+                            // Calcular espacio adicional basado en si hay rotación
+                            // Etiquetas rotadas a -45 grados necesitan más espacio (hasta 60-70px)
+                            // Etiquetas normales necesitan menos (25-30px)
+                            // + espacio para la etiqueta del eje X (20px)
+                            const extraHeightForRotatedLabels = needsRotation ? 60 : 0; // Espacio para etiquetas rotadas (-45 grados)
+                            const extraHeightForXAxisLabel = 20; // Espacio para la etiqueta "Sepal Length"
+                            extraHeightForXAxis = extraHeightForRotatedLabels + extraHeightForXAxisLabel;
+                        }}
+                        
+                        const svgHeight = height + extraHeightForXAxis;
+                        
                         // CRÍTICO: Establecer altura mínima y máxima explícitamente en la celda
                         // ANTES de limpiar el innerHTML para prevenir expansión infinita
-                        targetCell.style.minHeight = height + 'px';
-                        targetCell.style.maxHeight = height + 'px';
-                        targetCell.style.height = height + 'px';
+                        // Usar svgHeight para el contenedor para que las etiquetas se vean
+                        targetCell.style.minHeight = svgHeight + 'px';
+                        targetCell.style.maxHeight = svgHeight + 'px';
+                        targetCell.style.height = svgHeight + 'px';
                         targetCell.style.overflow = 'hidden';
                         
                         // CRÍTICO: Limpiar solo después de establecer dimensiones
                         targetCell.innerHTML = '';
                         
-                        const data = {hist_data_json};
+                        // data ya fue definido arriba para calcular needsRotation
                         
                         if (data.length === 0) {{
                             targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
@@ -1622,11 +1645,12 @@ class ReactiveMatrixLayout:
                         
                         // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
                         // IMPORTANTE: Usar overflow: visible para que las etiquetas de ejes se vean
+                        // Usar svgHeight para incluir espacio para las etiquetas del eje X
                         const svg = window.d3.select(targetCell)
                             .append('svg')
                             .attr('width', width)
-                            .attr('height', height)
-                            .style('max-height', height + 'px')
+                            .attr('height', svgHeight)
+                            .style('max-height', svgHeight + 'px')
                             .style('overflow', 'visible')
                             .style('display', 'block');
                         
@@ -1710,11 +1734,9 @@ class ReactiveMatrixLayout:
                             .attr('height', d => chartHeight - y(d.count));
                         
                         if ({str(show_axes).lower()}) {{
-                            // Detectar si necesitamos rotar etiquetas del eje X
-                            const numBins = data.length;
-                            const maxBinLabelLength = Math.max(...data.map(d => String(d.bin).length), 0);
-                            const needsRotation = numBins > 8 || maxBinLabelLength > 8;
+                            // Detectar si necesitamos rotar etiquetas del eje X (ya calculado arriba)
                             const rotationAngle = needsRotation ? -45 : 0;
+                            const numBins = data.length;
                             
                             const xAxis = g.append('g')
                                 .attr('transform', `translate(0,${{chartHeight}})`)
@@ -1756,8 +1778,13 @@ class ReactiveMatrixLayout:
                             
                             // Renderizar etiquetas de ejes
                             // Etiqueta del eje X (debajo del gráfico)
+                            // Ajustar posición Y para que esté dentro del espacio adicional del SVG
                             const xLabelX = chartWidth / 2;
-                            const xLabelY = chartHeight + margin.bottom - 10;
+                            // Posicionar la etiqueta dentro del espacio adicional calculado
+                            // chartHeight + margin.bottom es donde termina el área del gráfico
+                            // Agregar espacio para las etiquetas rotadas si las hay (45px para -45 grados), luego la etiqueta (15px)
+                            const spaceForRotatedLabels = needsRotation ? 45 : 0;
+                            const xLabelY = chartHeight + margin.bottom + spaceForRotatedLabels + 15;
                             
                             const xLabelText = g.append('text')
                                 .attr('x', xLabelX)
@@ -2136,14 +2163,37 @@ class ReactiveMatrixLayout:
                             chartHeight = Math.max(height - margin.top - margin.bottom, 150);
                         }}
                         
+                        // IMPORTANTE: Calcular espacio necesario para etiquetas del eje X
+                        // Necesitamos saber si las etiquetas estarán rotadas para calcular el espacio
+                        const data = {box_data_json};
+                        let needsRotation = false;
+                        let extraHeightForXAxis = 50; // Valor por defecto seguro
+                        
+                        if (data.length > 0) {{
+                            // Para boxplot, las etiquetas de categorías pueden ser largas
+                            const maxCategoryLength = Math.max(...data.map(d => String(d.category).length), 0);
+                            needsRotation = data.length > 3 || maxCategoryLength > 10;
+                            
+                            // Calcular espacio adicional basado en si hay rotación
+                            // Etiquetas rotadas a -45 grados necesitan más espacio (hasta 60-70px)
+                            // Etiquetas normales necesitan menos (25-30px)
+                            // + espacio para la etiqueta del eje X (20px)
+                            const extraHeightForRotatedLabels = needsRotation ? 60 : 0; // Espacio para etiquetas rotadas (-45 grados)
+                            const extraHeightForXAxisLabel = 20; // Espacio para la etiqueta "Species"
+                            extraHeightForXAxis = extraHeightForRotatedLabels + extraHeightForXAxisLabel;
+                        }}
+                        
+                        const svgHeight = height + extraHeightForXAxis;
+                        
                         // CRÍTICO: Establecer altura mínima y máxima explícitamente en la celda
                         // para prevenir expansión infinita
-                        targetCell.style.minHeight = height + 'px';
-                        targetCell.style.maxHeight = height + 'px';
-                        targetCell.style.height = height + 'px';
+                        // Usar svgHeight para el contenedor para que las etiquetas se vean
+                        targetCell.style.minHeight = svgHeight + 'px';
+                        targetCell.style.maxHeight = svgHeight + 'px';
+                        targetCell.style.height = svgHeight + 'px';
                         targetCell.style.overflow = 'hidden';
                         
-                        const data = {box_data_json};
+                        // data ya fue definido arriba para calcular needsRotation
                         
                         if (data.length === 0) {{
                             targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
@@ -2153,11 +2203,12 @@ class ReactiveMatrixLayout:
                         
                         // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
                         // IMPORTANTE: Usar overflow: visible para que las etiquetas de ejes se vean
+                        // Usar svgHeight para incluir espacio para las etiquetas del eje X
                         const svg = window.d3.select(targetCell)
                             .append('svg')
                             .attr('width', width)
-                            .attr('height', height)
-                            .style('max-height', height + 'px')
+                            .attr('height', svgHeight)
+                            .style('max-height', svgHeight + 'px')
                             .style('overflow', 'visible')
                             .style('display', 'block');
                         
@@ -2247,8 +2298,13 @@ class ReactiveMatrixLayout:
                             
                             // Renderizar etiquetas de ejes
                             // Etiqueta del eje X (debajo del gráfico)
+                            // Ajustar posición Y para que esté dentro del espacio adicional del SVG
                             const xLabelX = chartWidth / 2;
-                            const xLabelY = chartHeight + margin.bottom - 10;
+                            // Posicionar la etiqueta dentro del espacio adicional calculado
+                            // chartHeight + margin.bottom es donde termina el área del gráfico
+                            // Agregar espacio para las etiquetas rotadas si las hay (45px para -45 grados), luego la etiqueta (15px)
+                            const spaceForRotatedLabels = needsRotation ? 45 : 0;
+                            const xLabelY = chartHeight + margin.bottom + spaceForRotatedLabels + 15;
                             
                             const xLabelText = g.append('text')
                                 .attr('x', xLabelX)
