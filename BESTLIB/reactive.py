@@ -2242,33 +2242,40 @@ class ReactiveMatrixLayout:
                             extraHeightForXAxis = extraHeightForRotatedLabels + extraHeightForXAxisLabel;
                         }}
                         
-                        // CRÍTICO: El SVG debe caber dentro de la celda sin cambiar su tamaño
-                        // Usar la altura de la celda como altura máxima del SVG
-                        const svgHeight = Math.min(height, cellHeight);
+                        // 🔒 CORRECCIÓN: Calcular svgHeight asegurando que incluya espacio para el eje X
+                        // El SVG debe incluir el espacio para etiquetas rotadas y labels
+                        const baseHeight = Math.min(height, cellHeight);
+                        const svgHeight = baseHeight;
                         
-                        // Ajustar chartHeight para que el eje X quepa dentro del SVG
+                        // 🔒 CORRECCIÓN: Calcular chartHeight asegurando que el eje X quepa dentro del SVG
                         // Reducir chartHeight para dejar espacio para el eje X y sus etiquetas
                         let chartHeight = svgHeight - margin.top - margin.bottom - extraHeightForXAxis;
                         let chartWidth = width - margin.left - margin.right;
                         
-                        // Asegurar dimensiones mínimas
+                        // 🔒 CORRECCIÓN: Asegurar dimensiones mínimas y que todo quepa dentro del SVG
                         const minChartWidth = 200;
                         const minChartHeight = 150;
                         if (chartWidth < minChartWidth) {{
                             chartWidth = minChartWidth;
                             width = chartWidth + margin.left + margin.right;
                         }}
+                        // Asegurar que chartHeight sea válido y que el eje X quepa
                         if (chartHeight < minChartHeight) {{
-                            // Si no cabe, reducir el espacio extra del eje X
-                            const minRequiredHeight = margin.top + margin.bottom + minChartHeight;
+                            // Si no cabe, ajustar para que quepa el mínimo pero sin salirse del SVG
+                            const minRequiredHeight = margin.top + margin.bottom + minChartHeight + extraHeightForXAxis;
                             if (svgHeight >= minRequiredHeight) {{
-                                chartHeight = svgHeight - margin.top - margin.bottom;
-                                // Ajustar extraHeightForXAxis para que quepa
-                                extraHeightForXAxis = Math.max(20, svgHeight - margin.top - margin.bottom - chartHeight);
+                                chartHeight = svgHeight - margin.top - margin.bottom - extraHeightForXAxis;
                             }} else {{
-                                chartHeight = minChartHeight;
+                                // Si aún no cabe, reducir extraHeightForXAxis pero mantener mínimo
+                                const availableHeight = svgHeight - margin.top - margin.bottom;
+                                chartHeight = Math.max(minChartHeight, availableHeight - extraHeightForXAxis);
+                                // Ajustar extraHeightForXAxis para que quepa
+                                extraHeightForXAxis = Math.max(20, availableHeight - chartHeight);
                             }}
                         }}
+                        
+                        // 🔒 CORRECCIÓN: Asegurar que chartHeight no sea negativo
+                        chartHeight = Math.max(chartHeight, minChartHeight);
                         
                         // CRÍTICO: NO modificar estilos de la celda - mantener tamaño fijo del grid
                         // data ya fue definido arriba para calcular needsRotation
@@ -2279,13 +2286,15 @@ class ReactiveMatrixLayout:
                             return;
                         }}
                         
-                        // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
+                        // 🔒 CORRECCIÓN: Establecer SVG con viewBox para mejor escalado y ajuste al contenedor
                         // IMPORTANTE: Usar overflow: visible para que las etiquetas de ejes se vean
                         // El SVG debe caber dentro de la celda sin cambiar su tamaño
                         const svg = window.d3.select(targetCell)
                             .append('svg')
-                            .attr('width', width)
-                            .attr('height', svgHeight)
+                            .attr('width', '100%')
+                            .attr('height', '100%')
+                            .attr('viewBox', `0 0 ${{width}} ${{svgHeight}}`)
+                            .attr('preserveAspectRatio', 'xMidYMid meet')
                             .style('max-width', '100%')
                             .style('max-height', '100%')
                             .style('overflow', 'visible')
@@ -2299,8 +2308,14 @@ class ReactiveMatrixLayout:
                             .range([0, chartWidth])
                             .padding(0.2);
                         
+                        // 🔒 CORRECCIÓN: Calcular dominio Y asegurando que siempre sea válido
+                        const yMin = window.d3.min(data, d => d.lower);
+                        const yMax = window.d3.max(data, d => d.upper);
+                        // Asegurar que el dominio sea válido (no NaN, no infinito)
+                        const yDomainMin = (isFinite(yMin) && !isNaN(yMin)) ? yMin : 0;
+                        const yDomainMax = (isFinite(yMax) && !isNaN(yMax)) ? yMax : (yDomainMin + 1);
                         const y = window.d3.scaleLinear()
-                            .domain([window.d3.min(data, d => d.lower), window.d3.max(data, d => d.upper)])
+                            .domain([yDomainMin, yDomainMax])
                             .nice()
                             .range([chartHeight, 0]);
                         
@@ -2348,32 +2363,55 @@ class ReactiveMatrixLayout:
                         }});
                         
                         if ({str(show_axes).lower()}) {{
+                            // 🔒 CORRECCIÓN: Eje X - Asegurar que se muestre correctamente y no se salga del SVG
                             const xAxis = g.append('g')
-                                .attr('transform', `translate(0,${{chartHeight}})`)
-                                .call(window.d3.axisBottom(x));
+                                .attr('class', 'x-axis')
+                                .attr('transform', `translate(0,${{chartHeight}})`);
                             
+                            const xAxisGenerator = window.d3.axisBottom(x);
+                            xAxis.call(xAxisGenerator);
+                            
+                            // Estilizar etiquetas del eje X con rotación si es necesario
                             xAxis.selectAll('text')
-                                .style('font-size', '12px')
+                                .style('font-size', needsRotation ? '10px' : '12px')
                                 .style('font-weight', '600')
                                 .style('fill', '#000000')
-                                .style('font-family', 'Arial, sans-serif');
+                                .style('font-family', 'Arial, sans-serif')
+                                .attr('transform', needsRotation ? 'rotate(-45)' : null)
+                                .style('text-anchor', needsRotation ? 'end' : 'middle')
+                                .attr('dx', needsRotation ? '-0.5em' : '0')
+                                .attr('dy', needsRotation ? '0.5em' : '0.7em')
+                                .style('opacity', 1);  // Asegurar que sean visibles
                             
+                            // Estilizar líneas del eje X
                             xAxis.selectAll('line, path')
                                 .style('stroke', '#000000')
-                                .style('stroke-width', '1.5px');
+                                .style('stroke-width', '1.5px')
+                                .style('opacity', 1);  // Asegurar que sean visibles
                             
+                            // 🔒 CORRECCIÓN: Eje Y - Asegurar que se muestre correctamente
                             const yAxis = g.append('g')
-                                .call(window.d3.axisLeft(y).ticks(5));
+                                .attr('class', 'y-axis');
                             
+                            const yAxisGenerator = window.d3.axisLeft(y)
+                                .ticks(5)
+                                .tickFormat(window.d3.format('.2f'));  // Formato numérico para el eje Y
+                            
+                            yAxis.call(yAxisGenerator);
+                            
+                            // Estilizar etiquetas del eje Y
                             yAxis.selectAll('text')
                                 .style('font-size', '12px')
                                 .style('font-weight', '600')
                                 .style('fill', '#000000')
-                                .style('font-family', 'Arial, sans-serif');
+                                .style('font-family', 'Arial, sans-serif')
+                                .style('opacity', 1);  // Asegurar que sean visibles
                             
+                            // Estilizar líneas del eje Y
                             yAxis.selectAll('line, path')
                                 .style('stroke', '#000000')
-                                .style('stroke-width', '1.5px');
+                                .style('stroke-width', '1.5px')
+                                .style('opacity', 1);  // Asegurar que sean visibles
                             
                             // Renderizar etiquetas de ejes
                             // Etiqueta del eje X (debajo del gráfico)
