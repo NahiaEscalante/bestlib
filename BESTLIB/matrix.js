@@ -5613,15 +5613,15 @@
                 viewLetter = idMatch[1];
             }
           }
-          }
-
-        sendEvent(divId, 'select', { 
+          
+          sendEvent(divId, 'select', { 
             type: 'select',
             items: items,  // Enviar todas las filas originales de esta categoría
             indices: [index],
             original_items: [d],
             _original_rows: items,  // También incluir como _original_rows para compatibilidad
-            __view_letter__: viewLetter,
+            __view_letter__: viewLetter || spec.__view_letter__ || null,
+            __is_primary_view__: spec.__is_primary_view__ || false
             __is_primary_view__: spec.__is_primary_view__ || false
           });
         }

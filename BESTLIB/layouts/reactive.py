@@ -1700,11 +1700,26 @@ class ReactiveMatrixLayout:
                     # El mapping se actualiza cuando se crea inicialmente el histograma
                     # Los _original_rows ya están incluidos en hist_data
                     
-                    # JavaScript para actualizar el gráfico (similar a bar chart)
+                    # CRÍTICO: Usar renderHistogramD3 si está disponible, sino generar JavaScript manual
                     div_id = hist_params['layout_div_id']
                     hist_data_json = json.dumps(_sanitize_for_json(hist_data))
                     default_color = kwargs.get('color', '#4a90e2')
                     show_axes = kwargs.get('axes', True)
+                    x_label = kwargs.get('xLabel', column or 'Value')
+                    y_label = kwargs.get('yLabel', 'Frequency')
+                    
+                    # Crear spec completo para renderHistogramD3
+                    spec_dict = {
+                        'type': 'histogram',
+                        'data': hist_data,
+                        'color': default_color,
+                        'axes': show_axes,
+                        'xLabel': x_label,
+                        'yLabel': y_label,
+                        '__linked_to__': kwargs.get('__linked_to__'),
+                        '__view_letter__': letter
+                    }
+                    spec_json = json.dumps(_sanitize_for_json(spec_dict))
                     
                     js_update = f"""
                 (function() {{
@@ -1734,107 +1749,123 @@ class ReactiveMatrixLayout:
                         
                         if (!targetCell) return;
                         
-                        // CRÍTICO: Calcular dimensiones ANTES de limpiar el innerHTML
-                        // para evitar que la celda pierda sus dimensiones
-                        const dims = window.getChartDimensions ? 
-                            window.getChartDimensions(targetCell, {{ type: 'histogram' }}, 400, 350) :
-                            {{ width: Math.max(targetCell.clientWidth || 400, 200), height: 350 }};
-                        const width = dims.width;
-                        const height = dims.height;
-                        const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
-                        const chartWidth = width - margin.left - margin.right;
-                        const chartHeight = height - margin.top - margin.bottom;
+                        // CRÍTICO: Limpiar solo el contenido, no la estructura
+                        const existingSvg = targetCell.querySelector('svg');
+                        if (existingSvg) {{
+                            existingSvg.remove();
+                        }}
                         
-                        // CRÍTICO: Establecer altura mínima y máxima explícitamente en la celda
-                        // ANTES de limpiar el innerHTML para prevenir expansión infinita
-                        targetCell.style.minHeight = height + 'px';
-                        targetCell.style.maxHeight = height + 'px';
-                        targetCell.style.height = height + 'px';
-                        targetCell.style.overflow = 'hidden';
-                        
-                        // CRÍTICO: Limpiar solo después de establecer dimensiones
-                        targetCell.innerHTML = '';
-                        
-                        const data = {hist_data_json};
+                        const spec = {spec_json};
+                        const data = spec.data || [];
                         
                         if (data.length === 0) {{
                             targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
                             return;
                         }}
                         
-                        // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
-                        const svg = window.d3.select(targetCell)
-                            .append('svg')
-                            .attr('width', width)
-                            .attr('height', height)
-                            .style('max-height', height + 'px')
-                            .style('overflow', 'hidden')
-                            .style('display', 'block');
-                        
-                        const g = svg.append('g')
-                            .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
-                        
-                        const x = window.d3.scaleBand()
-                            .domain(data.map(d => d.bin))
-                            .range([0, chartWidth])
-                            .padding(0.1);
-                        
-                        const y = window.d3.scaleLinear()
-                            .domain([0, window.d3.max(data, d => d.count) || 100])
-                            .nice()
-                            .range([chartHeight, 0]);
-                        
-                        // IMPORTANTE: Agregar event listeners a las barras para interactividad
-                        const bars = g.selectAll('.bar')
-                            .data(data)
-                            .enter()
-                            .append('rect')
-                            .attr('class', 'bar')
-                            .attr('x', d => x(d.bin))
-                            .attr('y', chartHeight)
-                            .attr('width', x.bandwidth())
-                            .attr('height', 0)
-                            .attr('fill', '{default_color}')
-                            .style('cursor', 'pointer')
-                            .on('click', function(event, d) {{
-                                // IMPORTANTE: Enviar todas las filas originales que corresponden a este bin
-                                const originalRows = d._original_rows || d._original_row || (d._original_row ? [d._original_row] : null) || [];
-                                
-                                // Asegurar que originalRows sea un array
-                                const items = Array.isArray(originalRows) && originalRows.length > 0 ? originalRows : [];
-                                
-                                // Si no hay filas originales, intentar enviar al menos información del bin
-                                if (items.length === 0) {{
-                                    console.warn(`[Histogram] No se encontraron filas originales para el bin ${{d.bin}}. Asegúrese de que los datos se prepararon correctamente.`);
-                                    items.push({{ bin: d.bin, count: d.count }});
-                                }}
-                                
-                                // Obtener letra de la vista
-                                const viewLetter = '{letter}';
-                                if (window.sendEvent && typeof window.sendEvent === 'function') {{
-                                    window.sendEvent('{div_id}', 'select', {{
-                                        type: 'select',
-                                        items: items,  // Enviar todas las filas originales de este bin
-                                        indices: [],
-                                        original_items: [d],
-                                        _original_rows: items,  // También incluir como _original_rows para compatibilidad
-                                        __view_letter__: viewLetter,
-                                        __is_primary_view__: false  // Histogram enlazado no es vista principal
-                                    }});
-                                }}
-                            }})
-                            .transition()
-                            .duration(500)
-                            .attr('y', d => y(d.count))
-                            .attr('height', d => chartHeight - y(d.count));
-                        
-                        if ({str(show_axes).lower()}) {{
-                            const xAxis = g.append('g')
-                                .attr('transform', `translate(0,${{chartHeight}})`)
-                                .call(window.d3.axisBottom(x));
+                        // CRÍTICO: Usar renderHistogramD3 si está disponible
+                        if (window.renderHistogramD3 && typeof window.renderHistogramD3 === 'function') {{
+                            window.renderHistogramD3(targetCell, spec, window.d3, '{div_id}');
+                        }} else {{
+                            // Fallback: renderizar manualmente
+                            const dims = window.getChartDimensions ? 
+                                window.getChartDimensions(targetCell, {{ type: 'histogram' }}, 400, 350) :
+                                {{ width: Math.max(targetCell.clientWidth || 400, 200), height: 350 }};
+                            const width = dims.width;
+                            const height = dims.height;
+                            const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
+                            const chartWidth = width - margin.left - margin.right;
+                            const chartHeight = height - margin.top - margin.bottom;
                             
-                            const yAxis = g.append('g')
-                                .call(window.d3.axisLeft(y));
+                            targetCell.style.minHeight = height + 'px';
+                            targetCell.style.maxHeight = height + 'px';
+                            targetCell.style.height = height + 'px';
+                            targetCell.style.overflow = 'hidden';
+                            
+                            const svg = window.d3.select(targetCell)
+                                .append('svg')
+                                .attr('width', width)
+                                .attr('height', height)
+                                .style('max-height', height + 'px')
+                                .style('overflow', 'hidden')
+                                .style('display', 'block');
+                            
+                            const g = svg.append('g')
+                                .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
+                            
+                            // Usar scaleLinear para histograma (bins son valores numéricos)
+                            const binValues = data.map(d => d.bin).sort((a, b) => a - b);
+                            const minBin = binValues[0];
+                            const maxBin = binValues[binValues.length - 1];
+                            let binSpacing = 1;
+                            if (binValues.length > 1) {{
+                                const diffs = [];
+                                for (let i = 1; i < binValues.length; i++) {{
+                                    diffs.push(binValues[i] - binValues[i-1]);
+                                }}
+                                binSpacing = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+                            }}
+                            
+                            const x = window.d3.scaleLinear()
+                                .domain([minBin - binSpacing / 2, maxBin + binSpacing / 2])
+                                .range([0, chartWidth]);
+                            
+                            const y = window.d3.scaleLinear()
+                                .domain([0, window.d3.max(data, d => d.count) || 100])
+                                .nice()
+                                .range([chartHeight, 0]);
+                            
+                            const barWidthPixels = x(minBin + binSpacing) - x(minBin);
+                            const barWidth = Math.max(barWidthPixels * 0.9, 1);
+                            
+                            g.selectAll('.bar')
+                                .data(data)
+                                .enter()
+                                .append('rect')
+                                .attr('class', 'bar bestlib-bar')
+                                .attr('x', d => x(d.bin) - barWidth / 2)
+                                .attr('y', chartHeight)
+                                .attr('width', barWidth)
+                                .attr('height', 0)
+                                .attr('fill', spec.color || '{default_color}')
+                                .transition()
+                                .duration(500)
+                                .attr('y', d => y(d.count))
+                                .attr('height', d => chartHeight - y(d.count));
+                            
+                            if (spec.axes !== false) {{
+                                const xAxis = g.append('g')
+                                    .attr('transform', `translate(0,${{chartHeight}})`)
+                                    .call(window.d3.axisBottom(x));
+                                
+                                const yAxis = g.append('g')
+                                    .call(window.d3.axisLeft(y));
+                                
+                                // Renderizar etiquetas de ejes
+                                if (window.renderAxisLabels && typeof window.renderAxisLabels === 'function') {{
+                                    window.renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+                                }} else if (spec.xLabel || spec.yLabel) {{
+                                    if (spec.xLabel) {{
+                                        g.append('text')
+                                            .attr('x', chartWidth / 2)
+                                            .attr('y', chartHeight + margin.bottom - 10)
+                                            .attr('text-anchor', 'middle')
+                                            .style('font-size', '13px')
+                                            .style('font-weight', '600')
+                                            .text(spec.xLabel);
+                                    }}
+                                    if (spec.yLabel) {{
+                                        svg.append('text')
+                                            .attr('x', margin.left / 2 - 8)
+                                            .attr('y', margin.top + chartHeight / 2)
+                                            .attr('text-anchor', 'middle')
+                                            .attr('transform', 'rotate(-90 ' + (margin.left / 2 - 8) + ' ' + (margin.top + chartHeight / 2) + ')')
+                                            .style('font-size', '13px')
+                                            .style('font-weight', '600')
+                                            .text(spec.yLabel);
+                                    }}
+                                }}
+                            }}
                         }}
                     }}
                     
@@ -2165,11 +2196,26 @@ class ReactiveMatrixLayout:
                 # Actualizar el mapping global causa que el sistema detecte cambios y re-renderice todo el layout,
                 # lo que resulta en duplicación de gráficos, especialmente en layouts grandes (3x3, etc.)
                 
-                # JavaScript para actualizar el gráfico
+                # CRÍTICO: Usar renderBoxplotD3 si está disponible, sino generar JavaScript manual
                 div_id = boxplot_params['layout_div_id']
                 box_data_json = json.dumps(_sanitize_for_json(box_data))
                 default_color = kwargs.get('color', '#4a90e2')
                 show_axes = kwargs.get('axes', True)
+                x_label = kwargs.get('xLabel', category_col or 'Category')
+                y_label = kwargs.get('yLabel', column or 'Value')
+                
+                # Crear spec completo para renderBoxplotD3
+                spec_dict = {
+                    'type': 'boxplot',
+                    'data': box_data,
+                    'color': default_color,
+                    'axes': show_axes,
+                    'xLabel': x_label,
+                    'yLabel': y_label,
+                    '__linked_to__': kwargs.get('__linked_to__'),
+                    '__view_letter__': letter
+                }
+                spec_json = json.dumps(_sanitize_for_json(spec_dict))
                 
                 js_update = f"""
                 (function() {{
@@ -2194,7 +2240,6 @@ class ReactiveMatrixLayout:
                         const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
                         let targetCell = null;
                         
-                        // Buscar celda con SVG existente (más robusto)
                         for (let cell of cells) {{
                             const svg = cell.querySelector('svg');
                             if (svg) {{
@@ -2203,7 +2248,6 @@ class ReactiveMatrixLayout:
                             }}
                         }}
                         
-                        // Si no encontramos, usar la primera celda
                         if (!targetCell && cells.length > 0) {{
                             targetCell = cells[0];
                         }}
@@ -2213,43 +2257,14 @@ class ReactiveMatrixLayout:
                             return;
                         }}
                         
-                        // CRÍTICO: Solo limpiar el contenido de la celda, NO tocar el contenedor principal
-                        // Esto evita que se dispare un re-render del layout completo
-                        // IMPORTANTE: Desconectar ResizeObserver temporalmente para evitar re-renders
-                        if (targetCell._resizeObserver) {{
-                            targetCell._resizeObserver.disconnect();
-                        }}
-                        
-                        // En lugar de usar innerHTML = '', removemos solo el SVG existente
+                        // CRÍTICO: Limpiar solo el contenido, no la estructura
                         const existingSvg = targetCell.querySelector('svg');
                         if (existingSvg) {{
                             existingSvg.remove();
                         }}
-                        // Limpiar cualquier otro contenido visual (divs, etc.) pero mantener la estructura de la celda
-                        const otherContent = targetCell.querySelectorAll('div:not(.matrix-cell)');
-                        otherContent.forEach(el => el.remove());
                         
-                        // NO reconectar el ResizeObserver aquí - se reconectará después de renderizar si es necesario
-                        
-                        // CRÍTICO: Usar getChartDimensions() para calcular dimensiones de manera consistente
-                        // Esto asegura que respeta max_width y usa la misma lógica que el render inicial
-                        const dims = window.getChartDimensions ? 
-                            window.getChartDimensions(targetCell, {{ type: 'boxplot' }}, 400, 350) :
-                            {{ width: Math.max(targetCell.clientWidth || 400, 200), height: 350 }};
-                        const width = dims.width;
-                        const height = dims.height;
-                        const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
-                        const chartWidth = width - margin.left - margin.right;
-                        const chartHeight = height - margin.top - margin.bottom;
-                        
-                        // CRÍTICO: Establecer altura mínima y máxima explícitamente en la celda
-                        // para prevenir expansión infinita
-                        targetCell.style.minHeight = height + 'px';
-                        targetCell.style.maxHeight = height + 'px';
-                        targetCell.style.height = height + 'px';
-                        targetCell.style.overflow = 'hidden';
-                        
-                        const data = {box_data_json};
+                        const spec = {spec_json};
+                        const data = spec.data || [];
                         
                         if (data.length === 0) {{
                             targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
@@ -2257,84 +2272,123 @@ class ReactiveMatrixLayout:
                             return;
                         }}
                         
-                        // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
-                        const svg = window.d3.select(targetCell)
-                            .append('svg')
-                            .attr('width', width)
-                            .attr('height', height)
-                            .style('max-height', height + 'px')
-                            .style('overflow', 'hidden')
-                            .style('display', 'block');
-                        
-                        const g = svg.append('g')
-                            .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
-                        
-                        const x = window.d3.scaleBand()
-                            .domain(data.map(d => d.category))
-                            .range([0, chartWidth])
-                            .padding(0.2);
-                        
-                        const y = window.d3.scaleLinear()
-                            .domain([window.d3.min(data, d => d.lower), window.d3.max(data, d => d.upper)])
-                            .nice()
-                            .range([chartHeight, 0]);
-                        
-                        // Dibujar boxplot para cada categoría
-                        data.forEach((d, i) => {{
-                            const xPos = x(d.category);
-                            const boxWidth = x.bandwidth();
-                            const centerX = xPos + boxWidth / 2;
+                        // CRÍTICO: Usar renderBoxplotD3 si está disponible
+                        if (window.renderBoxplotD3 && typeof window.renderBoxplotD3 === 'function') {{
+                            window.renderBoxplotD3(targetCell, spec, window.d3, '{div_id}');
+                        }} else {{
+                            // Fallback: renderizar manualmente
+                            const dims = window.getChartDimensions ? 
+                                window.getChartDimensions(targetCell, {{ type: 'boxplot' }}, 400, 350) :
+                                {{ width: Math.max(targetCell.clientWidth || 400, 200), height: 350 }};
+                            const width = dims.width;
+                            const height = dims.height;
+                            const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
+                            const chartWidth = width - margin.left - margin.right;
+                            const chartHeight = height - margin.top - margin.bottom;
                             
-                            // Bigotes (whiskers)
-                            g.append('line')
-                                .attr('x1', centerX)
-                                .attr('x2', centerX)
-                                .attr('y1', y(d.lower))
-                                .attr('y2', y(d.q1))
-                                .attr('stroke', '#000')
-                                .attr('stroke-width', 2);
+                            targetCell.style.minHeight = height + 'px';
+                            targetCell.style.maxHeight = height + 'px';
+                            targetCell.style.height = height + 'px';
+                            targetCell.style.overflow = 'hidden';
                             
-                            g.append('line')
-                                .attr('x1', centerX)
-                                .attr('x2', centerX)
-                                .attr('y1', y(d.q3))
-                                .attr('y2', y(d.upper))
-                                .attr('stroke', '#000')
-                                .attr('stroke-width', 2);
+                            const svg = window.d3.select(targetCell)
+                                .append('svg')
+                                .attr('width', width)
+                                .attr('height', height)
+                                .style('max-height', height + 'px')
+                                .style('overflow', 'hidden')
+                                .style('display', 'block');
                             
-                            // Caja (box)
-                            g.append('rect')
-                                .attr('x', xPos)
-                                .attr('y', y(d.q3))
-                                .attr('width', boxWidth)
-                                .attr('height', y(d.q1) - y(d.q3))
-                                .attr('fill', '{default_color}')
-                                .attr('stroke', '#000')
-                                .attr('stroke-width', 2);
+                            const g = svg.append('g')
+                                .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
                             
-                            // Mediana (median line)
-                            g.append('line')
-                                .attr('x1', xPos)
-                                .attr('x2', xPos + boxWidth)
-                                .attr('y1', y(d.median))
-                                .attr('y2', y(d.median))
-                                .attr('stroke', '#fff')
-                                .attr('stroke-width', 2);
-                        }});
-                        
-                        if ({str(show_axes).lower()}) {{
-                            const xAxis = g.append('g')
-                                .attr('transform', `translate(0,${{chartHeight}})`)
-                                .call(window.d3.axisBottom(x));
+                            const x = window.d3.scaleBand()
+                                .domain(data.map(d => d.category))
+                                .range([0, chartWidth])
+                                .padding(0.2);
                             
-                            const yAxis = g.append('g')
-                                .call(window.d3.axisLeft(y));
+                            const y = window.d3.scaleLinear()
+                                .domain([window.d3.min(data, d => d.lower), window.d3.max(data, d => d.upper)])
+                                .nice()
+                                .range([chartHeight, 0]);
+                            
+                            // Dibujar boxplot para cada categoría
+                            data.forEach((d, i) => {{
+                                const xPos = x(d.category);
+                                const boxWidth = x.bandwidth();
+                                const centerX = xPos + boxWidth / 2;
+                                
+                                // Bigotes (whiskers)
+                                g.append('line')
+                                    .attr('x1', centerX)
+                                    .attr('x2', centerX)
+                                    .attr('y1', y(d.lower))
+                                    .attr('y2', y(d.q1))
+                                    .attr('stroke', '#000')
+                                    .attr('stroke-width', 2);
+                                
+                                g.append('line')
+                                    .attr('x1', centerX)
+                                    .attr('x2', centerX)
+                                    .attr('y1', y(d.q3))
+                                    .attr('y2', y(d.upper))
+                                    .attr('stroke', '#000')
+                                    .attr('stroke-width', 2);
+                                
+                                // Caja (box)
+                                g.append('rect')
+                                    .attr('x', xPos)
+                                    .attr('y', y(d.q3))
+                                    .attr('width', boxWidth)
+                                    .attr('height', y(d.q1) - y(d.q3))
+                                    .attr('fill', spec.color || '{default_color}')
+                                    .attr('stroke', '#000')
+                                    .attr('stroke-width', 2);
+                                
+                                // Mediana (median line)
+                                g.append('line')
+                                    .attr('x1', xPos)
+                                    .attr('x2', xPos + boxWidth)
+                                    .attr('y1', y(d.median))
+                                    .attr('y2', y(d.median))
+                                    .attr('stroke', '#fff')
+                                    .attr('stroke-width', 2);
+                            }});
+                            
+                            if (spec.axes !== false) {{
+                                const xAxis = g.append('g')
+                                    .attr('transform', `translate(0,${{chartHeight}})`)
+                                    .call(window.d3.axisBottom(x));
+                                
+                                const yAxis = g.append('g')
+                                    .call(window.d3.axisLeft(y));
+                                
+                                // Renderizar etiquetas de ejes
+                                if (window.renderAxisLabels && typeof window.renderAxisLabels === 'function') {{
+                                    window.renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+                                }} else if (spec.xLabel || spec.yLabel) {{
+                                    if (spec.xLabel) {{
+                                        g.append('text')
+                                            .attr('x', chartWidth / 2)
+                                            .attr('y', chartHeight + margin.bottom - 10)
+                                            .attr('text-anchor', 'middle')
+                                            .style('font-size', '13px')
+                                            .style('font-weight', '600')
+                                            .text(spec.xLabel);
+                                    }}
+                                    if (spec.yLabel) {{
+                                        svg.append('text')
+                                            .attr('x', margin.left / 2 - 8)
+                                            .attr('y', margin.top + chartHeight / 2)
+                                            .attr('text-anchor', 'middle')
+                                            .attr('transform', 'rotate(-90 ' + (margin.left / 2 - 8) + ' ' + (margin.top + chartHeight / 2) + ')')
+                                            .style('font-size', '13px')
+                                            .style('font-weight', '600')
+                                            .text(spec.yLabel);
+                                    }}
+                                }}
+                            }}
                         }}
-                        
-                        // IMPORTANTE: Marcar que esta celda ya no necesita ResizeObserver
-                        // porque se está actualizando manualmente
-                        targetCell._chartSpec = null;
-                        targetCell._chartDivId = null;
                         
                         // Resetear flag después de completar la actualización
                         window._bestlib_updating_boxplot_{letter} = false;
