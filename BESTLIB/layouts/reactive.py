@@ -455,7 +455,9 @@ class ReactiveMatrixLayout:
         if scatter_spec:
             scatter_spec['__scatter_letter__'] = letter
             scatter_spec['__selection_model_id__'] = id(scatter_selection)
+            # CRÍTICO: Guardar en ambos lugares: clase y instancia interna
             MatrixLayout._map[letter] = scatter_spec
+            self._layout._map[letter] = scatter_spec
             
             # Debug: verificar que el spec tiene los identificadores
             if self._debug or MatrixLayout._debug:
@@ -644,14 +646,20 @@ class ReactiveMatrixLayout:
             # CRÍTICO: Si linked_to es None, NO enlazar automáticamente (gráfico estático)
             if linked_to is None:
                 # Crear bar chart estático sin enlazar
-                MatrixLayout.map_barchart(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
+                barchart_spec = MatrixLayout.map_barchart(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
+                # CRÍTICO: Guardar spec también en la instancia interna
+                if barchart_spec:
+                    self._layout._map[letter] = barchart_spec
                 return self
             
             # Validar que linked_to no sea el string "None"
             if isinstance(linked_to, str) and linked_to.lower() == 'none':
                 linked_to = None
                 # Crear bar chart estático sin enlazar
-                MatrixLayout.map_barchart(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
+                barchart_spec = MatrixLayout.map_barchart(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
+                # CRÍTICO: Guardar spec también en la instancia interna
+                if barchart_spec:
+                    self._layout._map[letter] = barchart_spec
                 return self
             
             # Buscar en scatter plots primero (compatibilidad hacia atrás)
@@ -1932,12 +1940,18 @@ class ReactiveMatrixLayout:
                         print(f"📊 Histogram '{letter}' inicializado con {len(processed_items) if processed_items else len(self._data)} items (hay selección activa)")
         
         # Crear histograma inicial con datos filtrados si hay selección, o todos los datos si no
-        MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **kwargs)
+        hist_spec = MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **kwargs)
+        
+        # CRÍTICO: Guardar spec también en la instancia interna
+        if hist_spec:
+            self._layout._map[letter] = hist_spec
         
         # Asegurar que __linked_to__ esté en el spec guardado (por si map_histogram no lo copió)
         if not is_primary and linked_to:
             if letter in MatrixLayout._map:
                 MatrixLayout._map[letter]['__linked_to__'] = linked_to
+            if letter in self._layout._map:
+                self._layout._map[letter]['__linked_to__'] = linked_to
         
         return self
     
@@ -2007,7 +2021,10 @@ class ReactiveMatrixLayout:
             all_primary = {**self._scatter_selection_models, **self._primary_view_models}
             if not all_primary:
                 # Si no hay vistas principales, crear boxplot estático
-                MatrixLayout.map_boxplot(letter, self._data, category_col=category_col, value_col=column, **kwargs)
+                boxplot_spec = MatrixLayout.map_boxplot(letter, self._data, category_col=category_col, value_col=column, **kwargs)
+                # CRÍTICO: Guardar spec también en la instancia interna
+                if boxplot_spec:
+                    self._layout._map[letter] = boxplot_spec
                 return self
             primary_letter = list(all_primary.keys())[-1]
             primary_selection = all_primary[primary_letter]
@@ -2577,7 +2594,20 @@ class ReactiveMatrixLayout:
             # Asegurar que __linked_to__ esté en el spec si fue agregado antes
             if '__linked_to__' in kwargs:
                 boxplot_spec['__linked_to__'] = kwargs['__linked_to__']
+            # CRÍTICO: Guardar en ambos lugares: clase y instancia interna
             MatrixLayout._map[letter] = boxplot_spec
+            self._layout._map[letter] = boxplot_spec
+        else:
+            # Si no hay datos, crear spec vacío pero guardarlo igual
+            boxplot_spec = {
+                'type': 'boxplot',
+                'data': [],
+                'column': column,
+                'category_col': category_col,
+                **kwargs
+            }
+            MatrixLayout._map[letter] = boxplot_spec
+            self._layout._map[letter] = boxplot_spec
         
         return self
     
@@ -2828,7 +2858,11 @@ class ReactiveMatrixLayout:
             kwargs['interactive'] = True
         
         # Crear pie chart inicial con todos los datos
-        MatrixLayout.map_pie(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
+        pie_spec = MatrixLayout.map_pie(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
+        
+        # CRÍTICO: Guardar spec también en la instancia interna
+        if pie_spec:
+            self._layout._map[letter] = pie_spec
         
         # Asegurar que __linked_to__ esté en el spec guardado (por si map_pie no lo copió)
         if not is_primary and linked_to:

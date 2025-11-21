@@ -82,6 +82,10 @@ class MatrixLayout:
         self.ascii_layout = ascii_layout
         self.div_id = "matrix-" + str(uuid.uuid4())
         
+        # CRÍTICO: Inicializar _map como diccionario de instancia para evitar conflictos entre múltiples layouts
+        # Cada instancia tiene su propio _map, pero también puede acceder a MatrixLayout._map (clase) si es necesario
+        self._map = {}
+        
         # Usar CommManager para registro de instancia
         CommManager.register_instance(self.div_id, self)
         
@@ -691,8 +695,13 @@ class MatrixLayout:
                 meta["__figsize__"] = figsize_px
         
         # Combinar mapping con metadata
-        # CRÍTICO: Usar MatrixLayout._map (diccionario de clase) en lugar de self._map (que no existe)
-        mapping_merged = {**MatrixLayout._map, **meta}
+        # CRÍTICO: Usar self._map (instancia) primero, luego MatrixLayout._map (clase) como fallback
+        # Esto permite que cada instancia tenga su propio mapping, pero también comparta specs de clase
+        instance_map = getattr(self, '_map', {})
+        class_map = MatrixLayout._map
+        # Combinar: primero instancia (tiene prioridad), luego clase
+        combined_map = {**class_map, **instance_map}
+        mapping_merged = {**combined_map, **meta}
         if self._merge_opt is not None:
             mapping_merged["__merge__"] = self._merge_opt
         
