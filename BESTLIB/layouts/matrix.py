@@ -183,7 +183,7 @@ class MatrixLayout:
     @classmethod
     def map_scatter(cls, letter, data, **kwargs):
         """Método helper para crear scatter plot"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('scatter')
         spec = chart.get_spec(data, **kwargs)
@@ -196,7 +196,7 @@ class MatrixLayout:
     @classmethod
     def map_barchart(cls, letter, data, **kwargs):
         """Método helper para crear bar chart"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('bar')
         spec = chart.get_spec(data, **kwargs)
@@ -209,7 +209,7 @@ class MatrixLayout:
     @classmethod
     def map_line_plot(cls, letter, data, **kwargs):
         """Método helper para crear line plot completo"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('line_plot')
         spec = chart.get_spec(data, **kwargs)
@@ -222,7 +222,7 @@ class MatrixLayout:
     @classmethod
     def map_horizontal_bar(cls, letter, data, **kwargs):
         """Método helper para crear horizontal bar chart"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('horizontal_bar')
         spec = chart.get_spec(data, **kwargs)
@@ -235,7 +235,7 @@ class MatrixLayout:
     @classmethod
     def map_hexbin(cls, letter, data, **kwargs):
         """Método helper para crear hexbin chart"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('hexbin')
         spec = chart.get_spec(data, **kwargs)
@@ -248,7 +248,7 @@ class MatrixLayout:
     @classmethod
     def map_errorbars(cls, letter, data, **kwargs):
         """Método helper para crear errorbars chart"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('errorbars')
         spec = chart.get_spec(data, **kwargs)
@@ -261,7 +261,7 @@ class MatrixLayout:
     @classmethod
     def map_fill_between(cls, letter, data, **kwargs):
         """Método helper para crear fill_between chart"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('fill_between')
         spec = chart.get_spec(data, **kwargs)
@@ -274,7 +274,7 @@ class MatrixLayout:
     @classmethod
     def map_step(cls, letter, data, **kwargs):
         """Método helper para crear step plot"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('step_plot')
         spec = chart.get_spec(data, **kwargs)
@@ -287,7 +287,7 @@ class MatrixLayout:
     @classmethod
     def map_kde(cls, letter, data, **kwargs):
         """Método helper para crear KDE"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         chart = ChartRegistry.get('kde')
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
@@ -298,7 +298,7 @@ class MatrixLayout:
     @classmethod
     def map_distplot(cls, letter, data, **kwargs):
         """Método helper para crear distplot"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         chart = ChartRegistry.get('distplot')
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
@@ -309,7 +309,7 @@ class MatrixLayout:
     @classmethod
     def map_rug(cls, letter, data, **kwargs):
         """Método helper para crear rug plot"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         chart = ChartRegistry.get('rug')
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
@@ -320,7 +320,7 @@ class MatrixLayout:
     @classmethod
     def map_qqplot(cls, letter, data, **kwargs):
         """Método helper para crear Q-Q plot"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         chart = ChartRegistry.get('qqplot')
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
@@ -331,7 +331,7 @@ class MatrixLayout:
     @classmethod
     def map_ecdf(cls, letter, data, **kwargs):
         """Método helper para crear ECDF"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         chart = ChartRegistry.get('ecdf')
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
@@ -342,7 +342,7 @@ class MatrixLayout:
     @classmethod
     def map_ridgeline(cls, letter, data, **kwargs):
         """Método helper para crear ridgeline plot"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         chart = ChartRegistry.get('ridgeline')
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
@@ -353,7 +353,7 @@ class MatrixLayout:
     @classmethod
     def map_ribbon(cls, letter, data, **kwargs):
         """Método helper para crear ribbon plot"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         chart = ChartRegistry.get('ribbon')
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
@@ -364,7 +364,7 @@ class MatrixLayout:
     @classmethod
     def map_hist2d(cls, letter, data, **kwargs):
         """Método helper para crear 2D histogram"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         chart = ChartRegistry.get('hist2d')
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
@@ -375,7 +375,7 @@ class MatrixLayout:
     @classmethod
     def map_polar(cls, letter, data, **kwargs):
         """Método helper para crear polar plot"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         chart = ChartRegistry.get('polar')
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
@@ -386,7 +386,7 @@ class MatrixLayout:
     @classmethod
     def map_funnel(cls, letter, data, **kwargs):
         """Método helper para crear funnel plot"""
-        from ..charts.registry import ChartRegistry
+        from ..charts import ChartRegistry
         chart = ChartRegistry.get('funnel')
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
