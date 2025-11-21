@@ -744,6 +744,7 @@ class ReactiveMatrixLayout:
                 print(f"   - SelectionModel ID: {id(primary_selection)}")
                 print(f"   - Callbacks actuales: {len(primary_selection._callbacks)}")
             
+            # CRÍTICO: Definir update_barchart dentro del bloque if not is_primary
             # Configurar callback para actualizar bar chart cuando cambia selección
             def update_barchart(items, count):
                 """Actualiza el bar chart cuando cambia la selección usando JavaScript"""
@@ -1099,11 +1100,20 @@ class ReactiveMatrixLayout:
             
             # Registrar callback en el modelo de selección de la vista principal
             # Solo si update_barchart fue definido (es decir, si es vista enlazada)
-            if update_barchart is not None:
-                primary_selection.on_change(update_barchart)
+            # CRÍTICO: Solo registrar si no es vista principal y primary_selection está definido
+            if not is_primary and update_barchart is not None and primary_letter is not None:
+                if primary_letter in self._scatter_selection_models:
+                    primary_selection = self._scatter_selection_models[primary_letter]
+                elif primary_letter in self._primary_view_models:
+                    primary_selection = self._primary_view_models[primary_letter]
+                else:
+                    primary_selection = None
                 
-                # Marcar como callback registrado
-                self._barchart_callbacks[letter] = update_barchart
+                if primary_selection is not None:
+                    primary_selection.on_change(update_barchart)
+                    
+                    # Marcar como callback registrado
+                    self._barchart_callbacks[letter] = update_barchart
         
         return self
 
@@ -3296,13 +3306,24 @@ class ReactiveMatrixLayout:
                     self._update_flags[pie_update_flag] = False
             
             # Registrar callback en el SelectionModel de la vista principal
-            primary_selection.on_change(update_pie)
-            
-            # Debug: verificar que el callback se registró
-            if self._debug or MatrixLayout._debug:
-                print(f"🔗 [ReactiveMatrixLayout] Callback registrado para pie chart '{letter}' enlazado a vista principal '{primary_letter}'")
-                print(f"   - SelectionModel ID: {id(primary_selection)}")
-                print(f"   - Callbacks registrados: {len(primary_selection._callbacks)}")
+            # CRÍTICO: Solo registrar si no es vista principal y primary_selection está definido
+            if not is_primary and primary_letter is not None:
+                # Asegurar que primary_selection esté definido
+                if primary_letter in self._scatter_selection_models:
+                    primary_selection = self._scatter_selection_models[primary_letter]
+                elif primary_letter in self._primary_view_models:
+                    primary_selection = self._primary_view_models[primary_letter]
+                else:
+                    primary_selection = None
+                
+                if primary_selection is not None:
+                    primary_selection.on_change(update_pie)
+                    
+                    # Debug: verificar que el callback se registró
+                    if self._debug or MatrixLayout._debug:
+                        print(f"🔗 [ReactiveMatrixLayout] Callback registrado para pie chart '{letter}' enlazado a vista principal '{primary_letter}'")
+                        print(f"   - SelectionModel ID: {id(primary_selection)}")
+                        print(f"   - Callbacks registrados: {len(primary_selection._callbacks)}")
         
         return self
 
@@ -3737,6 +3758,13 @@ class ReactiveMatrixLayout:
         El bar chart se actualiza automáticamente cuando seleccionas en el scatter plot,
         NO necesitas llamar display() nuevamente después de cada selección.
         """
+        # CRÍTICO: Asegurar que los specs estén en self._layout._map antes de renderizar
+        # Copiar todos los specs de MatrixLayout._map a self._layout._map
+        from .matrix import MatrixLayout
+        for letter, spec in MatrixLayout._map.items():
+            if letter not in self._layout._map:
+                self._layout._map[letter] = spec
+        
         # Cargar assets automáticamente en Colab
         from ..render.assets import AssetManager
         AssetManager.ensure_colab_assets_loaded()
@@ -3744,9 +3772,28 @@ class ReactiveMatrixLayout:
         if ascii_layout:
             self._layout.ascii_layout = ascii_layout
         
-        # Solo mostrar una vez - el bar chart se actualiza automáticamente vía JavaScript
+        # CRÍTICO: Llamar display() del layout interno que genera HTML/JS
+        # Esto retorna None, pero el HTML/JS se muestra automáticamente en Jupyter
         self._layout.display()
         return self
+    
+    def _repr_html_(self):
+        """Representación HTML del layout (compatible con Jupyter Notebook clásico)"""
+        # CRÍTICO: Asegurar que los specs estén en self._layout._map antes de renderizar
+        from .matrix import MatrixLayout
+        for letter, spec in MatrixLayout._map.items():
+            if letter not in self._layout._map:
+                self._layout._map[letter] = spec
+        return self._layout._repr_html_()
+    
+    def _repr_mimebundle_(self, include=None, exclude=None):
+        """Representación MIME bundle del layout (compatible con JupyterLab)"""
+        # CRÍTICO: Asegurar que los specs estén en self._layout._map antes de renderizar
+        from .matrix import MatrixLayout
+        for letter, spec in MatrixLayout._map.items():
+            if letter not in self._layout._map:
+                self._layout._map[letter] = spec
+        return self._layout._repr_mimebundle_(include, exclude)
 
     # ==========================
     # Passthrough de Merge
