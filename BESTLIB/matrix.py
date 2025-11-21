@@ -197,7 +197,7 @@ class MatrixLayout:
             # ... código ...
             MatrixLayout.set_debug(False)  # Desactivar debug
         """
-        cls._debug = enabled
+        cls._debug = bool(enabled)
     
     @classmethod
     def on_global(cls, event, func):
