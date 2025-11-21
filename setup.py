@@ -5,7 +5,7 @@ setup(
     version="0.1.0",
     description="MatrixLayout widget for dashboards",
     author="Nahia, Alejandro, Max",
-    packages=["BESTLIB"],
+    packages=find_packages(),
     include_package_data=True,
     package_data={
         "BESTLIB": ["*.js", "*.css"],
