@@ -691,7 +691,8 @@ class MatrixLayout:
                 meta["__figsize__"] = figsize_px
         
         # Combinar mapping con metadata
-        mapping_merged = {**self._map, **meta}
+        # CRÍTICO: Usar MatrixLayout._map (diccionario de clase) en lugar de self._map (que no existe)
+        mapping_merged = {**MatrixLayout._map, **meta}
         if self._merge_opt is not None:
             mapping_merged["__merge__"] = self._merge_opt
         
