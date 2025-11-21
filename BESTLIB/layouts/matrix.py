@@ -18,6 +18,13 @@ try:
 except ImportError:
     HAS_WIDGETS = False
 
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
+    pd = None
+
 
 class MatrixLayout:
     """
@@ -280,13 +287,19 @@ class MatrixLayout:
         return spec
     
     @classmethod
-    def map_step(cls, letter, data, **kwargs):
+    def map_step(cls, letter, data, x_col=None, y_col=None, **kwargs):
         """Método helper para crear step plot"""
-        from ..charts import ChartRegistry
-        
-        chart = ChartRegistry.get('step_plot')
-        spec = chart.get_spec(data, **kwargs)
-        
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('step_plot')
+            spec = chart.get_spec(data, x_col=x_col, y_col=y_col, **kwargs)
+        except Exception:
+            # Fallback: delegar a versión legacy
+            try:
+                from ...matrix import MatrixLayout as LegacyMatrixLayout
+                return LegacyMatrixLayout.map_step(letter, data, x_col=x_col, y_col=y_col, **kwargs)
+            except Exception:
+                spec = {'type': 'step_plot', 'data': [], **kwargs}
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
         cls._map[letter] = spec
@@ -397,6 +410,199 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('funnel')
         spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_histogram(cls, letter, data, value_col=None, bins=10, **kwargs):
+        """Método helper para crear histograma"""
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('histogram')
+            spec = chart.get_spec(data, column=value_col, bins=bins, **kwargs)
+        except Exception:
+            # Fallback: delegar a versión legacy si ChartRegistry no tiene histogram
+            try:
+                from ...matrix import MatrixLayout as LegacyMatrixLayout
+                return LegacyMatrixLayout.map_histogram(letter, data, value_col=value_col, bins=bins, **kwargs)
+            except Exception:
+                spec = {'type': 'histogram', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_pie(cls, letter, data, category_col=None, value_col=None, **kwargs):
+        """Método helper para crear pie chart"""
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('pie')
+            spec = chart.get_spec(data, category_col=category_col, value_col=value_col, **kwargs)
+        except Exception:
+            # Fallback: delegar a versión legacy
+            try:
+                from ...matrix import MatrixLayout as LegacyMatrixLayout
+                return LegacyMatrixLayout.map_pie(letter, data, category_col=category_col, value_col=value_col, **kwargs)
+            except Exception:
+                spec = {'type': 'pie', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_boxplot(cls, letter, data, category_col=None, value_col=None, column=None, **kwargs):
+        """Método helper para crear boxplot"""
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('boxplot')
+            # Permitir 'column' como alias de 'value_col'
+            if value_col is None and column is not None:
+                value_col = column
+            spec = chart.get_spec(data, category_col=category_col, value_col=value_col, **kwargs)
+        except Exception:
+            # Fallback: delegar a versión legacy
+            try:
+                from ...matrix import MatrixLayout as LegacyMatrixLayout
+                return LegacyMatrixLayout.map_boxplot(letter, data, category_col=category_col, value_col=value_col, column=column, **kwargs)
+            except Exception:
+                spec = {'type': 'boxplot', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_line(cls, letter, data, x_col=None, y_col=None, series_col=None, **kwargs):
+        """Método helper para crear line chart (multi-series)"""
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('line')
+            spec = chart.get_spec(data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
+        except Exception:
+            # Fallback: delegar a versión legacy
+            try:
+                from ...matrix import MatrixLayout as LegacyMatrixLayout
+                return LegacyMatrixLayout.map_line(letter, data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
+            except Exception:
+                spec = {'type': 'line', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_heatmap(cls, letter, data, x_col=None, y_col=None, value_col=None, **kwargs):
+        """Método helper para crear heatmap"""
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('heatmap')
+            spec = chart.get_spec(data, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
+        except Exception:
+            # Fallback: delegar a versión legacy
+            try:
+                from ...matrix import MatrixLayout as LegacyMatrixLayout
+                return LegacyMatrixLayout.map_heatmap(letter, data, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
+            except Exception:
+                spec = {'type': 'heatmap', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_violin(cls, letter, data, value_col=None, category_col=None, bins=20, **kwargs):
+        """Método helper para crear violin plot"""
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('violin')
+            spec = chart.get_spec(data, value_col=value_col, category_col=category_col, bins=bins, **kwargs)
+        except Exception:
+            # Fallback: delegar a versión legacy
+            try:
+                from ...matrix import MatrixLayout as LegacyMatrixLayout
+                return LegacyMatrixLayout.map_violin(letter, data, value_col=value_col, category_col=category_col, bins=bins, **kwargs)
+            except Exception:
+                spec = {'type': 'violin', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_radviz(cls, letter, data, features=None, class_col=None, **kwargs):
+        """Método helper para crear radviz plot"""
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('radviz')
+            spec = chart.get_spec(data, features=features, class_col=class_col, **kwargs)
+        except Exception:
+            # Fallback: delegar a versión legacy
+            try:
+                from ...matrix import MatrixLayout as LegacyMatrixLayout
+                return LegacyMatrixLayout.map_radviz(letter, data, features=features, class_col=class_col, **kwargs)
+            except Exception:
+                spec = {'type': 'radviz', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_star_coordinates(cls, letter, data, features=None, class_col=None, **kwargs):
+        """Método helper para crear star coordinates plot"""
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('star_coordinates')
+            spec = chart.get_spec(data, features=features, class_col=class_col, **kwargs)
+        except Exception:
+            # Fallback: delegar a versión legacy
+            try:
+                from ...matrix import MatrixLayout as LegacyMatrixLayout
+                return LegacyMatrixLayout.map_star_coordinates(letter, data, features=features, class_col=class_col, **kwargs)
+            except Exception:
+                spec = {'type': 'star_coordinates', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_parallel_coordinates(cls, letter, data, dimensions=None, category_col=None, **kwargs):
+        """Método helper para crear parallel coordinates plot"""
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('parallel_coordinates')
+            spec = chart.get_spec(data, dimensions=dimensions, category_col=category_col, **kwargs)
+        except Exception:
+            # Fallback: delegar a versión legacy
+            try:
+                from ...matrix import MatrixLayout as LegacyMatrixLayout
+                return LegacyMatrixLayout.map_parallel_coordinates(letter, data, dimensions=dimensions, category_col=category_col, **kwargs)
+            except Exception:
+                spec = {'type': 'parallel_coordinates', 'data': [], **kwargs}
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_grouped_barchart(cls, letter, data, main_col=None, sub_col=None, value_col=None, **kwargs):
+        """Método helper para crear grouped bar chart"""
+        try:
+            from ..charts import ChartRegistry
+            chart = ChartRegistry.get('grouped_barchart')
+            spec = chart.get_spec(data, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
+        except Exception:
+            # Fallback: delegar a versión legacy
+            try:
+                from ...matrix import MatrixLayout as LegacyMatrixLayout
+                return LegacyMatrixLayout.map_grouped_barchart(letter, data, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
+            except Exception:
+                spec = {'type': 'grouped_barchart', 'data': [], **kwargs}
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
         cls._map[letter] = spec
