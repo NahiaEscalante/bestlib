@@ -788,9 +788,13 @@ class MatrixLayout:
             
             data = self._prepare_repr_data(ascii_layout)
             
-            # Generar HTML
-            html_content = HTMLGenerator.generate_container(self.div_id, data['inline_style'])
-            html_content = HTMLGenerator.generate_style_tag(data['css_code']) + "\n" + html_content
+            # Generar HTML completo (incluye wrapper seguro de D3.js)
+            html_content = HTMLGenerator.generate_full_html(
+                self.div_id,
+                data['css_code'],
+                "",  # JS va separado
+                data['inline_style']
+            )
             
             # Generar JavaScript usando JSBuilder
             # En Colab, esperar a que D3 esté disponible antes de renderizar

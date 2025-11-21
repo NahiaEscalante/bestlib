@@ -72,26 +72,22 @@ def _import_reactive_modules():
 _import_reactive_modules()
 
 # Importar ReactiveMatrixLayout desde layouts/reactive.py (estructura modular)
+# IMPORTANTE: Solo usar la versión modular, NO la legacy
+ReactiveMatrixLayout = None
+HAS_REACTIVE = False
 try:
     from .layouts.reactive import ReactiveMatrixLayout
     if ReactiveMatrixLayout is not None:
         HAS_REACTIVE = True
-except (ImportError, ModuleNotFoundError, AttributeError):
-    # Fallback: intentar desde reactive.py legacy (si existe)
-    try:
-        import importlib.util
-        from pathlib import Path
-        reactive_py = Path(__file__).parent / "reactive.py"
-        if reactive_py.exists():
-            spec = importlib.util.spec_from_file_location("reactive_legacy", str(reactive_py))
-            if spec and spec.loader:
-                reactive_legacy = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(reactive_legacy)
-                ReactiveMatrixLayout = getattr(reactive_legacy, 'ReactiveMatrixLayout', None)
-                if ReactiveMatrixLayout is not None:
-                    HAS_REACTIVE = True
-    except Exception:
-        pass
+        # Verificar que es la versión correcta (debe tener add_scatter, add_histogram, etc.)
+        if not hasattr(ReactiveMatrixLayout, 'add_scatter'):
+            # Si no tiene add_scatter, es la versión incorrecta
+            ReactiveMatrixLayout = None
+            HAS_REACTIVE = False
+except (ImportError, ModuleNotFoundError, AttributeError) as e:
+    # NO usar fallback legacy - solo la versión modular es válida
+    ReactiveMatrixLayout = None
+    HAS_REACTIVE = False
 
 # Importar sistema de vistas enlazadas
 try:

@@ -67,11 +67,30 @@ class HTMLGenerator:
         Returns:
             str: HTML completo
         """
+        # Wrapper seguro para cargar D3.js ANTES del código principal
+        d3_loader = """<script>
+(function() {
+    // Cargar D3.js solo si no está disponible
+    if (typeof window.d3 === 'undefined') {
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js';
+        script.async = false; // Cargar de forma síncrona para asegurar disponibilidad
+        script.crossOrigin = 'anonymous';
+        script.onerror = function() {
+            // Fallback a CDN alternativo
+            script.src = 'https://unpkg.com/d3@7/dist/d3.min.js';
+            document.head.appendChild(script);
+        };
+        document.head.appendChild(script);
+    }
+})();
+</script>"""
+        
         style_tag = HTMLGenerator.generate_style_tag(css_code)
         container = HTMLGenerator.generate_container(div_id, inline_style)
         script_tag = HTMLGenerator.generate_script_tag(js_code)
         
-        return f"{style_tag}\n{container}\n{script_tag}"
+        return f"{d3_loader}\n{style_tag}\n{container}\n{script_tag}"
     
     @staticmethod
     def escape_js_string(s):

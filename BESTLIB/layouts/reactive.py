@@ -457,10 +457,20 @@ class ReactiveMatrixLayout:
                 print(f"⚠️ Bar chart para '{letter}' ya está registrado. Ignorando registro duplicado.")
             return self
         
+        # Inicializar primary_letter siempre
+        primary_letter = None
+        
         # Si es vista enlazada, determinar a qué vista principal enlazar
         if not is_primary:
             # CRÍTICO: Si linked_to es None, NO enlazar automáticamente (gráfico estático)
             if linked_to is None:
+                # Crear bar chart estático sin enlazar
+                MatrixLayout.map_barchart(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
+                return self
+            
+            # Validar que linked_to no sea el string "None"
+            if isinstance(linked_to, str) and linked_to.lower() == 'none':
+                linked_to = None
                 # Crear bar chart estático sin enlazar
                 MatrixLayout.map_barchart(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
                 return self
@@ -490,11 +500,14 @@ class ReactiveMatrixLayout:
                 error_msg += "Agrega la vista principal primero (ej: add_scatter('A', ...) o add_barchart('B', interactive=True, ...))."
                 raise ValueError(error_msg)
         
-        # Guardar el enlace
-        self._barchart_to_scatter[letter] = primary_letter
-        
-        # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
-        kwargs['__linked_to__'] = primary_letter
+        # Guardar el enlace (solo si es vista enlazada y primary_letter está definido)
+        if not is_primary and primary_letter is not None:
+            self._barchart_to_scatter[letter] = primary_letter
+            # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
+            kwargs['__linked_to__'] = primary_letter
+        else:
+            # Si es vista principal o no hay enlace, remover __linked_to__
+            kwargs.pop('__linked_to__', None)  # Remover si existe
         
         # Crear bar chart inicial con todos los datos
         MatrixLayout.map_barchart(
@@ -1169,10 +1182,20 @@ class ReactiveMatrixLayout:
             kwargs['__is_primary_view__'] = True
             kwargs['interactive'] = True
         
+        # Inicializar primary_letter siempre
+        primary_letter = None
+        
         # Si es vista enlazada, determinar a qué vista principal enlazar
         if not is_primary:
             # CRÍTICO: Si linked_to es None, NO enlazar automáticamente (gráfico estático)
             if linked_to is None:
+                # Crear histograma estático sin enlazar
+                MatrixLayout.map_histogram(letter, self._data, value_col=column, bins=bins, **kwargs)
+                return self
+            
+            # Validar que linked_to no sea el string "None"
+            if isinstance(linked_to, str) and linked_to.lower() == 'none':
+                linked_to = None
                 # Crear histograma estático sin enlazar
                 MatrixLayout.map_histogram(letter, self._data, value_col=column, bins=bins, **kwargs)
                 return self
@@ -1185,11 +1208,28 @@ class ReactiveMatrixLayout:
                 primary_letter = linked_to
                 primary_selection = self._primary_view_models[primary_letter]
             else:
-                # Si linked_to está especificado pero no existe, lanzar error
-                raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
+                # Si linked_to está especificado pero no existe, lanzar error con información útil
+                available_scatters = list(self._scatter_selection_models.keys())
+                available_primary = list(self._primary_view_models.keys())
+                all_available = available_scatters + available_primary
+                
+                if self._debug or MatrixLayout._debug:
+                    print(f"❌ [ReactiveMatrixLayout] Vista principal '{linked_to}' no existe para histogram '{letter}'")
+                    print(f"   - Scatter plots disponibles: {available_scatters}")
+                    print(f"   - Vistas principales disponibles: {available_primary}")
+                    print(f"   - Todas las vistas: {all_available}")
+                
+                error_msg = f"Vista principal '{linked_to}' no existe. "
+                if all_available:
+                    error_msg += f"Vistas disponibles: {all_available}. "
+                error_msg += "Agrega la vista principal primero (ej: add_scatter('A', ...) o add_barchart('B', interactive=True, ...))."
+                raise ValueError(error_msg)
             
-            # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
-            kwargs['__linked_to__'] = primary_letter
+            # Agregar __linked_to__ al spec para indicadores visuales en JavaScript (solo si hay enlace)
+            if primary_letter is not None:
+                kwargs['__linked_to__'] = primary_letter
+            else:
+                kwargs.pop('__linked_to__', None)  # Remover si existe
             
             # Guardar parámetros
             hist_params = {
@@ -1564,46 +1604,55 @@ class ReactiveMatrixLayout:
             return self
         
         # Determinar a qué vista principal enlazar
-        if linked_to:
-            # Buscar en scatter plots primero (compatibilidad hacia atrás)
-            if linked_to in self._scatter_selection_models:
-                primary_letter = linked_to
-                primary_selection = self._scatter_selection_models[primary_letter]
-            elif linked_to in self._primary_view_models:
-                primary_letter = linked_to
-                primary_selection = self._primary_view_models[primary_letter]
+        primary_letter = None  # Inicializar siempre
+        
+        if linked_to is not None:
+            # Validar que linked_to no sea el string "None"
+            if isinstance(linked_to, str) and linked_to.lower() == 'none':
+                linked_to = None
             else:
-                # Error con información detallada
-                available_scatters = list(self._scatter_selection_models.keys())
-                available_primary = list(self._primary_view_models.keys())
-                all_available = available_scatters + available_primary
-                
-                if self._debug or MatrixLayout._debug:
-                    print(f"❌ [ReactiveMatrixLayout] Vista principal '{linked_to}' no existe para boxplot '{letter}'")
-                    print(f"   - Scatter plots disponibles: {available_scatters}")
-                    print(f"   - Vistas principales disponibles: {available_primary}")
-                    print(f"   - Todas las vistas: {all_available}")
-                
-                error_msg = f"Vista principal '{linked_to}' no existe. "
-                if all_available:
-                    error_msg += f"Vistas disponibles: {all_available}. "
-                error_msg += "Agrega la vista principal primero (ej: add_scatter('A', ...) o add_barchart('B', interactive=True, ...))."
-                raise ValueError(error_msg)
-        else:
+                # Buscar en scatter plots primero (compatibilidad hacia atrás)
+                if linked_to in self._scatter_selection_models:
+                    primary_letter = linked_to
+                    primary_selection = self._scatter_selection_models[primary_letter]
+                elif linked_to in self._primary_view_models:
+                    primary_letter = linked_to
+                    primary_selection = self._primary_view_models[primary_letter]
+                else:
+                    # Error con información detallada
+                    available_scatters = list(self._scatter_selection_models.keys())
+                    available_primary = list(self._primary_view_models.keys())
+                    all_available = available_scatters + available_primary
+                    
+                    if self._debug or MatrixLayout._debug:
+                        print(f"❌ [ReactiveMatrixLayout] Vista principal '{linked_to}' no existe para boxplot '{letter}'")
+                        print(f"   - Scatter plots disponibles: {available_scatters}")
+                        print(f"   - Vistas principales disponibles: {available_primary}")
+                        print(f"   - Todas las vistas: {all_available}")
+                    
+                    error_msg = f"Vista principal '{linked_to}' no existe. "
+                    if all_available:
+                        error_msg += f"Vistas disponibles: {all_available}. "
+                    error_msg += "Agrega la vista principal primero (ej: add_scatter('A', ...) o add_barchart('B', interactive=True, ...))."
+                    raise ValueError(error_msg)
+        
+        if linked_to is None:
             # Si no se especifica, usar la última vista principal disponible
             all_primary = {**self._scatter_selection_models, **self._primary_view_models}
             if not all_primary:
-                raise ValueError("No hay vistas principales disponibles. Agrega una vista principal primero (scatter, bar chart, etc.)")
+                # Si no hay vistas principales, crear boxplot estático
+                MatrixLayout.map_boxplot(letter, self._data, category_col=category_col, value_col=column, **kwargs)
+                return self
             primary_letter = list(all_primary.keys())[-1]
             primary_selection = all_primary[primary_letter]
             if self._debug or MatrixLayout._debug:
                 print(f"💡 Boxplot '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
         
-        # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
-        if linked_to:
+        # Agregar __linked_to__ al spec para indicadores visuales en JavaScript (solo si hay enlace)
+        if primary_letter is not None:
             kwargs['__linked_to__'] = primary_letter
-        elif not linked_to and 'primary_letter' in locals():
-            kwargs['__linked_to__'] = primary_letter
+        else:
+            kwargs.pop('__linked_to__', None)  # Remover si existe
         
         # Guardar parámetros
         boxplot_params = {
