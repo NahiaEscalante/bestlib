@@ -1355,15 +1355,50 @@ class ReactiveMatrixLayout:
         
         # Si es vista principal, crear histograma y retornar
         if is_primary:
-            MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **kwargs)
+            # ✅ DEBUG: Verificar datos antes de crear histograma
+            if self._debug or MatrixLayout._debug:
+                print(f"🔍 [ReactiveMatrixLayout] Creando histogram '{letter}' como vista principal")
+                print(f"   - initial_data type: {type(initial_data)}")
+                if HAS_PANDAS and hasattr(initial_data, 'shape'):
+                    print(f"   - initial_data shape: {initial_data.shape}")
+                    print(f"   - column '{column}' exists: {column in initial_data.columns if hasattr(initial_data, 'columns') else 'N/A'}")
+                elif isinstance(initial_data, list):
+                    print(f"   - initial_data length: {len(initial_data)}")
+            
+            # ✅ CORRECCIÓN CRÍTICA: Asegurar que xLabel y yLabel se pasen correctamente
+            # map_histogram usa value_col, no column, así que asegurar que esté en kwargs si se especificó
+            histogram_kwargs = kwargs.copy()
+            if 'xLabel' in histogram_kwargs:
+                histogram_kwargs['xLabel'] = histogram_kwargs['xLabel']
+            if 'yLabel' in histogram_kwargs:
+                histogram_kwargs['yLabel'] = histogram_kwargs['yLabel']
+            
+            # ✅ CORRECCIÓN CRÍTICA: Llamar a map_histogram y guardar el spec retornado
+            spec = MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **histogram_kwargs)
             
             # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
-            if letter in MatrixLayout._map:
+            # Usar el spec retornado en lugar de acceder directamente a _map para evitar problemas de sincronización
+            if spec and letter in MatrixLayout._map:
+                # Actualizar el spec en _map directamente
                 MatrixLayout._map[letter]['__view_letter__'] = letter
                 MatrixLayout._map[letter]['__is_primary_view__'] = True
                 MatrixLayout._map[letter]['interactive'] = True
+                
+                # ✅ DEBUG: Verificar que el spec tiene datos
                 if self._debug or MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Histogram '{letter}' configurado como vista principal con __view_letter__={letter}")
+                    print(f"   - Spec type: {MatrixLayout._map[letter].get('type')}")
+                    print(f"   - Data length: {len(MatrixLayout._map[letter].get('data', []))}")
+                    data = MatrixLayout._map[letter].get('data', [])
+                    if data:
+                        print(f"   - First bin: bin={data[0].get('bin')}, count={data[0].get('count')}")
+                    else:
+                        print(f"   - ⚠️ WARNING: Histogram data está vacío!")
+            else:
+                if self._debug or MatrixLayout._debug:
+                    print(f"❌ [ReactiveMatrixLayout] ERROR: Histogram '{letter}' no se guardó en _map después de map_histogram")
+                    print(f"   - spec is None: {spec is None}")
+                    print(f"   - letter in _map: {letter in MatrixLayout._map if hasattr(MatrixLayout, '_map') else 'N/A'}")
             
             return self
         
