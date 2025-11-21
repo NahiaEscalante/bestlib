@@ -75,7 +75,7 @@ class JSBuilder:
 """
         else:
             # Versión normal (para Jupyter)
-        return f"""
+            return f"""
 (function() {{
   const mapping = {mapping_js};
   const container = document.getElementById("{div_id}");

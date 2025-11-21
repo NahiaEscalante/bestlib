@@ -2203,6 +2203,16 @@ class MatrixLayout:
         if self._merge_opt is not None:
             mapping_merged["__merge__"] = self._merge_opt
         
+        # Diagnóstico: verificar que los specs estén en el mapping
+        if MatrixLayout._debug:
+            chart_keys = [k for k in MatrixLayout._map.keys() if not k.startswith('__')]
+            print(f"🔍 [MatrixLayout] _prepare_repr_data:")
+            print(f"   - MatrixLayout._map keys (charts): {chart_keys}")
+            for key in chart_keys[:3]:  # Solo primeros 3 para no saturar
+                spec = MatrixLayout._map.get(key)
+                if spec:
+                    print(f"   - Spec '{key}': type={spec.get('type')}, has_data={'data' in spec}, has_series={'series' in spec}")
+        
         mapping_js = json.dumps(_sanitize_for_json(mapping_merged))
         
         # Generar estilo inline para el contenedor si hay max_width

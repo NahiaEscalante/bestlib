@@ -1302,15 +1302,16 @@
     
     const chartType = spec.type;
     
-    // Diagnóstico: verificar estructura de datos para gráficos avanzados
-    if (window._bestlib_debug && ['kde', 'distplot', 'rug', 'qqplot', 'ecdf', 'hist2d', 'polar', 'ridgeline', 'ribbon', 'funnel'].includes(chartType)) {
+    // Diagnóstico: verificar estructura de datos para gráficos avanzados (siempre activo para debugging)
+    if (['kde', 'distplot', 'rug', 'qqplot', 'ecdf', 'hist2d', 'polar', 'ridgeline', 'ribbon', 'funnel'].includes(chartType)) {
       console.log(`[BESTLIB] renderChartD3: ${chartType}`, {
         hasData: 'data' in spec,
         dataType: spec.data ? (Array.isArray(spec.data) ? 'array' : typeof spec.data) : 'undefined',
         dataLength: Array.isArray(spec.data) ? spec.data.length : (spec.data && typeof spec.data === 'object' ? Object.keys(spec.data).length : 0),
         hasSeries: 'series' in spec,
         seriesKeys: spec.series ? Object.keys(spec.series) : [],
-        specKeys: Object.keys(spec)
+        specKeys: Object.keys(spec),
+        dataSample: spec.data ? (Array.isArray(spec.data) ? spec.data.slice(0, 2) : (typeof spec.data === 'object' ? Object.keys(spec.data).slice(0, 5) : spec.data)) : null
       });
     }
     
@@ -7164,7 +7165,25 @@
   function renderKdeD3(container, spec, d3, divId) {
     const data = spec.data || [];
     if (!data || data.length === 0) {
-      console.warn('[BESTLIB] renderKdeD3: No hay datos', { spec });
+      console.error('[BESTLIB] renderKdeD3: No hay datos', { 
+        spec, 
+        hasData: 'data' in spec,
+        dataType: typeof spec.data,
+        dataValue: spec.data,
+        specKeys: Object.keys(spec)
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para KDE</div>';
+      return;
+    }
+    
+    // Validar estructura de datos
+    if (!Array.isArray(data) || data.length === 0 || !data[0] || (!data[0].hasOwnProperty('x') || !data[0].hasOwnProperty('y'))) {
+      console.error('[BESTLIB] renderKdeD3: Estructura de datos inválida', { 
+        dataLength: data.length,
+        firstItem: data[0],
+        dataType: Array.isArray(data) ? 'array' : typeof data
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: Estructura de datos inválida para KDE (esperado: [{x, y}, ...])</div>';
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -7264,7 +7283,14 @@
     const rug = data.rug || [];
     
     if (!histogram || histogram.length === 0) {
-      console.warn('[BESTLIB] renderDistplotD3: No hay datos de histograma', { spec });
+      console.error('[BESTLIB] renderDistplotD3: No hay datos de histograma', { 
+        spec,
+        hasData: 'data' in spec,
+        dataType: typeof spec.data,
+        dataKeys: spec.data ? Object.keys(spec.data) : [],
+        histogramLength: histogram.length
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos de histograma para Distplot</div>';
       return;
     }
     
@@ -7387,7 +7413,13 @@
   function renderRugD3(container, spec, d3, divId) {
     const data = spec.data || [];
     if (!data || data.length === 0) {
-      console.warn('[BESTLIB] renderRugD3: No hay datos', { spec });
+      console.error('[BESTLIB] renderRugD3: No hay datos', { 
+        spec, 
+        hasData: 'data' in spec,
+        dataType: typeof spec.data,
+        specKeys: Object.keys(spec)
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para Rug</div>';
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -7483,7 +7515,13 @@
   function renderQqplotD3(container, spec, d3, divId) {
     const data = spec.data || [];
     if (!data || data.length === 0) {
-      console.warn('[BESTLIB] renderQqplotD3: No hay datos', { spec });
+      console.error('[BESTLIB] renderQqplotD3: No hay datos', { 
+        spec, 
+        hasData: 'data' in spec,
+        dataType: typeof spec.data,
+        specKeys: Object.keys(spec)
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para Q-Q Plot</div>';
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -7576,7 +7614,13 @@
   function renderEcdfD3(container, spec, d3, divId) {
     const data = spec.data || [];
     if (!data || data.length === 0) {
-      console.warn('[BESTLIB] renderEcdfD3: No hay datos', { spec });
+      console.error('[BESTLIB] renderEcdfD3: No hay datos', { 
+        spec, 
+        hasData: 'data' in spec,
+        dataType: typeof spec.data,
+        specKeys: Object.keys(spec)
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para ECDF</div>';
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -7663,7 +7707,14 @@
   function renderRidgelineD3(container, spec, d3, divId) {
     const series = spec.series || {};
     if (!series || Object.keys(series).length === 0) {
-      console.warn('[BESTLIB] renderRidgelineD3: No hay series', { spec });
+      console.error('[BESTLIB] renderRidgelineD3: No hay series', { 
+        spec, 
+        hasSeries: 'series' in spec,
+        seriesType: typeof spec.series,
+        specKeys: Object.keys(spec),
+        hasData: 'data' in spec
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay series para Ridgeline</div>';
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -7941,7 +7992,13 @@
   function renderHist2dD3(container, spec, d3, divId) {
     const data = spec.data || [];
     if (!data || data.length === 0) {
-      console.warn('[BESTLIB] renderHist2dD3: No hay datos', { spec });
+      console.error('[BESTLIB] renderHist2dD3: No hay datos', { 
+        spec, 
+        hasData: 'data' in spec,
+        dataType: typeof spec.data,
+        specKeys: Object.keys(spec)
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para Hist2D</div>';
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -8023,7 +8080,13 @@
   function renderPolarD3(container, spec, d3, divId) {
     const data = spec.data || [];
     if (!data || data.length === 0) {
-      console.warn('[BESTLIB] renderPolarD3: No hay datos', { spec });
+      console.error('[BESTLIB] renderPolarD3: No hay datos', { 
+        spec, 
+        hasData: 'data' in spec,
+        dataType: typeof spec.data,
+        specKeys: Object.keys(spec)
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para Polar</div>';
       return;
     }
     
@@ -8133,7 +8196,13 @@
   function renderFunnelD3(container, spec, d3, divId) {
     const data = spec.data || [];
     if (!data || data.length === 0) {
-      console.warn('[BESTLIB] renderFunnelD3: No hay datos', { spec });
+      console.error('[BESTLIB] renderFunnelD3: No hay datos', { 
+        spec, 
+        hasData: 'data' in spec,
+        dataType: typeof spec.data,
+        specKeys: Object.keys(spec)
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para Funnel</div>';
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
