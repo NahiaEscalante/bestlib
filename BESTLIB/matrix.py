@@ -937,15 +937,76 @@ class MatrixLayout:
         import math
         import itertools
         values = []
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+        
+        # ✅ DEBUG: Verificar estado de pandas
+        debug_mode = hasattr(cls, '_debug') and cls._debug
+        
+        # ✅ CORRECCIÓN CRÍTICA: Verificar pandas de forma más robusta
+        # A veces HAS_PANDAS puede ser True pero pd no está disponible en el scope
+        pd_available = HAS_PANDAS
+        pd_module = pd
+        if pd_available and pd_module is None:
+            # Intentar importar pandas si no está disponible
+            try:
+                import pandas as pd_module
+                pd_available = True
+            except ImportError:
+                pd_available = False
+        
+        # ✅ DEBUG SIEMPRE: Para diagnóstico del problema
+        print(f"🔍 [map_histogram] Procesando histogram '{letter}'")
+        print(f"   - HAS_PANDAS: {HAS_PANDAS}")
+        print(f"   - pd_available: {pd_available}")
+        print(f"   - pd_module is None: {pd_module is None}")
+        print(f"   - data type: {type(data)}")
+        is_dataframe = pd_module is not None and isinstance(data, pd_module.DataFrame) if pd_module else False
+        print(f"   - isinstance(data, pd.DataFrame): {is_dataframe}")
+        print(f"   - value_col: {value_col}")
+        
+        if pd_module is not None and isinstance(data, pd_module.DataFrame):
+            print(f"   - DataFrame shape: {data.shape}")
+            print(f"   - Column exists: {value_col in data.columns if value_col else False}")
+            if value_col and value_col in data.columns:
+                print(f"   - Column dtype: {data[value_col].dtype}")
+        
+        if pd_available and pd_module is not None and isinstance(data, pd_module.DataFrame):
             if not value_col or value_col not in data.columns:
                 raise ValueError("Debe especificar value_col para histograma con DataFrame")
+            
+            if debug_mode:
+                print(f"🔍 [map_histogram] Procesando DataFrame para histogram '{letter}'")
+                print(f"   - DataFrame shape: {data.shape}")
+                print(f"   - value_col: {value_col}")
+                print(f"   - Column dtype: {data[value_col].dtype}")
+            
             # Extraer valores numéricos limpiando NaN
-            series = data[value_col].dropna()
             try:
-                values = series.astype(float).tolist()
-            except Exception:
-                values = [float(v) for v in series.tolist()]
+                print(f"   - Attempting to extract series from column '{value_col}'")
+                series = data[value_col].dropna()
+                
+                print(f"   - Series length after dropna: {len(series)}")
+                if len(series) > 0:
+                    print(f"   - Sample values: {series.head(5).tolist()}")
+                    print(f"   - Series dtype: {series.dtype}")
+                else:
+                    print(f"   - ⚠️ WARNING: Series is empty after dropna!")
+                
+                if len(series) > 0:
+                    try:
+                        values = series.astype(float).tolist()
+                        print(f"   - Values extracted via astype: {len(values)}")
+                    except Exception as e:
+                        print(f"   - Error in astype(float): {e}, trying manual conversion")
+                        values = [float(v) for v in series.tolist()]
+                        print(f"   - Values after manual conversion: {len(values)}")
+                else:
+                    print(f"   - ⚠️ WARNING: No values to extract, series is empty")
+                    values = []
+            except Exception as e:
+                print(f"   - ❌ ERROR extracting series: {e}")
+                import traceback
+                traceback.print_exc()
+                values = []
         else:
             # Lista de diccionarios
             if not isinstance(data, list):
@@ -958,7 +1019,12 @@ class MatrixLayout:
                         values.append(float(v))
                     except Exception:
                         continue
+        print(f"   - Final values count: {len(values)}")
+        if values:
+            print(f"   - Values range: [{min(values)}, {max(values)}]")
+        
         if not values:
+            print(f"   - ⚠️ WARNING: No values extracted, returning empty histogram data")
             hist_data = []
         else:
             vmin = min(values)
@@ -976,7 +1042,10 @@ class MatrixLayout:
             # Esto permite que las vistas enlazadas reciban los datos correctos
             bin_rows = [[] for _ in range(len(edges) - 1)]  # Lista de listas para cada bin
             
-            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if debug_mode:
+                print(f"   - Created {len(bin_rows)} bins with edges: [{edges[0]:.2f}, ..., {edges[-1]:.2f}]")
+            
+            if pd_available and pd_module is not None and isinstance(data, pd_module.DataFrame):
                 # Para DataFrame: almacenar todas las filas originales que caen en cada bin
                 original_data = data.to_dict('records')
                 for row in original_data:
