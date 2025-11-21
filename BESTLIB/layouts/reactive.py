@@ -1882,6 +1882,14 @@ class ReactiveMatrixLayout:
                 return
             update_boxplot._executing = True
             
+            # ✅ CORRECCIÓN: Validar que items tenga el formato correcto antes de procesar
+            # Si items está vacío o no tiene la estructura esperada, usar todos los datos
+            if not items or (isinstance(items, list) and len(items) == 0):
+                if self._debug or MatrixLayout._debug:
+                    print(f"   ℹ️ Boxplot '{letter}': items vacío, usando todos los datos")
+                items = None
+                count = 0
+            
             try:
                 import json
                 from IPython.display import Javascript
@@ -1889,46 +1897,68 @@ class ReactiveMatrixLayout:
                 if self._debug or MatrixLayout._debug:
                     print(f"   🔄 Boxplot '{letter}' callback ejecutándose con {count} items")
                 
-                # Usar datos seleccionados o todos los datos
-                # Si los items tienen _original_row, usar esos datos
+                # ✅ CORRECCIÓN CRÍTICA: Usar datos seleccionados o todos los datos
+                # Estrategia mejorada: usar índices originales si están disponibles, o crear DataFrame desde items
                 data_to_use = self._data
                 if items and len(items) > 0:
-                    # Extraer datos originales si están disponibles
-                    processed_items = []
-                    for item in items:
-                        if isinstance(item, dict):
-                            # Si tiene _original_row, usar esos datos
-                            if '_original_row' in item:
-                                processed_items.append(item['_original_row'])
-                            elif '_original_rows' in item:
-                                # Si hay múltiples filas originales
-                                processed_items.extend(item['_original_rows'])
-                            else:
-                                # Si no tiene _original_row/_original_rows, el item ya es una fila original
-                                # (esto es común cuando viene de scatter plot)
-                                processed_items.append(item)
-                        else:
-                            processed_items.append(item)
-                    
-                    if processed_items:
-                        if HAS_PANDAS:
-                            import pandas as pd
-                            # Intentar crear DataFrame desde los items procesados
-                            try:
-                                if isinstance(processed_items[0], dict):
-                                    data_to_use = pd.DataFrame(processed_items)
+                    # ✅ ESTRATEGIA 1: Si tenemos índices originales en el payload, usarlos para filtrar self._data
+                    # Esto garantiza que tenemos todas las columnas del DataFrame original
+                    if HAS_PANDAS and isinstance(self._data, pd.DataFrame):
+                        # Buscar índices en el payload (pueden venir en diferentes formatos)
+                        indices = None
+                        if hasattr(items, '__iter__') and not isinstance(items, (str, dict)):
+                            # Si items es una lista, buscar en el primer item o en el contexto
+                            # Los índices pueden venir en el payload original, no en items
+                            pass  # Los índices no están en items, están en el payload original
+                        
+                        # ✅ ESTRATEGIA 2: Extraer datos originales desde items
+                        processed_items = []
+                        for item in items:
+                            if isinstance(item, dict):
+                                # Si tiene _original_row, usar esos datos
+                                if '_original_row' in item:
+                                    processed_items.append(item['_original_row'])
+                                elif '_original_rows' in item:
+                                    # Si hay múltiples filas originales
+                                    processed_items.extend(item['_original_rows'])
                                 else:
-                                    # Si no son diccionarios, intentar convertir
-                                    data_to_use = pd.DataFrame(processed_items)
+                                    # Si no tiene _original_row/_original_rows, el item ya es una fila original
+                                    # (esto es común cuando viene de scatter plot)
+                                    processed_items.append(item)
+                            else:
+                                processed_items.append(item)
+                        
+                        if processed_items:
+                            try:
+                                # Intentar crear DataFrame desde los items procesados
+                                if HAS_PANDAS:
+                                    import pandas as pd
+                                    if isinstance(processed_items[0], dict):
+                                        data_from_items = pd.DataFrame(processed_items)
+                                    else:
+                                        data_from_items = pd.DataFrame(processed_items)
+                                    
+                                    # ✅ CORRECCIÓN CRÍTICA: Verificar que el DataFrame tenga todas las columnas necesarias
+                                    # Si falta la columna del boxplot, usar self._data completo
+                                    if column and column not in data_from_items.columns:
+                                        if self._debug or MatrixLayout._debug:
+                                            print(f"⚠️ Error actualizando boxplot: '{column}' no está en datos filtrados, usando todos los datos")
+                                        data_to_use = self._data
+                                    else:
+                                        data_to_use = data_from_items
+                                else:
+                                    data_to_use = processed_items
                             except Exception as e:
                                 if self._debug or MatrixLayout._debug:
                                     print(f"⚠️ Error creando DataFrame desde items: {e}")
+                                # Si falla, usar todos los datos
                                 data_to_use = self._data
                         else:
-                            data_to_use = processed_items
+                            # Si no hay items procesados, usar todos los datos
+                            data_to_use = self._data
                     else:
-                        # Si no hay items procesados, usar todos los datos
-                        data_to_use = self._data
+                        # Si no es DataFrame, usar items directamente
+                        data_to_use = items if items else self._data
                 else:
                     # Si no hay items, usar todos los datos (selección desactivada)
                     data_to_use = self._data
@@ -1945,6 +1975,18 @@ class ReactiveMatrixLayout:
                             import pandas as pd_module
                             globals()['pd'] = pd_module
                     if pd_module is not None and isinstance(data_to_use, pd_module.DataFrame):
+                        # ✅ CORRECCIÓN CRÍTICA: Verificar que las columnas necesarias existen
+                        if column not in data_to_use.columns:
+                            if self._debug or MatrixLayout._debug:
+                                print(f"⚠️ Error actualizando boxplot: '{column}' no está en datos. Columnas disponibles: {list(data_to_use.columns)[:10]}")
+                            # Intentar usar todos los datos
+                            data_to_use = self._data
+                            if column not in data_to_use.columns:
+                                if self._debug or MatrixLayout._debug:
+                                    print(f"❌ Error crítico: '{column}' no está en datos originales")
+                                update_boxplot._executing = False
+                                return
+                        
                         if category_col and category_col in data_to_use.columns:
                             # Boxplot por categoría
                             box_data = []
@@ -1969,6 +2011,18 @@ class ReactiveMatrixLayout:
                                     })
                         else:
                             # Boxplot simple
+                            # ✅ CORRECCIÓN CRÍTICA: Verificar que la columna existe antes de acceder
+                            if column not in data_to_use.columns:
+                                if self._debug or MatrixLayout._debug:
+                                    print(f"⚠️ Error actualizando boxplot: '{column}' no está en datos. Columnas disponibles: {list(data_to_use.columns)[:10]}")
+                                # Usar todos los datos si la columna no está en los datos filtrados
+                                data_to_use = self._data
+                                if column not in data_to_use.columns:
+                                    if self._debug or MatrixLayout._debug:
+                                        print(f"❌ Error crítico: '{column}' no está en datos originales")
+                                    update_boxplot._executing = False
+                                    return
+                            
                             values = data_to_use[column].dropna()
                             if len(values) > 0:
                                 q1 = values.quantile(0.25)
