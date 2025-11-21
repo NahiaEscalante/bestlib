@@ -45,6 +45,7 @@ except (ImportError, AttributeError, ModuleNotFoundError, Exception):
 # Importar desde módulos modulares
 from .matrix import MatrixLayout
 from ..reactive.selection import SelectionModel
+from ..reactive.selection import _items_to_dataframe
 
 class ReactiveMatrixLayout:
     """
@@ -2296,10 +2297,21 @@ class ReactiveMatrixLayout:
             # Crear handler para eventos de selección del pie chart
             def pie_handler(payload):
                 """Handler que actualiza el SelectionModel de este pie chart"""
+                # CRÍTICO: Verificar que el evento sea para este pie chart
                 event_letter = payload.get('__view_letter__')
-                if event_letter != letter:
+                
+                # Si el evento tiene __view_letter__, debe coincidir con la letra de este pie chart
+                # Si no tiene __view_letter__, procesar solo si no hay otros handlers más específicos
+                # (esto permite compatibilidad con eventos antiguos)
+                if event_letter is not None and event_letter != letter:
+                    # El evento es para otra vista, ignorar
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⏭️ [ReactiveMatrixLayout] Evento de pie chart ignorado: esperado '{letter}', recibido '{event_letter}'")
                     return
                 
+                # Si event_letter es None, podría ser un evento antiguo sin __view_letter__
+                # En ese caso, procesar solo si no hay otros handlers más específicos
+                # Por ahora, procesar si event_letter es None o coincide con letter
                 items = payload.get('items', [])
                 
                 if self._debug or MatrixLayout._debug:
@@ -2314,14 +2326,14 @@ class ReactiveMatrixLayout:
                 
                 # Guardar en variable Python si se especificó (como DataFrame)
                 if selection_var:
-                    import __main__
-                    # Guardar como DataFrame para facilitar el trabajo del usuario
-                    setattr(__main__, selection_var, items_df if items_df is not None else items)
-                    if self._debug or MatrixLayout._debug:
-                        count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
-                        print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
+                    # Usar el método set_selection para mantener consistencia
+                    self.set_selection(selection_var, items_df if items_df is not None else items)
             
+            # CRÍTICO: Registrar handler ANTES de crear el gráfico para asegurar que esté disponible cuando llegue el evento
             self._layout.on('select', pie_handler)
+            
+            if self._debug or MatrixLayout._debug:
+                print(f"📝 [ReactiveMatrixLayout] Handler registrado para pie chart '{letter}' con selection_var='{selection_var}'")
             
             kwargs['__view_letter__'] = letter
             kwargs['__is_primary_view__'] = True
@@ -3292,6 +3304,64 @@ class ReactiveMatrixLayout:
     def count(self):
         """Retorna el número de items seleccionados"""
         return self.selection_model.get_count()
+    
+    def get_selection(self, selection_var=None):
+        """
+        Obtiene la selección guardada en una variable Python.
+        
+        Args:
+            selection_var (str, optional): Nombre de la variable de selección.
+                                          Si no se especifica, retorna la selección del modelo principal.
+        
+        Returns:
+            DataFrame o lista: Datos seleccionados guardados en la variable especificada,
+                              o la selección del modelo principal si no se especifica variable.
+        
+        Ejemplo:
+            layout = ReactiveMatrixLayout("P", selection_model=SelectionModel())
+            layout.set_data(df)
+            layout.add_pie('P', category_col='species', interactive=True, selection_var='selected_pie_category')
+            layout.display()
+            
+            # Más tarde, obtener la selección:
+            selected = layout.get_selection('selected_pie_category')
+            # O simplemente:
+            selected = layout.get_selection()  # Retorna selection_model.get_items()
+        """
+        if selection_var:
+            # Buscar la variable en el namespace del usuario
+            import __main__
+            if hasattr(__main__, selection_var):
+                return getattr(__main__, selection_var)
+            else:
+                # Si no existe, buscar en _selection_variables para encontrar la letra correspondiente
+                for view_letter, var_name in self._selection_variables.items():
+                    if var_name == selection_var:
+                        # Retornar la selección del modelo de esa vista
+                        if view_letter in self._primary_view_models:
+                            return self._primary_view_models[view_letter].get_items()
+                # Si no se encuentra, retornar DataFrame vacío
+                if HAS_PANDAS:
+                    return pd.DataFrame()
+                else:
+                    return []
+        else:
+            # Retornar selección del modelo principal
+            return self.selection_model.get_items()
+    
+    def set_selection(self, selection_var_name, items):
+        """
+        Guarda la selección en una variable Python por su nombre.
+        
+        Args:
+            selection_var_name (str): Nombre de la variable donde guardar la selección.
+            items (list or pd.DataFrame): Los items a guardar.
+        """
+        import __main__
+        setattr(__main__, selection_var_name, items)
+        if self._debug or MatrixLayout._debug:
+            count_msg = f"{len(items)} filas" if HAS_PANDAS and isinstance(items, pd.DataFrame) else f"{len(items)} items"
+            print(f"💾 Selección guardada en variable '{selection_var_name}': {count_msg}")
 
 
 # ==========================
