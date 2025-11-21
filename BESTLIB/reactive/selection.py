@@ -181,9 +181,10 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
     def update(self, items):
         """
         Actualiza los items manualmente desde Python.
+        ✅ CORRECCIÓN: Ahora maneja DataFrames correctamente.
         
         Args:
-            items: Lista de items a actualizar
+            items: Lista de diccionarios, DataFrame de pandas, o None
         """
         # Flag para evitar actualizaciones múltiples simultáneas
         if hasattr(self, '_updating') and self._updating:
@@ -193,16 +194,71 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
         
         try:
             if items is None:
-                items = []
+                items_list = []
+            elif HAS_PANDAS and isinstance(items, pd.DataFrame):
+                # ✅ CORRECCIÓN CRÍTICA: Convertir DataFrame a lista de diccionarios
+                # traitlets.List(Dict()) espera lista de dicts, no DataFrame
+                if items.empty:
+                    items_list = []
+                else:
+                    items_list = items.to_dict('records')
+            elif isinstance(items, list):
+                # ✅ CORRECCIÓN: Validar que todos los elementos sean diccionarios
+                items_list = []
+                for item in items:
+                    if isinstance(item, dict):
+                        items_list.append(item)
+                    elif HAS_PANDAS and isinstance(item, pd.Series):
+                        # Convertir Series a dict
+                        items_list.append(item.to_dict())
+                    else:
+                        # Intentar convertir a dict
+                        try:
+                            if hasattr(item, '__dict__'):
+                                items_list.append(item.__dict__)
+                            elif hasattr(item, '_asdict'):
+                                items_list.append(item._asdict())
+                            else:
+                                # Último recurso: crear dict con el item
+                                items_list.append({'value': item})
+                        except Exception as e:
+                            print(f"⚠️ [SelectionModel] Error convirtiendo item a dict: {e}")
+                            continue
             else:
-                items = list(items)
+                # Intentar convertir a lista
+                try:
+                    items_list = list(items) if hasattr(items, '__iter__') else [items]
+                except Exception:
+                    items_list = []
             
-            new_count = len(items)
+            new_count = len(items_list)
+            
+            # ✅ CORRECCIÓN: Validar que items_list sea lista de diccionarios para traitlets
+            # traitlets.List(Dict()) requiere que todos los elementos sean dicts
+            valid_items = []
+            for item in items_list:
+                if isinstance(item, dict):
+                    valid_items.append(item)
+                else:
+                    # Intentar convertir a dict
+                    try:
+                        if HAS_PANDAS and isinstance(item, pd.Series):
+                            valid_items.append(item.to_dict())
+                        elif hasattr(item, '__dict__'):
+                            valid_items.append(item.__dict__)
+                        elif hasattr(item, '_asdict'):
+                            valid_items.append(item._asdict())
+                        else:
+                            # Fallback: crear dict con el valor
+                            valid_items.append({'value': item})
+                    except Exception:
+                        # Si no se puede convertir, omitir
+                        continue
             
             # Solo actualizar si hay cambio real (evitar loops infinitos)
-            if self.items != items or self.count != new_count:
-                self.items = items
-                self.count = new_count
+            if self.items != valid_items or self.count != len(valid_items):
+                self.items = valid_items
+                self.count = len(valid_items)
                 # NOTA: NO llamar callbacks manualmente aquí porque @observe('items') ya los ejecutará
         finally:
             self._updating = False
