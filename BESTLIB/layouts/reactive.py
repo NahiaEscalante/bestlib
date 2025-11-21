@@ -48,6 +48,25 @@ class ReactiveMatrixLayout:
         selected_rows = selection.get_items()  # Lista de diccionarios con todas las columnas
     """
     
+    _debug = False  # Modo debug para ver mensajes detallados
+    
+    @classmethod
+    def set_debug(cls, enabled: bool):
+        """
+        Activa/desactiva mensajes de debug.
+        
+        Args:
+            enabled (bool): Si True, activa mensajes detallados de debug.
+                           Si False, solo muestra errores críticos.
+        
+        Ejemplo:
+            ReactiveMatrixLayout.set_debug(True)  # Activar debug
+            layout = ReactiveMatrixLayout("AS\nHX")
+            # ... código ...
+            ReactiveMatrixLayout.set_debug(False)  # Desactivar debug
+        """
+        cls._debug = bool(enabled)
+    
     def __init__(self, ascii_layout=None, selection_model=None, figsize=None, row_heights=None, col_widths=None, gap=None, cell_padding=None, max_width=None):
         """
         Crea un MatrixLayout con soporte reactivo y LinkedViews integrado.
@@ -192,14 +211,14 @@ class ReactiveMatrixLayout:
             event_scatter_letter = payload.get('__scatter_letter__')
             if event_scatter_letter != scatter_letter_capture:
                 # Este evento no es para este scatter plot, ignorar
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{scatter_letter_capture}', recibido '{event_scatter_letter}'")
                 return
             
             # El payload ya viene con __scatter_letter__ del JavaScript
             items = payload.get('items', [])
             
-            if MatrixLayout._debug:
+            if self._debug or MatrixLayout._debug:
                 print(f"✅ [ReactiveMatrixLayout] Evento recibido para scatter '{scatter_letter_capture}': {len(items)} items")
             
             # Convertir items a DataFrame antes de guardar
@@ -246,7 +265,7 @@ class ReactiveMatrixLayout:
             MatrixLayout._map[letter] = scatter_spec
             
             # Debug: verificar que el spec tiene los identificadores
-            if MatrixLayout._debug:
+            if self._debug or MatrixLayout._debug:
                 print(f"✅ [ReactiveMatrixLayout] Scatter plot '{letter}' configurado con __scatter_letter__={scatter_spec.get('__scatter_letter__')}")
         
         # Registrar vista para sistema de enlace
@@ -330,7 +349,7 @@ class ReactiveMatrixLayout:
                 import __main__
                 empty_df = pd.DataFrame() if HAS_PANDAS else []
                 setattr(__main__, selection_var, empty_df)
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     df_type = "DataFrame" if HAS_PANDAS else "lista"
                     print(f"📦 Variable '{selection_var}' creada para guardar selecciones de bar chart '{letter}' como {df_type}")
             
@@ -350,13 +369,13 @@ class ReactiveMatrixLayout:
                 # CRÍTICO: Prevenir procesamiento si estamos actualizando el bar chart
                 # Verificar flag de actualización del bar chart
                 if self._barchart_update_flags.get(barchart_update_flag, False):
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         print(f"⏭️ [ReactiveMatrixLayout] Bar chart '{letter}' está siendo actualizado, ignorando evento")
                     return
                 
                 items = payload.get('items', [])
                 
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Evento recibido para bar chart '{letter}': {len(items)} items")
                 
                 # CRÍTICO: Prevenir actualizaciones recursivas
@@ -384,7 +403,7 @@ class ReactiveMatrixLayout:
                         import __main__
                         # Guardar como DataFrame para facilitar el trabajo del usuario
                         setattr(__main__, selection_var, items_df if items_df is not None else items)
-                        if MatrixLayout._debug:
+                        if self._debug or MatrixLayout._debug:
                             count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
                             print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
                 finally:
@@ -407,7 +426,7 @@ class ReactiveMatrixLayout:
         
         # Evitar registrar múltiples callbacks para la misma letra (solo si es enlazada)
         if not is_primary and letter in self._barchart_callbacks:
-            if MatrixLayout._debug:
+            if self._debug or MatrixLayout._debug:
                 print(f"⚠️ Bar chart para '{letter}' ya está registrado. Ignorando registro duplicado.")
             return self
         
@@ -474,7 +493,7 @@ class ReactiveMatrixLayout:
             }
         
             # Debug: verificar que la vista principal existe
-            if MatrixLayout._debug:
+            if self._debug or MatrixLayout._debug:
                 print(f"🔗 [ReactiveMatrixLayout] Registrando callback para bar chart '{letter}' enlazado a vista principal '{primary_letter}'")
                 print(f"   - SelectionModel ID: {id(primary_selection)}")
                 print(f"   - Callbacks actuales: {len(primary_selection._callbacks)}")
@@ -484,7 +503,7 @@ class ReactiveMatrixLayout:
                 """Actualiza el bar chart cuando cambia la selección usando JavaScript"""
                 try:
                     # Debug: verificar que el callback se está ejecutando
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando bar chart '{letter}' con {count} items seleccionados")
                     import json
                     from IPython.display import Javascript
@@ -802,7 +821,7 @@ class ReactiveMatrixLayout:
                         pass
                     
                 except Exception as e:
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         print(f"⚠️ Error actualizando bar chart: {e}")
                         import traceback
                         traceback.print_exc()
@@ -878,7 +897,7 @@ class ReactiveMatrixLayout:
                 import __main__
                 empty_df = pd.DataFrame() if HAS_PANDAS else []
                 setattr(__main__, selection_var, empty_df)
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     df_type = "DataFrame" if HAS_PANDAS else "lista"
                     print(f"📦 Variable '{selection_var}' creada para guardar selecciones de grouped bar chart '{letter}' como {df_type}")
             
@@ -889,7 +908,7 @@ class ReactiveMatrixLayout:
                 
                 items = payload.get('items', [])
                 
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Evento recibido para grouped bar chart '{letter}': {len(items)} items")
                 
                 # Convertir items a DataFrame antes de guardar
@@ -903,7 +922,7 @@ class ReactiveMatrixLayout:
                     import __main__
                     # Guardar como DataFrame para facilitar el trabajo del usuario
                     setattr(__main__, selection_var, items_df if items_df is not None else items)
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
                         print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
             
@@ -930,7 +949,7 @@ class ReactiveMatrixLayout:
                     return self
                 primary_letter = list(all_primary.keys())[-1]
                 primary_selection = all_primary[primary_letter]
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     print(f"💡 Grouped bar chart '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
             
             def update(items, count):
@@ -982,7 +1001,7 @@ class ReactiveMatrixLayout:
             if not self._scatter_selection_models:
                 raise ValueError("No hay scatter plots disponibles. Agrega un scatter plot primero con add_scatter().")
             scatter_letter = list(self._scatter_selection_models.keys())[-1]
-            if MatrixLayout._debug:
+            if self._debug or MatrixLayout._debug:
                 print(f"💡 Gráfico '{letter}' ({chart_type}) enlazado automáticamente a scatter '{scatter_letter}'")
         
         # Guardar información del gráfico enlazado
@@ -999,7 +1018,7 @@ class ReactiveMatrixLayout:
                 """Función genérica de actualización que puede ser extendida"""
                 # Por defecto, actualizar el mapping del gráfico
                 # Los gráficos específicos pueden sobrescribir este comportamiento
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     print(f"🔄 Actualizando gráfico '{letter}' ({chart_type}) con {count} elementos seleccionados")
             
             update_func = generic_update
@@ -1071,7 +1090,7 @@ class ReactiveMatrixLayout:
                 import __main__
                 empty_df = pd.DataFrame() if HAS_PANDAS else []
                 setattr(__main__, selection_var, empty_df)
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     df_type = "DataFrame" if HAS_PANDAS else "lista"
                     print(f"📦 Variable '{selection_var}' creada para guardar selecciones de histogram '{letter}' como {df_type}")
             
@@ -1084,7 +1103,7 @@ class ReactiveMatrixLayout:
                 
                 items = payload.get('items', [])
                 
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Evento recibido para histogram '{letter}': {len(items)} items")
                 
                 # Convertir items a DataFrame antes de guardar
@@ -1099,7 +1118,7 @@ class ReactiveMatrixLayout:
                     import __main__
                     # Guardar como DataFrame para facilitar el trabajo del usuario
                     setattr(__main__, selection_var, items_df if items_df is not None else items)
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
                         print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
             
@@ -1149,7 +1168,7 @@ class ReactiveMatrixLayout:
                 
                 # CRÍTICO: Flag para evitar ejecuciones múltiples simultáneas
                 if hasattr(update_histogram, '_executing') and update_histogram._executing:
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         print(f"   ⏭️ Histogram '{letter}' callback ya está ejecutándose, ignorando llamada duplicada")
                     return
                 update_histogram._executing = True
@@ -1158,7 +1177,7 @@ class ReactiveMatrixLayout:
                     import json
                     from IPython.display import Javascript
                     
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         print(f"   🔄 Histogram '{letter}' callback ejecutándose con {count} items")
                     
                     # Usar datos seleccionados o todos los datos
@@ -1452,14 +1471,14 @@ class ReactiveMatrixLayout:
                     
                 except Exception as e:
                     # MatrixLayout ya está importado al principio de la función
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         print(f"⚠️ Error actualizando histograma: {e}")
                         import traceback
                         traceback.print_exc()
                 finally:
                     # CRÍTICO: Resetear flag después de completar
                     update_histogram._executing = False
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         print(f"   ✅ Histogram '{letter}' callback completado")
             
             # Registrar callback en el modelo de selección de la vista principal
@@ -1499,7 +1518,7 @@ class ReactiveMatrixLayout:
         
         # Verificar si ya existe un callback para este boxplot (evitar duplicados)
         if letter in self._boxplot_callbacks:
-            if MatrixLayout._debug:
+            if self._debug or MatrixLayout._debug:
                 print(f"⚠️ Boxplot para '{letter}' ya está registrado. Ignorando registro duplicado.")
             return self
         
@@ -1521,7 +1540,7 @@ class ReactiveMatrixLayout:
                 raise ValueError("No hay vistas principales disponibles. Agrega una vista principal primero (scatter, bar chart, etc.)")
             primary_letter = list(all_primary.keys())[-1]
             primary_selection = all_primary[primary_letter]
-            if MatrixLayout._debug:
+            if self._debug or MatrixLayout._debug:
                 print(f"💡 Boxplot '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
         
         # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
@@ -1547,7 +1566,7 @@ class ReactiveMatrixLayout:
             
             # CRÍTICO: Flag para evitar ejecuciones múltiples simultáneas
             if hasattr(update_boxplot, '_executing') and update_boxplot._executing:
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     print(f"   ⏭️ Boxplot '{letter}' callback ya está ejecutándose, ignorando llamada duplicada")
                 return
             update_boxplot._executing = True
@@ -1556,7 +1575,7 @@ class ReactiveMatrixLayout:
                 import json
                 from IPython.display import Javascript
                 
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     print(f"   🔄 Boxplot '{letter}' callback ejecutándose con {count} items")
                 
                 # Usar datos seleccionados o todos los datos
@@ -1859,11 +1878,11 @@ class ReactiveMatrixLayout:
                     # en lugar de crear uno nuevo, lo que previene la duplicación
                     display(Javascript(js_update), clear=False, display_id=f'boxplot-update-{letter}', update=True)
                     
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         print(f"   📤 JavaScript del boxplot '{letter}' ejecutado (display_id: boxplot-update-{letter})")
                 except Exception as e:
                     from .matrix import MatrixLayout
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         print(f"⚠️ Error ejecutando JavaScript del boxplot: {e}")
                         import traceback
                         traceback.print_exc()
@@ -1871,13 +1890,13 @@ class ReactiveMatrixLayout:
             except Exception as e:
                 from .matrix import MatrixLayout
                 import traceback
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     print(f"⚠️ Error actualizando boxplot: {e}")
                     traceback.print_exc()
             finally:
                 # CRÍTICO: Resetear flag después de completar
                 update_boxplot._executing = False
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     print(f"   ✅ Boxplot '{letter}' callback completado")
         
         # Registrar callback en el SelectionModel de la vista principal
@@ -1887,7 +1906,7 @@ class ReactiveMatrixLayout:
         self._boxplot_callbacks[letter] = update_boxplot
         
         # Debug: verificar que el callback se registró
-        if MatrixLayout._debug:
+        if self._debug or MatrixLayout._debug:
             print(f"🔗 [ReactiveMatrixLayout] Callback registrado para boxplot '{letter}' enlazado a vista principal '{primary_letter}'")
             print(f"   - SelectionModel ID: {id(primary_selection)}")
             print(f"   - Callbacks registrados: {len(primary_selection._callbacks)}")
@@ -2026,7 +2045,7 @@ class ReactiveMatrixLayout:
         except Exception as e:
             from .matrix import MatrixLayout
             import traceback
-            if MatrixLayout._debug:
+            if self._debug or MatrixLayout._debug:
                 print(f"⚠️ Error preparando datos del bar chart: {e}")
                 traceback.print_exc()
             return []
@@ -2160,7 +2179,7 @@ class ReactiveMatrixLayout:
                 import __main__
                 empty_df = pd.DataFrame() if HAS_PANDAS else []
                 setattr(__main__, selection_var, empty_df)
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     df_type = "DataFrame" if HAS_PANDAS else "lista"
                     print(f"📦 Variable '{selection_var}' creada para guardar selecciones de pie chart '{letter}' como {df_type}")
             
@@ -2173,7 +2192,7 @@ class ReactiveMatrixLayout:
                 
                 items = payload.get('items', [])
                 
-                if MatrixLayout._debug:
+                if self._debug or MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Evento recibido para pie chart '{letter}': {len(items)} items")
                 
                 # Convertir items a DataFrame antes de guardar
@@ -2188,7 +2207,7 @@ class ReactiveMatrixLayout:
                     import __main__
                     # Guardar como DataFrame para facilitar el trabajo del usuario
                     setattr(__main__, selection_var, items_df if items_df is not None else items)
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
                         print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
             
@@ -2250,14 +2269,14 @@ class ReactiveMatrixLayout:
                 
                 # Prevenir actualizaciones recursivas
                 if self._update_flags.get(pie_update_flag, False):
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         print(f"⏭️ [ReactiveMatrixLayout] Actualización de pie chart '{letter}' ya en progreso, ignorando...")
                     return
                 
                 self._update_flags[pie_update_flag] = True
                 
                 try:
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando pie chart '{letter}' con {count} items seleccionados")
                     
                     # Procesar items: los items del bar chart ya son las filas originales
@@ -2301,7 +2320,7 @@ class ReactiveMatrixLayout:
                     # Validar que category_col existe en los datos
                     if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
                         if category_col and category_col not in data_to_use.columns:
-                            if MatrixLayout._debug:
+                            if self._debug or MatrixLayout._debug:
                                 print(f"⚠️ Columna '{category_col}' no encontrada en datos. Columnas disponibles: {list(data_to_use.columns)}")
                             # Intentar usar todos los datos originales
                             data_to_use = self._data
@@ -2350,7 +2369,7 @@ class ReactiveMatrixLayout:
                                         for cat, cnt in counts.items()
                                     ]
                             else:
-                                if MatrixLayout._debug:
+                                if self._debug or MatrixLayout._debug:
                                     print(f"⚠️ No se puede crear pie chart: columna '{category_col}' no encontrada")
                                 return
                         else:
@@ -2403,7 +2422,7 @@ class ReactiveMatrixLayout:
                             pie_data_str = json.dumps(pie_data, sort_keys=True)
                             pie_data_hash = hashlib.md5(pie_data_str.encode()).hexdigest()
                             if self._pie_data_cache.get(pie_data_cache_key) == pie_data_hash:
-                                if MatrixLayout._debug:
+                                if self._debug or MatrixLayout._debug:
                                     print(f"⏭️ [ReactiveMatrixLayout] Datos del pie chart '{letter}' no han cambiado, ignorando actualización")
                                 self._update_flags[pie_update_flag] = False
                                 return
@@ -2607,12 +2626,12 @@ class ReactiveMatrixLayout:
                             # Ejecutar JavaScript directamente
                             display(Javascript(js_update), clear=False, display_id=f'piechart-update-{letter}', update=True)
                         except Exception as e:
-                            if MatrixLayout._debug:
+                            if self._debug or MatrixLayout._debug:
                                 print(f"⚠️ Error ejecutando JavaScript del pie chart: {e}")
                                 import traceback
                                 traceback.print_exc()
                     except Exception as e:
-                        if MatrixLayout._debug:
+                        if self._debug or MatrixLayout._debug:
                             print(f"⚠️ Error actualizando pie chart con JavaScript: {e}")
                             traceback.print_exc()
                     finally:
@@ -2624,7 +2643,7 @@ class ReactiveMatrixLayout:
                             self._update_flags[pie_update_flag] = False
                         threading.Thread(target=reset_flag, daemon=True).start()
                 except Exception as e:
-                    if MatrixLayout._debug:
+                    if self._debug or MatrixLayout._debug:
                         print(f"⚠️ Error actualizando pie chart: {e}")
                         traceback.print_exc()
                     # Reset flag en caso de error
@@ -2634,7 +2653,7 @@ class ReactiveMatrixLayout:
             primary_selection.on_change(update_pie)
             
             # Debug: verificar que el callback se registró
-            if MatrixLayout._debug:
+            if self._debug or MatrixLayout._debug:
                 print(f"🔗 [ReactiveMatrixLayout] Callback registrado para pie chart '{letter}' enlazado a vista principal '{primary_letter}'")
                 print(f"   - SelectionModel ID: {id(primary_selection)}")
                 print(f"   - Callbacks registrados: {len(primary_selection._callbacks)}")

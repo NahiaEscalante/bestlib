@@ -24,6 +24,7 @@ class MatrixLayout:
     Layout de matriz ASCII refactorizado para usar módulos modulares.
     Mantiene compatibilidad hacia atrás con la API original.
     """
+    _debug = False  # Modo debug para ver mensajes detallados
     _map = {}
     _safe_html = True
     
@@ -81,7 +82,14 @@ class MatrixLayout:
     
     @classmethod
     def set_debug(cls, enabled: bool):
-        """Activa/desactiva mensajes de debug"""
+        """
+        Activa/desactiva mensajes de debug.
+        
+        Args:
+            enabled (bool): Si True, activa mensajes detallados de debug.
+                           Si False, solo muestra errores críticos.
+        """
+        cls._debug = bool(enabled)
         EventManager.set_debug(enabled)
         CommManager.set_debug(enabled)
     
