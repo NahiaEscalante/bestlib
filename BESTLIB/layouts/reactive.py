@@ -2126,10 +2126,11 @@ class ReactiveMatrixLayout:
         # Crear boxplot inicial con datos filtrados si hay selección, o todos los datos si no
         data_to_use = initial_data if 'initial_data' in locals() else self._data
         if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
-                if category_col and category_col in data_to_use.columns:
-                    box_data = []
-                    for cat in data_to_use[category_col].unique():
-                        cat_data = data_to_use[data_to_use[category_col] == cat][column].dropna()
+            if category_col and category_col in data_to_use.columns:
+                # Boxplot por categoría
+                box_data = []
+                for cat in data_to_use[category_col].unique():
+                    cat_data = data_to_use[data_to_use[category_col] == cat][column].dropna()
                     if len(cat_data) > 0:
                         q1 = cat_data.quantile(0.25)
                         median = cat_data.quantile(0.5)
