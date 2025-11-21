@@ -4912,7 +4912,43 @@
       .enter()
       .append('g')
       .attr('class', 'boxplot-group')
-      .style('cursor', 'pointer')
+      .style('cursor', spec.interactive ? 'pointer' : 'default')
+      .on('click', function(event, d) {
+        if (spec.interactive) {
+          // Obtener letra de la vista (para vistas principales)
+          let viewLetter = spec.__view_letter__ || null;
+          if (!viewLetter && container) {
+            const letterAttr = container.getAttribute('data-letter');
+            if (letterAttr) {
+              viewLetter = letterAttr;
+            }
+          }
+          
+          // IMPORTANTE: Enviar todas las filas originales que corresponden a esta categoría
+          const originalRows = d._original_rows || d._original_row || (d._original_row ? [d._original_row] : null) || [];
+          
+          // Asegurar que originalRows sea un array
+          const items = Array.isArray(originalRows) && originalRows.length > 0 ? originalRows : [];
+          
+          // Si no hay filas originales, intentar enviar al menos información de la categoría
+          if (items.length === 0) {
+            console.warn(`[Boxplot] No se encontraron filas originales para la categoría ${d.category}. Asegúrese de que los datos se prepararon correctamente.`);
+            // Enviar información de la categoría como fallback
+            items.push({ category: d.category });
+          }
+          
+          sendEvent(divId, 'select', {
+            type: 'select',
+            items: items,  // Enviar todas las filas originales de esta categoría
+            indices: [],
+            original_items: [d],
+            _original_rows: items,  // También incluir como _original_rows para compatibilidad
+            selected_category: d.category,
+            __view_letter__: viewLetter,
+            __is_primary_view__: spec.__is_primary_view__ || false
+          });
+        }
+      })
       .on('mouseenter', function(event, d) {
         // Mostrar tooltip con información detallada
         const mouseX = event.pageX || event.clientX || 0;
@@ -5878,7 +5914,9 @@
         count: indices.size, // Contar total, no solo los enviados
         indices: limitedIndices,
         totalCount: indices.size, // Total real de seleccionados
-        __scatter_letter__: scatterLetter
+        __scatter_letter__: scatterLetter,
+        __view_letter__: scatterLetter,  // También incluir como __view_letter__ para compatibilidad
+        __is_primary_view__: spec.__is_primary_view__ || false
       });
       
       // Advertencia si se limitó el payload
@@ -8004,7 +8042,29 @@
     // Ejes - solo eje X para ridgeline (las categorías están en el lado izquierdo)
     if (spec.axes !== false) {
       const xLabel = options.xLabel || spec.xLabel;
+      const yLabel = options.yLabel || spec.yLabel;
       renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
+      // Nota: Ridgeline no tiene eje Y tradicional, pero podemos mostrar el label si se especifica
+      if (yLabel && svg) {
+        const styles = getUnifiedStyles();
+        const offset = 8;
+        const yLabelX = margin.left / 2 - offset;
+        const yLabelY = margin.top + chartHeight / 2;
+        
+        svg.append('text')
+          .attr('x', yLabelX)
+          .attr('y', yLabelY)
+          .attr('text-anchor', 'middle')
+          .attr('dominant-baseline', 'central')
+          .attr('class', 'bestlib-axis-label bestlib-axis-label-y')
+          .style('font-size', `${styles.labelFontSize}px`)
+          .style('font-weight', styles.labelFontWeight)
+          .style('fill', styles.textColor)
+          .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
+          .style('pointer-events', 'none')
+          .attr('transform', `rotate(-90 ${yLabelX} ${yLabelY})`)
+          .text(yLabel);
+      }
     }
   }
   
@@ -8389,6 +8449,36 @@
       .attr('stroke', color)
       .attr('stroke-width', 1)
       .attr('opacity', 0.3);
+    
+    // Polar no tiene ejes tradicionales, pero puede mostrar labels si se especifican
+    if (xLabel || yLabel) {
+      const styles = getUnifiedStyles();
+      // Mostrar labels en el centro del gráfico polar
+      if (xLabel && svg) {
+        svg.append('text')
+          .attr('x', size / 2)
+          .attr('y', size - 10)
+          .attr('text-anchor', 'middle')
+          .attr('class', 'bestlib-axis-label bestlib-axis-label-x')
+          .style('font-size', `${styles.labelFontSize}px`)
+          .style('font-weight', styles.labelFontWeight)
+          .style('fill', styles.textColor)
+          .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
+          .text(xLabel);
+      }
+      if (yLabel && svg) {
+        svg.append('text')
+          .attr('x', size / 2)
+          .attr('y', 20)
+          .attr('text-anchor', 'middle')
+          .attr('class', 'bestlib-axis-label bestlib-axis-label-y')
+          .style('font-size', `${styles.labelFontSize}px`)
+          .style('font-weight', styles.labelFontWeight)
+          .style('fill', styles.textColor)
+          .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
+          .text(yLabel);
+      }
+    }
   }
   
   /**
@@ -8494,8 +8584,9 @@
         
         applyUnifiedAxisStyles(axisG);
         
-        // Usar función reutilizable para label (centrado correctamente)
+        // Usar función reutilizable para labels
         const xLabel = options.xLabel || spec.xLabel;
+        const yLabel = options.yLabel || spec.yLabel;
         if (xLabel && svg) {
           const styles = getUnifiedStyles();
           const offset = 8;
@@ -8512,6 +8603,26 @@
             .style('fill', styles.textColor)
             .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
             .text(xLabel);
+        }
+        if (yLabel && svg) {
+          const styles = getUnifiedStyles();
+          const offset = 8;
+          const yLabelX = margin.left / 2 - offset;
+          const yLabelY = margin.top + chartHeight / 2;
+          
+          svg.append('text')
+            .attr('x', yLabelX)
+            .attr('y', yLabelY)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'central')
+            .attr('class', 'bestlib-axis-label bestlib-axis-label-y')
+            .style('font-size', `${styles.labelFontSize}px`)
+            .style('font-weight', styles.labelFontWeight)
+            .style('fill', styles.textColor)
+            .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
+            .style('pointer-events', 'none')
+            .attr('transform', `rotate(-90 ${yLabelX} ${yLabelY})`)
+            .text(yLabel);
         }
       }
     } else {
