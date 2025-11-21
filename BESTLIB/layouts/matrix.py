@@ -18,10 +18,36 @@ try:
 except ImportError:
     HAS_WIDGETS = False
 
+# Import de pandas de forma defensiva para evitar errores de importación circular
+HAS_PANDAS = False
+pd = None
 try:
+    # Verificar que pandas no esté parcialmente inicializado
+    import sys
+    if 'pandas' in sys.modules:
+        # Si pandas ya está en sys.modules pero corrupto, intentar limpiarlo
+        try:
+            pd_test = sys.modules['pandas']
+            # Intentar acceder a un atributo básico para verificar si está corrupto
+            _ = pd_test.__version__
+        except (AttributeError, ImportError):
+            # Pandas está corrupto, limpiarlo
+            del sys.modules['pandas']
+            # También limpiar submódulos relacionados
+            modules_to_remove = [k for k in sys.modules.keys() if k.startswith('pandas.')]
+            for mod in modules_to_remove:
+                try:
+                    del sys.modules[mod]
+                except:
+                    pass
+    
+    # Ahora intentar importar pandas
     import pandas as pd
+    # Verificar que pandas esté completamente inicializado
+    _ = pd.__version__
     HAS_PANDAS = True
-except ImportError:
+except (ImportError, AttributeError, ModuleNotFoundError, Exception):
+    # Si pandas no está disponible o está corrupto, continuar sin él
     HAS_PANDAS = False
     pd = None
 
