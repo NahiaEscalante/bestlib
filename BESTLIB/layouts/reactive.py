@@ -1875,6 +1875,19 @@ class ReactiveMatrixLayout:
             # CRÍTICO: Importar MatrixLayout al principio para evitar UnboundLocalError
             from .matrix import MatrixLayout
             
+            # ✅ CORRECCIÓN CRÍTICA: Importar pandas al principio para evitar UnboundLocalError
+            pd_module = None
+            if HAS_PANDAS:
+                # Intentar obtener pd de globals primero
+                pd_module = globals().get('pd')
+                if pd_module is None:
+                    import sys
+                    if 'pandas' in sys.modules:
+                        pd_module = sys.modules['pandas']
+                    else:
+                        import pandas as pd_module
+                        globals()['pd'] = pd_module
+            
             # CRÍTICO: Flag para evitar ejecuciones múltiples simultáneas
             if hasattr(update_boxplot, '_executing') and update_boxplot._executing:
                 if self._debug or MatrixLayout._debug:
@@ -1903,7 +1916,7 @@ class ReactiveMatrixLayout:
                 if items and len(items) > 0:
                     # ✅ ESTRATEGIA 1: Si tenemos índices originales en el payload, usarlos para filtrar self._data
                     # Esto garantiza que tenemos todas las columnas del DataFrame original
-                    if HAS_PANDAS and isinstance(self._data, pd.DataFrame):
+                    if HAS_PANDAS and pd_module is not None and isinstance(self._data, pd_module.DataFrame):
                         # Buscar índices en el payload (pueden venir en diferentes formatos)
                         indices = None
                         if hasattr(items, '__iter__') and not isinstance(items, (str, dict)):
@@ -1931,12 +1944,11 @@ class ReactiveMatrixLayout:
                         if processed_items:
                             try:
                                 # Intentar crear DataFrame desde los items procesados
-                                if HAS_PANDAS:
-                                    import pandas as pd
+                                if HAS_PANDAS and pd_module is not None:
                                     if isinstance(processed_items[0], dict):
-                                        data_from_items = pd.DataFrame(processed_items)
+                                        data_from_items = pd_module.DataFrame(processed_items)
                                     else:
-                                        data_from_items = pd.DataFrame(processed_items)
+                                        data_from_items = pd_module.DataFrame(processed_items)
                                     
                                     # ✅ CORRECCIÓN CRÍTICA: Verificar que el DataFrame tenga todas las columnas necesarias
                                     # Si falta la columna del boxplot, usar self._data completo
@@ -1964,17 +1976,8 @@ class ReactiveMatrixLayout:
                     data_to_use = self._data
                 
                 # Preparar datos para boxplot
-                # Asegurar que pd esté disponible (usar globals para evitar UnboundLocalError)
-                if HAS_PANDAS:
-                    pd_module = globals().get('pd')
-                    if pd_module is None:
-                        import sys
-                        if 'pandas' in sys.modules:
-                            pd_module = sys.modules['pandas']
-                        else:
-                            import pandas as pd_module
-                            globals()['pd'] = pd_module
-                    if pd_module is not None and isinstance(data_to_use, pd_module.DataFrame):
+                # ✅ CORRECCIÓN: pd_module ya está definido al principio de la función
+                if HAS_PANDAS and pd_module is not None and isinstance(data_to_use, pd_module.DataFrame):
                         # ✅ CORRECCIÓN CRÍTICA: Verificar que las columnas necesarias existen
                         if column not in data_to_use.columns:
                             if self._debug or MatrixLayout._debug:
