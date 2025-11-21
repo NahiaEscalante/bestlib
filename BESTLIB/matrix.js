@@ -874,9 +874,10 @@
       const xLabelFontSize = spec.xLabelFontSize || 13;
       const xLabelRotation = spec.xLabelRotation || 0;
       // Posición X: centro del gráfico (en coordenadas del grupo g)
-      // Posición Y: debajo del gráfico, dentro del margen inferior
+      // Posición Y: debajo del gráfico, dentro del margen inferior con offset
+      const offset = 8; // Offset para que no esté pegado al tick
       const xLabelX = chartWidth / 2;
-      const xLabelY = chartHeight + margin.bottom - 10;
+      const xLabelY = chartHeight + margin.bottom - 10 + offset;
       
       const styles = getUnifiedStyles();
       const xLabelText = g.append('text')
@@ -907,10 +908,11 @@
       const yLabelRotation = spec.yLabelRotation !== undefined ? spec.yLabelRotation : -90;
       
       // Coordenadas en el espacio del SVG (no del grupo g)
-      // X: en el centro del margen izquierdo (margin.left / 2) - posición horizontal
+      // X: en el centro del margen izquierdo con offset (margin.left / 2 - offset) - posición horizontal
       // Y: en el centro vertical del área del gráfico (margin.top + chartHeight / 2) - posición vertical
       // NOTA: Estas coordenadas están en el espacio del SVG, donde (0,0) es la esquina superior izquierda
-      const yLabelX = margin.left / 2;
+      const offset = 8; // Offset para que no esté pegado al tick
+      const yLabelX = margin.left / 2 - offset;
       const yLabelY = margin.top + chartHeight / 2;
       
       // DEBUG: Verificar que las coordenadas sean válidas
@@ -965,9 +967,10 @@
     if (xLabel && svg) {
       const styles = getUnifiedStyles();
       // X: centro del gráfico (margin.left + chartWidth / 2)
-      // Y: debajo del gráfico (margin.top + chartHeight + margin.bottom - 10)
+      // Y: debajo del gráfico con offset para no estar pegado (margin.top + chartHeight + margin.bottom - 10 + offset)
+      const offset = 8; // Offset para que no esté pegado al tick
       const xLabelX = margin.left + chartWidth / 2;
-      const xLabelY = margin.top + chartHeight + margin.bottom - 10;
+      const xLabelY = margin.top + chartHeight + margin.bottom - 10 + offset;
       
       svg.append('text')
         .attr('x', xLabelX)
@@ -1003,9 +1006,10 @@
     // Renderizar label si se proporciona
     if (yLabel && svg) {
       const styles = getUnifiedStyles();
-      // X: centro del margen izquierdo (margin.left / 2)
+      // X: centro del margen izquierdo con offset para no estar pegado (margin.left / 2 - offset)
       // Y: centro vertical del gráfico (margin.top + chartHeight / 2)
-      const yLabelX = margin.left / 2;
+      const offset = 8; // Offset para que no esté pegado al tick
+      const yLabelX = margin.left / 2 - offset;
       const yLabelY = margin.top + chartHeight / 2;
       
       const yLabelText = svg.append('text')
@@ -7489,7 +7493,7 @@
   function renderRugD3(container, spec, d3, divId) {
     console.log("[BESTLIB] renderRugD3()", spec);
     
-    const data = spec.data || [];
+    let data = spec.data || [];
     if (!data || data.length === 0) {
       console.error('[BESTLIB] renderRugD3: No hay datos', { 
         spec, 
@@ -7501,14 +7505,40 @@
       return;
     }
     
-    // Validar estructura de datos - Rug espera [{x: value}, ...]
-    if (!Array.isArray(data) || data.length === 0 || !data[0] || !data[0].hasOwnProperty('x')) {
-      console.error('[BESTLIB] renderRugD3: Estructura de datos inválida', { 
-        dataLength: data.length,
-        firstItem: data[0],
-        dataType: Array.isArray(data) ? 'array' : typeof data
-      });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: Estructura de datos inválida para Rug (esperado: [{x: value}, ...])</div>';
+    // Normalizar datos: aceptar [{x: value}, ...], [{value: X}, ...], o array simple de números
+    if (!Array.isArray(data)) {
+      console.error('[BESTLIB] renderRugD3: data no es un array', { dataType: typeof data });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: data debe ser un array</div>';
+      return;
+    }
+    
+    // Convertir a formato estándar [{x: value}, ...]
+    if (data.length > 0) {
+      const firstItem = data[0];
+      if (typeof firstItem === 'number') {
+        // Array simple de números: [5.1, 4.9, ...]
+        data = data.map(val => ({ x: val }));
+      } else if (typeof firstItem === 'object' && firstItem !== null) {
+        // Array de objetos: [{x: 5.1}, ...] o [{value: 5.1}, ...]
+        data = data.map(d => {
+          if (d.hasOwnProperty('x')) {
+            return { x: d.x };
+          } else if (d.hasOwnProperty('value')) {
+            return { x: d.value };
+          } else {
+            return null;
+          }
+        }).filter(d => d !== null && d.x != null && !isNaN(d.x));
+      } else {
+        console.error('[BESTLIB] renderRugD3: Formato de datos no reconocido', { firstItem });
+        container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: Formato de datos no reconocido</div>';
+        return;
+      }
+    }
+    
+    if (data.length === 0) {
+      console.error('[BESTLIB] renderRugD3: No hay datos válidos después de normalización');
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos válidos para Rug</div>';
       return;
     }
     
@@ -7565,6 +7595,10 @@
         .range([0, chartWidth]);
       
       // Dibujar ticks del rug (líneas verticales pequeñas en la base del eje)
+      // Asegurar que los ticks no queden fuera del padding
+      const tickStartY = chartHeight;
+      const tickEndY = chartHeight + Math.min(tickHeight * size, 8); // Máximo 8px de altura
+      
       g.selectAll('.rug-tick')
         .data(data)
         .enter()
@@ -7572,8 +7606,8 @@
         .attr('class', 'bestlib-point')
         .attr('x1', d => x(d.x))
         .attr('x2', d => x(d.x))
-        .attr('y1', chartHeight + padding)
-        .attr('y2', chartHeight + padding + tickHeight * size)
+        .attr('y1', tickStartY)
+        .attr('y2', tickEndY)
         .attr('stroke', color)
         .attr('stroke-width', strokeWidth)
         .attr('opacity', opacity);
@@ -7592,13 +7626,17 @@
         .range([chartHeight, 0]);
       
       // Dibujar ticks del rug en el eje Y (líneas horizontales pequeñas)
+      // Asegurar que los ticks no queden fuera del padding
+      const tickStartX = -Math.min(tickHeight * size, 8); // Máximo 8px de ancho
+      const tickEndX = 0;
+      
       g.selectAll('.rug-tick')
         .data(data)
         .enter()
         .append('line')
         .attr('class', 'bestlib-point')
-        .attr('x1', -padding - tickHeight * size)
-        .attr('x2', -padding)
+        .attr('x1', tickStartX)
+        .attr('x2', tickEndX)
         .attr('y1', d => y(d.x))
         .attr('y2', d => y(d.x))
         .attr('stroke', color)
@@ -7658,13 +7696,9 @@
     const strokeWidth = options.strokeWidth || spec.strokeWidth || 2;
     const showLine = options.showLine !== undefined ? options.showLine : true;
     
-    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels
-    if (options.xLabel && !spec.xLabel) {
-      spec.xLabel = options.xLabel;
-    }
-    if (options.yLabel && !spec.yLabel) {
-      spec.yLabel = options.yLabel;
-    }
+    // Obtener labels directamente desde options o spec (NO copiar al spec para evitar duplicación)
+    const xLabel = options.xLabel || spec.xLabel;
+    const yLabel = options.yLabel || spec.yLabel;
     
     const x = d3.scaleLinear()
       .domain(d3.extent(data, d => d.x) || [0, 100])
@@ -7703,20 +7737,10 @@
       .attr('fill', color)
       .attr('opacity', 0.6);
     
-    // Ejes
+    // Ejes - usar funciones reutilizables para evitar duplicación de labels
     if (spec.axes !== false) {
-      const xAxis = g.append('g')
-        .attr('transform', `translate(0,${chartHeight})`)
-        .call(d3.axisBottom(x));
-      
-      applyUnifiedAxisStyles(xAxis);
-      
-      const yAxis = g.append('g')
-        .call(d3.axisLeft(y));
-      
-      applyUnifiedAxisStyles(yAxis);
-      
-      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+      renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
+      renderYAxis(g, y, chartWidth, chartHeight, margin, yLabel, svg);
     }
   }
   
@@ -7871,15 +7895,36 @@
     const numCategories = categories.length;
     const spacing = chartHeight / (numCategories + (numCategories - 1) * overlap);
     
-    // Calcular dominios
+    // Calcular dominios - Python envía series en formato {cat: [{x, y}, ...]}
     let xMin = Infinity, xMax = -Infinity, yMax = -Infinity;
-    Object.values(series).forEach(serie => {
-      serie.forEach(d => {
-        xMin = Math.min(xMin, d.x);
-        xMax = Math.max(xMax, d.x);
-        yMax = Math.max(yMax, d.y);
-      });
+    
+    Object.keys(series).forEach(cat => {
+      const serie = series[cat];
+      if (Array.isArray(serie) && serie.length > 0) {
+        serie.forEach(d => {
+          if (d && typeof d === 'object' && d.hasOwnProperty('x') && d.hasOwnProperty('y')) {
+            const xVal = parseFloat(d.x);
+            const yVal = parseFloat(d.y);
+            if (!isNaN(xVal)) {
+              xMin = Math.min(xMin, xVal);
+              xMax = Math.max(xMax, xVal);
+            }
+            if (!isNaN(yVal)) {
+              yMax = Math.max(yMax, yVal);
+            }
+          }
+        });
+      }
     });
+    
+    // Asegurar valores válidos
+    if (!isFinite(xMin) || !isFinite(xMax)) {
+      xMin = 0;
+      xMax = 100;
+    }
+    if (!isFinite(yMax) || yMax <= 0) {
+      yMax = 1;
+    }
     
     const x = d3.scaleLinear()
       .domain([xMin, xMax])
@@ -7893,6 +7938,11 @@
     // Dibujar cada serie
     categories.forEach((cat, idx) => {
       const serie = series[cat];
+      
+      if (!Array.isArray(serie) || serie.length === 0) {
+        console.warn(`[BESTLIB] renderRidgelineD3: Serie '${cat}' está vacía o no es un array`);
+        return;
+      }
       const yOffset = idx * spacing * (1 + overlap);
       const yScale = d3.scaleLinear()
         .domain([0, yMax])
