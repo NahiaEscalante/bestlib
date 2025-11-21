@@ -945,6 +945,89 @@
   }
   
   /**
+   * Renderiza eje X con label de forma consistente
+   * @param {object} g - Grupo D3 donde renderizar
+   * @param {object} xScale - Escala D3 para eje X
+   * @param {number} chartHeight - Altura del área del gráfico
+   * @param {number} chartWidth - Ancho del área del gráfico
+   * @param {object} margin - Márgenes {top, right, bottom, left}
+   * @param {string} xLabel - Etiqueta del eje X (opcional)
+   * @param {object} svg - SVG principal (para labels)
+   */
+  function renderXAxis(g, xScale, chartHeight, chartWidth, margin, xLabel, svg) {
+    const xAxis = g.append('g')
+      .attr('transform', `translate(0,${chartHeight})`)
+      .call(d3.axisBottom(xScale));
+    
+    applyUnifiedAxisStyles(xAxis);
+    
+    // Renderizar label si se proporciona
+    if (xLabel && svg) {
+      const styles = getUnifiedStyles();
+      // X: centro del gráfico (margin.left + chartWidth / 2)
+      // Y: debajo del gráfico (margin.top + chartHeight + margin.bottom - 10)
+      const xLabelX = margin.left + chartWidth / 2;
+      const xLabelY = margin.top + chartHeight + margin.bottom - 10;
+      
+      svg.append('text')
+        .attr('x', xLabelX)
+        .attr('y', xLabelY)
+        .attr('text-anchor', 'middle')
+        .attr('class', 'bestlib-axis-label bestlib-axis-label-x')
+        .style('font-size', `${styles.labelFontSize}px`)
+        .style('font-weight', styles.labelFontWeight)
+        .style('fill', styles.textColor)
+        .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
+        .text(xLabel);
+    }
+    
+    return xAxis;
+  }
+  
+  /**
+   * Renderiza eje Y con label de forma consistente
+   * @param {object} g - Grupo D3 donde renderizar
+   * @param {object} yScale - Escala D3 para eje Y
+   * @param {number} chartWidth - Ancho del área del gráfico (no usado, pero para consistencia)
+   * @param {number} chartHeight - Altura del área del gráfico
+   * @param {object} margin - Márgenes {top, right, bottom, left}
+   * @param {string} yLabel - Etiqueta del eje Y (opcional)
+   * @param {object} svg - SVG principal (para labels)
+   */
+  function renderYAxis(g, yScale, chartWidth, chartHeight, margin, yLabel, svg) {
+    const yAxis = g.append('g')
+      .call(d3.axisLeft(yScale));
+    
+    applyUnifiedAxisStyles(yAxis);
+    
+    // Renderizar label si se proporciona
+    if (yLabel && svg) {
+      const styles = getUnifiedStyles();
+      // X: centro del margen izquierdo (margin.left / 2)
+      // Y: centro vertical del gráfico (margin.top + chartHeight / 2)
+      const yLabelX = margin.left / 2;
+      const yLabelY = margin.top + chartHeight / 2;
+      
+      const yLabelText = svg.append('text')
+        .attr('x', yLabelX)
+        .attr('y', yLabelY)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'central')
+        .attr('class', 'bestlib-axis-label bestlib-axis-label-y')
+        .style('font-size', `${styles.labelFontSize}px`)
+        .style('font-weight', styles.labelFontWeight)
+        .style('fill', styles.textColor)
+        .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
+        .style('pointer-events', 'none')
+        .text(yLabel);
+      
+      yLabelText.attr('transform', `rotate(-90 ${yLabelX} ${yLabelY})`);
+    }
+    
+    return yAxis;
+  }
+  
+  /**
    * Calcula márgenes dinámicamente según tamaño de etiquetas de ejes
    */
   function calculateAxisMargins(spec, defaultMargin, containerWidth, containerHeight) {
@@ -7211,19 +7294,14 @@
     const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
     
-    const options = spec.options || {};
-    const color = options.color || spec.color || '#4a90e2';
-    const fill = options.fill !== undefined ? options.fill : true;
-    const opacity = options.opacity || 0.3;
-    const strokeWidth = options.strokeWidth || spec.strokeWidth || 2;
-    
-    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels
-    if (options.xLabel && !spec.xLabel) {
-      spec.xLabel = options.xLabel;
-    }
-    if (options.yLabel && !spec.yLabel) {
-      spec.yLabel = options.yLabel;
-    }
+    // Unificar lectura de opciones con fallback para compatibilidad
+    const opt = spec.options || {};
+    const color = opt.color || spec.color || '#4a90e2';
+    const fill = opt.fill !== undefined ? opt.fill : true;
+    const opacity = opt.opacity || 0.3;
+    const strokeWidth = opt.strokeWidth || spec.strokeWidth || 2;
+    const xLabel = opt.xLabel || spec.xLabel;
+    const yLabel = opt.yLabel || spec.yLabel;
     
     const x = d3.scaleLinear()
       .domain(d3.extent(data, d => d.x) || [0, 100])
@@ -7264,20 +7342,10 @@
       .attr('d', line)
       .attr('class', 'bestlib-line');
     
-    // Ejes
+    // Ejes usando funciones reutilizables
     if (spec.axes !== false) {
-      const xAxis = g.append('g')
-        .attr('transform', `translate(0,${chartHeight})`)
-        .call(d3.axisBottom(x));
-      
-      applyUnifiedAxisStyles(xAxis);
-      
-      const yAxis = g.append('g')
-        .call(d3.axisLeft(y));
-      
-      applyUnifiedAxisStyles(yAxis);
-      
-      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+      renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
+      renderYAxis(g, y, chartWidth, chartHeight, margin, yLabel, svg);
     }
   }
   
@@ -7419,6 +7487,8 @@
    * Rug Plot con D3.js
    */
   function renderRugD3(container, spec, d3, divId) {
+    console.log("[BESTLIB] renderRugD3()", spec);
+    
     const data = spec.data || [];
     if (!data || data.length === 0) {
       console.error('[BESTLIB] renderRugD3: No hay datos', { 
@@ -7431,21 +7501,24 @@
       return;
     }
     
-    // Validar estructura de datos
+    // Validar estructura de datos - Rug espera [{x: value}, ...]
     if (!Array.isArray(data) || data.length === 0 || !data[0] || !data[0].hasOwnProperty('x')) {
       console.error('[BESTLIB] renderRugD3: Estructura de datos inválida', { 
         dataLength: data.length,
         firstItem: data[0],
         dataType: Array.isArray(data) ? 'array' : typeof data
       });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: Estructura de datos inválida para Rug (esperado: [{x, y}, ...])</div>';
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: Estructura de datos inválida para Rug (esperado: [{x: value}, ...])</div>';
       return;
     }
+    
+    console.log("[BESTLIB] renderRugD3 DATA LENGTH", data.length);
     
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
     
+    // Márgenes estándar
     const isLargeDashboard = container.closest('.matrix-layout') && 
                              container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
     const defaultMargin = isLargeDashboard 
@@ -7467,19 +7540,19 @@
     const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
     
-    const options = spec.options || {};
-    const axis = options.axis || 'x';
-    const color = options.color || spec.color || '#4a90e2';
-    const size = options.size || 2;
-    const opacity = options.opacity || 0.6;
+    // Unificar lectura de opciones con fallback para compatibilidad
+    const opt = spec.options || {};
+    const axis = opt.axis || 'x';
+    const color = opt.color || spec.color || '#4a90e2';
+    const size = opt.size || 2;
+    const opacity = opt.opacity || 0.6;
+    const strokeWidth = opt.strokeWidth || spec.strokeWidth || size;
+    const tickHeight = opt.height || 3; // Altura de los ticks del rug
+    const padding = opt.padding || 0; // Padding adicional
     
-    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels
-    if (options.xLabel && !spec.xLabel) {
-      spec.xLabel = options.xLabel;
-    }
-    if (options.yLabel && !spec.yLabel) {
-      spec.yLabel = options.yLabel;
-    }
+    // Obtener labels desde options o spec
+    const xLabel = opt.xLabel || spec.xLabel;
+    const yLabel = opt.yLabel || spec.yLabel;
     
     if (axis === 'x') {
       // Calcular dominio correctamente
@@ -7491,27 +7564,22 @@
         .nice()
         .range([0, chartWidth]);
       
-      // Dibujar ticks del rug
-      g.selectAll('.rug')
+      // Dibujar ticks del rug (líneas verticales pequeñas en la base del eje)
+      g.selectAll('.rug-tick')
         .data(data)
         .enter()
         .append('line')
         .attr('class', 'bestlib-point')
         .attr('x1', d => x(d.x))
         .attr('x2', d => x(d.x))
-        .attr('y1', chartHeight)
-        .attr('y2', chartHeight + size * 3)
+        .attr('y1', chartHeight + padding)
+        .attr('y2', chartHeight + padding + tickHeight * size)
         .attr('stroke', color)
-        .attr('stroke-width', size)
+        .attr('stroke-width', strokeWidth)
         .attr('opacity', opacity);
       
       if (spec.axes !== false) {
-        const xAxis = g.append('g')
-          .attr('transform', `translate(0,${chartHeight})`)
-          .call(d3.axisBottom(x));
-        
-        applyUnifiedAxisStyles(xAxis);
-        renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+        renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
       }
     } else {
       // Calcular dominio correctamente para eje Y
@@ -7523,28 +7591,26 @@
         .nice()
         .range([chartHeight, 0]);
       
-      // Dibujar ticks del rug en el eje Y
-      g.selectAll('.rug')
+      // Dibujar ticks del rug en el eje Y (líneas horizontales pequeñas)
+      g.selectAll('.rug-tick')
         .data(data)
         .enter()
         .append('line')
         .attr('class', 'bestlib-point')
-        .attr('x1', 0)
-        .attr('x2', -size * 3)
+        .attr('x1', -padding - tickHeight * size)
+        .attr('x2', -padding)
         .attr('y1', d => y(d.x))
         .attr('y2', d => y(d.x))
         .attr('stroke', color)
-        .attr('stroke-width', size)
+        .attr('stroke-width', strokeWidth)
         .attr('opacity', opacity);
       
       if (spec.axes !== false) {
-        const yAxis = g.append('g')
-          .call(d3.axisLeft(y));
-        
-        applyUnifiedAxisStyles(yAxis);
-        renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+        renderYAxis(g, y, chartWidth, chartHeight, margin, yLabel, svg);
       }
     }
+    
+    console.log("[BESTLIB] renderRugD3 SPEC OK");
   }
   
   /**

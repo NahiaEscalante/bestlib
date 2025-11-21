@@ -80,12 +80,16 @@ class RugChart(ChartBase):
             values = np.array(values)
         
         # Crear datos para rug plot: cada valor se marca en el eje
+        # Formato: [{"x": 5.1}, {"x": 4.9}, ...] - solo 'x' es necesario
         rug_data = []
         for val in values:
             try:
+                # Convertir a float y validar
+                float_val = float(val)
+                if HAS_NUMPY and np.isnan(float_val):
+                    continue  # Saltar NaN
                 rug_data.append({
-                    'x': float(val) if not (HAS_NUMPY and np.isnan(val)) else 0.0,
-                    'y': 0  # Posición en el eje (se ajustará en JS)
+                    'x': float_val
                 })
             except (ValueError, TypeError, OverflowError):
                 continue  # Saltar valores inválidos
