@@ -7404,6 +7404,10 @@
     const kdeColor = options.kdeColor || '#e24a4a';
     const rugColor = options.rugColor || '#4a90e2';
     
+    // Obtener labels directamente desde options o spec
+    const xLabel = options.xLabel || spec.xLabel;
+    const yLabel = options.yLabel || spec.yLabel;
+    
     // Combinar todos los datos para calcular dominios
     const allData = [...(histogram || []), ...(kde || [])];
     const xDomain = allData.length > 0 
@@ -7470,20 +7474,10 @@
         .attr('opacity', 0.6);
     }
     
-    // Ejes
+    // Ejes usando funciones reutilizables
     if (spec.axes !== false) {
-      const xAxis = g.append('g')
-        .attr('transform', `translate(0,${chartHeight})`)
-        .call(d3.axisBottom(x));
-      
-      applyUnifiedAxisStyles(xAxis);
-      
-      const yAxis = g.append('g')
-        .call(d3.axisLeft(y));
-      
-      applyUnifiedAxisStyles(yAxis);
-      
-      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+      renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
+      renderYAxis(g, y, chartWidth, chartHeight, margin, yLabel, svg);
     }
   }
   
@@ -7599,18 +7593,31 @@
       const tickStartY = chartHeight;
       const tickEndY = chartHeight + Math.min(tickHeight * size, 8); // Máximo 8px de altura
       
-      g.selectAll('.rug-tick')
-        .data(data)
-        .enter()
+      const rugTicks = g.selectAll('.rug-tick')
+        .data(data, (d, i) => i); // Usar índice como key para evitar duplicados
+      
+      rugTicks.enter()
         .append('line')
-        .attr('class', 'bestlib-point')
-        .attr('x1', d => x(d.x))
-        .attr('x2', d => x(d.x))
+        .attr('class', 'bestlib-point rug-tick')
+        .merge(rugTicks)
+        .attr('x1', d => {
+          const xVal = parseFloat(d.x);
+          return isNaN(xVal) ? 0 : x(xVal);
+        })
+        .attr('x2', d => {
+          const xVal = parseFloat(d.x);
+          return isNaN(xVal) ? 0 : x(xVal);
+        })
         .attr('y1', tickStartY)
         .attr('y2', tickEndY)
         .attr('stroke', color)
         .attr('stroke-width', strokeWidth)
         .attr('opacity', opacity);
+      
+      rugTicks.exit().remove();
+      
+      console.log(`[BESTLIB] renderRugD3: Dibujados ${data.length} ticks del rug`);
+      console.log(`[BESTLIB] renderRugD3 SPEC OK`);
       
       if (spec.axes !== false) {
         renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
@@ -7789,6 +7796,10 @@
     const strokeWidth = options.strokeWidth || spec.strokeWidth || 2;
     const step = options.step !== undefined ? options.step : true;
     
+    // Obtener labels directamente desde options o spec (NO copiar al spec para evitar duplicación)
+    const xLabel = options.xLabel || spec.xLabel;
+    const yLabel = options.yLabel || spec.yLabel;
+    
     const x = d3.scaleLinear()
       .domain(d3.extent(data, d => d.x) || [0, 100])
       .nice()
@@ -7820,20 +7831,10 @@
       .attr('d', line)
       .attr('class', 'bestlib-line');
     
-    // Ejes
+    // Ejes usando funciones reutilizables para evitar duplicación y asegurar labels
     if (spec.axes !== false) {
-      const xAxis = g.append('g')
-        .attr('transform', `translate(0,${chartHeight})`)
-        .call(d3.axisBottom(x));
-      
-      applyUnifiedAxisStyles(xAxis);
-      
-      const yAxis = g.append('g')
-        .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.2f')));
-      
-      applyUnifiedAxisStyles(yAxis);
-      
-      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+      renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
+      renderYAxis(g, y, chartWidth, chartHeight, margin, yLabel, svg);
     }
   }
   
@@ -7991,15 +7992,10 @@
         .text(cat);
     });
     
-    // Ejes
+    // Ejes - solo eje X para ridgeline (las categorías están en el lado izquierdo)
     if (spec.axes !== false) {
-      const xAxis = g.append('g')
-        .attr('transform', `translate(0,${chartHeight})`)
-        .call(d3.axisBottom(x));
-      
-      applyUnifiedAxisStyles(xAxis);
-      
-      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+      const xLabel = options.xLabel || spec.xLabel;
+      renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
     }
   }
   
@@ -8044,13 +8040,9 @@
     const showLines = options.showLines !== undefined ? options.showLines : true;
     const gradient = options.gradient !== undefined ? options.gradient : true;
     
-    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels
-    if (options.xLabel && !spec.xLabel) {
-      spec.xLabel = options.xLabel;
-    }
-    if (options.yLabel && !spec.yLabel) {
-      spec.yLabel = options.yLabel;
-    }
+    // Obtener labels directamente desde options o spec (NO copiar al spec para evitar duplicación)
+    const xLabel = options.xLabel || spec.xLabel;
+    const yLabel = options.yLabel || spec.yLabel;
     
     const x = d3.scaleLinear()
       .domain(data.length > 0 ? d3.extent(data, d => d.x) : [0, 100])
@@ -8147,20 +8139,10 @@
         .attr('class', 'bestlib-line');
     }
     
-    // Ejes
+    // Ejes usando funciones reutilizables
     if (spec.axes !== false) {
-      const xAxis = g.append('g')
-        .attr('transform', `translate(0,${chartHeight})`)
-        .call(d3.axisBottom(x));
-      
-      applyUnifiedAxisStyles(xAxis);
-      
-      const yAxis = g.append('g')
-        .call(d3.axisLeft(y));
-      
-      applyUnifiedAxisStyles(yAxis);
-      
-      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+      renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
+      renderYAxis(g, y, chartWidth, chartHeight, margin, yLabel, svg);
     }
   }
   
@@ -8207,21 +8189,30 @@
     const options = spec.options || {};
     const colorScale = options.colorScale || 'Blues';
     
-    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels
-    if (options.xLabel && !spec.xLabel) {
-      spec.xLabel = options.xLabel;
-    }
-    if (options.yLabel && !spec.yLabel) {
-      spec.yLabel = options.yLabel;
-    }
+    // Obtener labels directamente desde options o spec (NO copiar al spec para evitar duplicación)
+    const xLabel = options.xLabel || spec.xLabel;
+    const yLabel = options.yLabel || spec.yLabel;
+    
+    // Calcular dominios desde bins para alineación correcta
+    const xBinStarts = data.map(d => d.x_bin_start).filter(v => v != null && !isNaN(v));
+    const xBinEnds = data.map(d => d.x_bin_end).filter(v => v != null && !isNaN(v));
+    const yBinStarts = data.map(d => d.y_bin_start).filter(v => v != null && !isNaN(v));
+    const yBinEnds = data.map(d => d.y_bin_end).filter(v => v != null && !isNaN(v));
+    
+    const xDomain = xBinStarts.length > 0 && xBinEnds.length > 0
+      ? [Math.min(...xBinStarts), Math.max(...xBinEnds)]
+      : [0, 100];
+    const yDomain = yBinStarts.length > 0 && yBinEnds.length > 0
+      ? [Math.min(...yBinStarts), Math.max(...yBinEnds)]
+      : [0, 100];
     
     const x = d3.scaleLinear()
-      .domain(d3.extent(data, d => d.x) || [0, 100])
+      .domain(xDomain)
       .nice()
       .range([0, chartWidth]);
     
     const y = d3.scaleLinear()
-      .domain(d3.extent(data, d => d.y) || [0, 100])
+      .domain(yDomain)
       .nice()
       .range([chartHeight, 0]);
     
@@ -8229,34 +8220,40 @@
     const color = d3.scaleSequential(d3.interpolateBlues)
       .domain([0, maxValue]);
     
-    // Celdas del heatmap
+    // Celdas del heatmap - asegurar que los bins estén bien alineados
     g.selectAll('.cell')
       .data(data)
       .enter()
       .append('rect')
       .attr('class', 'bestlib-heatmap-cell')
-      .attr('x', d => x(d.x_bin_start))
-      .attr('y', d => y(d.y_bin_end))
-      .attr('width', d => x(d.x_bin_end) - x(d.x_bin_start))
-      .attr('height', d => y(d.y_bin_start) - y(d.y_bin_end))
+      .attr('x', d => {
+        const start = parseFloat(d.x_bin_start);
+        return isNaN(start) ? 0 : x(start);
+      })
+      .attr('y', d => {
+        const end = parseFloat(d.y_bin_end);
+        return isNaN(end) ? chartHeight : y(end);
+      })
+      .attr('width', d => {
+        const start = parseFloat(d.x_bin_start);
+        const end = parseFloat(d.x_bin_end);
+        if (isNaN(start) || isNaN(end)) return 0;
+        return Math.max(0, x(end) - x(start));
+      })
+      .attr('height', d => {
+        const start = parseFloat(d.y_bin_start);
+        const end = parseFloat(d.y_bin_end);
+        if (isNaN(start) || isNaN(end)) return 0;
+        return Math.max(0, y(start) - y(end));
+      })
       .attr('fill', d => color(d.value))
       .attr('stroke', '#fff')
       .attr('stroke-width', 0.5);
     
-    // Ejes
+    // Ejes usando funciones reutilizables
     if (spec.axes !== false) {
-      const xAxis = g.append('g')
-        .attr('transform', `translate(0,${chartHeight})`)
-        .call(d3.axisBottom(x));
-      
-      applyUnifiedAxisStyles(xAxis);
-      
-      const yAxis = g.append('g')
-        .call(d3.axisLeft(y));
-      
-      applyUnifiedAxisStyles(yAxis);
-      
-      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+      renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
+      renderYAxis(g, y, chartWidth, chartHeight, margin, yLabel, svg);
     }
   }
   
@@ -8280,8 +8277,13 @@
     let width = dims.width;
     let height = dims.height;
     
+    // Calcular tamaño con márgenes internos para que no se salga del padding
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const internalPadding = isLargeDashboard ? 30 : 40; // Padding interno para labels y grid
+    
     const size = Math.min(width, height);
-    const radius = Math.min(size - 40, size - 40) / 2;
+    const radius = Math.min(size - internalPadding, size - internalPadding) / 2;
     
     const svg = d3.select(container)
       .append('svg')
@@ -8299,13 +8301,9 @@
     const showGrid = options.showGrid !== undefined ? options.showGrid : true;
     const showLabels = options.showLabels !== undefined ? options.showLabels : true;
     
-    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels (Polar usa labels especiales)
-    if (options.xLabel && !spec.xLabel) {
-      spec.xLabel = options.xLabel;
-    }
-    if (options.yLabel && !spec.yLabel) {
-      spec.yLabel = options.yLabel;
-    }
+    // Obtener labels directamente desde options o spec (Polar no usa ejes tradicionales, pero puede tener labels)
+    const xLabel = options.xLabel || spec.xLabel;
+    const yLabel = options.yLabel || spec.yLabel;
     
     // Calcular coordenadas polares desde angle y radius (no usar x, y pre-calculados)
     const maxRadius = d3.max(data, d => (d.radius !== undefined ? d.radius : Math.sqrt(d.x*d.x + d.y*d.y))) || 1;
@@ -8429,13 +8427,9 @@
     const color = options.color || spec.color || '#4a90e2';
     const opacity = options.opacity || 0.7;
     
-    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels
-    if (options.xLabel && !spec.xLabel) {
-      spec.xLabel = options.xLabel;
-    }
-    if (options.yLabel && !spec.yLabel) {
-      spec.yLabel = options.yLabel;
-    }
+    // Obtener labels directamente desde options o spec (NO copiar al spec para evitar duplicación)
+    const xLabel = options.xLabel || spec.xLabel;
+    const yLabel = options.yLabel || spec.yLabel;
     
     const maxValue = d3.max(data, d => d.value) || 1;
     const numStages = data.length;
@@ -8480,16 +8474,36 @@
       });
       
       if (spec.axes !== false) {
-        const xAxis = d3.scaleLinear()
+        const x = d3.scaleLinear()
           .domain([0, maxValue])
           .range([0, maxWidth]);
         
+        // Crear grupo para el eje centrado
         const axisG = g.append('g')
           .attr('transform', `translate(${chartWidth/2 - maxWidth/2},${chartHeight})`)
           .call(d3.axisBottom(x));
         
         applyUnifiedAxisStyles(axisG);
-        renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+        
+        // Usar función reutilizable para label (centrado correctamente)
+        const xLabel = options.xLabel || spec.xLabel;
+        if (xLabel && svg) {
+          const styles = getUnifiedStyles();
+          const offset = 8;
+          const xLabelX = margin.left + chartWidth / 2;
+          const xLabelY = margin.top + chartHeight + margin.bottom - 10 + offset;
+          
+          svg.append('text')
+            .attr('x', xLabelX)
+            .attr('y', xLabelY)
+            .attr('text-anchor', 'middle')
+            .attr('class', 'bestlib-axis-label bestlib-axis-label-x')
+            .style('font-size', `${styles.labelFontSize}px`)
+            .style('font-weight', styles.labelFontWeight)
+            .style('fill', styles.textColor)
+            .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
+            .text(xLabel);
+        }
       }
     } else {
       // Horizontal (similar pero rotado)
