@@ -6342,11 +6342,13 @@
         return;
       }
       
-      // CDNs disponibles (intentar en orden)
+      // CDNs disponibles (intentar en orden) - Múltiples fallbacks
       const cdns = [
         'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js',
         'https://d3js.org/d3.v7.min.js',
-        'https://unpkg.com/d3@7/dist/d3.min.js'
+        'https://unpkg.com/d3@7/dist/d3.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js',
+        'https://cdn.skypack.dev/d3@7'
       ];
       
       let cdnIndex = 0;
@@ -6354,7 +6356,13 @@
       function tryLoadCDN(index) {
         if (index >= cdns.length) {
           _d3Promise = null;
-          reject(new Error('No se pudo cargar D3.js desde ningún CDN disponible'));
+          // Último intento: verificar si D3 está disponible de alguna forma
+          if (global.d3) {
+            resolve(global.d3);
+            return;
+          }
+          console.error('❌ [BESTLIB] No se pudo cargar D3.js desde ningún CDN disponible');
+          reject(new Error('No se pudo cargar D3.js desde ningún CDN disponible. Por favor, recarga la página o verifica tu conexión a internet.'));
           return;
         }
 
@@ -6362,6 +6370,7 @@
         script.id = scriptId;
         script.src = cdns[index];
         script.async = true;
+        script.crossOrigin = 'anonymous'; // Permitir CORS
         
         script.onload = () => {
           // Esperar un momento para que D3 se inicialice

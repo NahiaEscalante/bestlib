@@ -472,9 +472,23 @@ class ReactiveMatrixLayout:
             elif linked_to in self._primary_view_models:
                 primary_letter = linked_to
                 primary_selection = self._primary_view_models[primary_letter]
-        else:
-                # Si linked_to está especificado pero no existe, lanzar error
-                raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
+            else:
+                # Si linked_to está especificado pero no existe, lanzar error con información útil
+                available_scatters = list(self._scatter_selection_models.keys())
+                available_primary = list(self._primary_view_models.keys())
+                all_available = available_scatters + available_primary
+                
+                if self._debug or MatrixLayout._debug:
+                    print(f"❌ [ReactiveMatrixLayout] Vista principal '{linked_to}' no existe para barchart '{letter}'")
+                    print(f"   - Scatter plots disponibles: {available_scatters}")
+                    print(f"   - Vistas principales disponibles: {available_primary}")
+                    print(f"   - Todas las vistas: {all_available}")
+                
+                error_msg = f"Vista principal '{linked_to}' no existe. "
+                if all_available:
+                    error_msg += f"Vistas disponibles: {all_available}. "
+                error_msg += "Agrega la vista principal primero (ej: add_scatter('A', ...) o add_barchart('B', interactive=True, ...))."
+                raise ValueError(error_msg)
         
         # Guardar el enlace
         self._barchart_to_scatter[letter] = primary_letter
@@ -1559,7 +1573,22 @@ class ReactiveMatrixLayout:
                 primary_letter = linked_to
                 primary_selection = self._primary_view_models[primary_letter]
             else:
-                raise ValueError(f"Vista principal '{linked_to}' no existe. Vistas disponibles: scatter plots {list(self._scatter_selection_models.keys())}, vistas principales {list(self._primary_view_models.keys())}")
+                # Error con información detallada
+                available_scatters = list(self._scatter_selection_models.keys())
+                available_primary = list(self._primary_view_models.keys())
+                all_available = available_scatters + available_primary
+                
+                if self._debug or MatrixLayout._debug:
+                    print(f"❌ [ReactiveMatrixLayout] Vista principal '{linked_to}' no existe para boxplot '{letter}'")
+                    print(f"   - Scatter plots disponibles: {available_scatters}")
+                    print(f"   - Vistas principales disponibles: {available_primary}")
+                    print(f"   - Todas las vistas: {all_available}")
+                
+                error_msg = f"Vista principal '{linked_to}' no existe. "
+                if all_available:
+                    error_msg += f"Vistas disponibles: {all_available}. "
+                error_msg += "Agrega la vista principal primero (ej: add_scatter('A', ...) o add_barchart('B', interactive=True, ...))."
+                raise ValueError(error_msg)
         else:
             # Si no se especifica, usar la última vista principal disponible
             all_primary = {**self._scatter_selection_models, **self._primary_view_models}
