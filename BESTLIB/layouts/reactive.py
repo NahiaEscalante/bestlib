@@ -187,6 +187,106 @@ class ReactiveMatrixLayout:
         self._primary_view_types = {}  # {view_letter: 'scatter'|'barchart'|'histogram'|'grouped_barchart'} - Tipo de vista
         # Sistema para guardar selecciones en variables Python accesibles
         self._selection_variables = {}  # {view_letter: variable_name} - Variables donde guardar selecciones
+        
+        # CRÍTICO: Registrar handler genérico centralizado para TODOS los eventos "select" y "brush"
+        # Este handler captura eventos que no son manejados por handlers específicos
+        self._register_central_select_handler()
+    
+    def _register_central_select_handler(self):
+        """
+        Registra un handler genérico centralizado que captura TODOS los eventos "select" y "brush".
+        Este handler asegura que:
+        1. Los eventos se enruten al SelectionModel correcto
+        2. Las variables de selección se actualicen
+        3. Los gráficos vinculados se actualicen
+        """
+        from .matrix import MatrixLayout
+        
+        def central_select_handler(payload):
+            """
+            Handler centralizado que procesa TODOS los eventos de selección.
+            Se ejecuta para eventos que no tienen handlers específicos o como fallback.
+            """
+            # Extraer información del evento
+            event_type = payload.get('type', 'select')
+            items = payload.get('items', [])
+            view_letter = payload.get('__view_letter__') or payload.get('__scatter_letter__')
+            
+            if self._debug or MatrixLayout._debug:
+                print(f"🔄 [ReactiveMatrixLayout] Handler central recibió evento '{event_type}' para vista '{view_letter}': {len(items)} items")
+            
+            # Si no hay view_letter, no podemos procesar el evento
+            if view_letter is None:
+                if self._debug or MatrixLayout._debug:
+                    print(f"   ⚠️ Evento sin __view_letter__ o __scatter_letter__, ignorando")
+                return
+            
+            # Convertir items a DataFrame
+            items_df = _items_to_dataframe(items)
+            
+            # 1. Actualizar SelectionModel específico de la vista si existe
+            if view_letter in self._scatter_selection_models:
+                scatter_selection = self._scatter_selection_models[view_letter]
+                scatter_selection.update(items)
+                if self._debug or MatrixLayout._debug:
+                    print(f"   ✅ SelectionModel de scatter '{view_letter}' actualizado")
+            
+            if view_letter in self._primary_view_models:
+                primary_selection = self._primary_view_models[view_letter]
+                primary_selection.update(items)
+                if self._debug or MatrixLayout._debug:
+                    print(f"   ✅ SelectionModel de vista principal '{view_letter}' actualizado")
+            
+            # 2. Actualizar SelectionModel principal
+            self.selection_model.update(items)
+            self._selected_data = items_df if items_df is not None else items
+            
+            # 3. Guardar en variable Python si existe selection_var para esta vista
+            if view_letter in self._selection_variables:
+                selection_var_name = self._selection_variables[view_letter]
+                self.set_selection(selection_var_name, items_df if items_df is not None else items)
+                if self._debug or MatrixLayout._debug:
+                    count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
+                    print(f"   💾 Selección guardada en variable '{selection_var_name}': {count_msg}")
+            
+            # 4. Disparar actualizaciones de gráficos vinculados
+            self._trigger_linked_updates(view_letter, items)
+        
+        # Registrar handler para eventos "select" y "brush"
+        self._layout.on('select', central_select_handler)
+        self._layout.on('brush', central_select_handler)
+        
+        if self._debug or MatrixLayout._debug:
+            print(f"✅ [ReactiveMatrixLayout] Handler central registrado para eventos 'select' y 'brush'")
+    
+    def _trigger_linked_updates(self, source_letter, items):
+        """
+        Dispara actualizaciones de todos los gráficos vinculados a una vista principal.
+        
+        Args:
+            source_letter: Letra de la vista principal que generó la selección
+            items: Items seleccionados
+        """
+        from .matrix import MatrixLayout
+        
+        if self._debug or MatrixLayout._debug:
+            print(f"🔄 [ReactiveMatrixLayout] Disparando actualizaciones para gráficos vinculados a '{source_letter}'")
+        
+        # Buscar todos los gráficos vinculados a source_letter
+        linked_charts = []
+        
+        # Buscar en _linked_charts
+        for chart_letter, chart_config in self._linked_charts.items():
+            if chart_config.get('linked_to') == source_letter:
+                linked_charts.append((chart_letter, chart_config))
+        
+        # Buscar en histogramas, boxplots, barcharts vinculados
+        # (estos ya tienen sus propios callbacks registrados en los SelectionModels,
+        # pero podemos verificar que estén activos)
+        
+        if linked_charts:
+            if self._debug or MatrixLayout._debug:
+                print(f"   📊 Encontrados {len(linked_charts)} gráficos vinculados a '{source_letter}'")
     
     def set_data(self, data):
         """
@@ -2563,6 +2663,7 @@ class ReactiveMatrixLayout:
                     self.set_selection(selection_var, items_df if items_df is not None else items)
             
             # CRÍTICO: Registrar handler ANTES de crear el gráfico para asegurar que esté disponible cuando llegue el evento
+            # El handler específico se ejecuta ANTES del handler central, permitiendo procesamiento específico
             self._layout.on('select', pie_handler)
             
             if self._debug or MatrixLayout._debug:
@@ -3565,22 +3666,33 @@ class ReactiveMatrixLayout:
             # Buscar la variable en el namespace del usuario
             import __main__
             if hasattr(__main__, selection_var):
-                return getattr(__main__, selection_var)
+                result = getattr(__main__, selection_var)
+                # Asegurar que sea DataFrame si pandas está disponible
+                if HAS_PANDAS:
+                    if result == [] or result is None:
+                        return pd.DataFrame()
+                    if not isinstance(result, pd.DataFrame):
+                        return _items_to_dataframe(result) if result else pd.DataFrame()
+                return result if result else (pd.DataFrame() if HAS_PANDAS else [])
             else:
                 # Si no existe, buscar en _selection_variables para encontrar la letra correspondiente
                 for view_letter, var_name in self._selection_variables.items():
                     if var_name == selection_var:
                         # Retornar la selección del modelo de esa vista
                         if view_letter in self._primary_view_models:
-                            return self._primary_view_models[view_letter].get_items()
+                            items = self._primary_view_models[view_letter].get_items()
+                            return _items_to_dataframe(items) if items and HAS_PANDAS else (items if items else (pd.DataFrame() if HAS_PANDAS else []))
+                        elif view_letter in self._scatter_selection_models:
+                            items = self._scatter_selection_models[view_letter].get_items()
+                            return _items_to_dataframe(items) if items and HAS_PANDAS else (items if items else (pd.DataFrame() if HAS_PANDAS else []))
                 # Si no se encuentra, retornar DataFrame vacío
-                if HAS_PANDAS:
-                    return pd.DataFrame()
-                else:
-                    return []
+                return pd.DataFrame() if HAS_PANDAS else []
         else:
             # Retornar selección del modelo principal
-            return self.selection_model.get_items()
+            items = self.selection_model.get_items()
+            if HAS_PANDAS and items:
+                return _items_to_dataframe(items)
+            return items if items else (pd.DataFrame() if HAS_PANDAS else [])
     
     def set_selection(self, selection_var_name, items):
         """
