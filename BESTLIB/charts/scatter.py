@@ -7,10 +7,28 @@ from ..data.validators import validate_scatter_data
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
 
+# Import de pandas de forma defensiva para evitar errores de importación circular
+HAS_PANDAS = False
+pd = None
 try:
+    # Verificar que pandas no esté parcialmente inicializado
+    import sys
+    if 'pandas' in sys.modules:
+        try:
+            pd_test = sys.modules['pandas']
+            _ = pd_test.__version__
+        except (AttributeError, ImportError):
+            del sys.modules['pandas']
+            modules_to_remove = [k for k in sys.modules.keys() if k.startswith('pandas.')]
+            for mod in modules_to_remove:
+                try:
+                    del sys.modules[mod]
+                except:
+                    pass
     import pandas as pd
+    _ = pd.__version__
     HAS_PANDAS = True
-except ImportError:
+except (ImportError, AttributeError, ModuleNotFoundError, Exception):
     HAS_PANDAS = False
     pd = None
 
