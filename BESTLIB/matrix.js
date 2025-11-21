@@ -5907,8 +5907,8 @@
         }
       }
       
-      // Enviar evento de selección
-      sendEvent(divId, 'select', {
+      // Enviar evento de selección (tanto 'select' como 'brush' para compatibilidad)
+      const eventPayload = {
         type: 'select',
         items: selectedItems,
         count: indices.size, // Contar total, no solo los enviados
@@ -5917,7 +5917,18 @@
         __scatter_letter__: scatterLetter,
         __view_letter__: scatterLetter,  // También incluir como __view_letter__ para compatibilidad
         __is_primary_view__: spec.__is_primary_view__ || false
-      });
+      };
+      
+      // Enviar como 'select' (evento principal)
+      sendEvent(divId, 'select', eventPayload);
+      
+      // También enviar como 'brush' si es una selección de área (más de un punto)
+      if (indices.size > 1) {
+        sendEvent(divId, 'brush', {
+          ...eventPayload,
+          type: 'brush'
+        });
+      }
       
       // Advertencia si se limitó el payload
       if (indices.size > MAX_PAYLOAD_ITEMS) {
@@ -5997,13 +6008,18 @@
       });
     
     // BRUSH para selección de área (renderizar DESPUÉS de los puntos para estar visualmente encima)
-    if (spec.interactive) {
+    if (spec.interactive !== false) {
       // Crear grupo de brush que estará en la parte superior
       const brushGroup = g.append('g')
-        .attr('class', 'brush-layer');
+        .attr('class', 'brush-layer')
+        .style('pointer-events', 'all');  // CRÍTICO: Asegurar que capture eventos
       
       const brush = d3.brush()
         .extent([[0, 0], [chartWidth, chartHeight]])
+        .filter(function(event) {
+          // Permitir brush con mouse y touch
+          return event.type === 'mousedown' || event.type === 'touchstart' || event.type === 'pointerdown';
+        })
         .on('start', function(event) {
           isBrushing = true;
           // Durante el brush, desactivar eventos de puntos temporalmente
@@ -6134,8 +6150,41 @@
           // Los puntos seleccionados se mostrarán con borde naranja
           updatePointVisualization(g.selectAll('.dot'), selectedIndices, false);
           
-          // Enviar evento de selección
+          // Enviar evento de selección (select)
           sendSelectionEvent(selectedIndices);
+          
+          // CRÍTICO: También enviar evento 'brush' explícitamente para que el backend lo procese
+          if (selectedIndices.size > 0) {
+            // Obtener letra del scatter plot
+            let scatterLetter = spec.__scatter_letter__ || null;
+            if (!scatterLetter && container) {
+              const letterAttr = container.getAttribute('data-letter');
+              if (letterAttr) {
+                scatterLetter = letterAttr;
+              } else {
+                const idMatch = container.id && container.id.match(/-cell-([A-Z])-/);
+                if (idMatch) {
+                  scatterLetter = idMatch[1];
+                }
+              }
+            }
+            
+            const selectedItems = Array.from(selectedIndices).map(i => {
+              const d = data[i];
+              return d._original_row || d;
+            });
+            
+            // Enviar evento 'brush' explícitamente
+            sendEvent(divId, 'brush', {
+              type: 'brush',
+              items: selectedItems,
+              count: selectedIndices.size,
+              indices: Array.from(selectedIndices),
+              __scatter_letter__: scatterLetter,
+              __view_letter__: scatterLetter,
+              __is_primary_view__: spec.__is_primary_view__ || false
+            });
+          }
           
           // CRÍTICO: NO limpiar el brush visual automáticamente
           // El brush debe permanecer visible Y funcional para permitir múltiples selecciones
@@ -6207,13 +6256,23 @@
         }
       `;
       
-      // Aplicar estilos directamente después de que el brush se crea
+      // CRÍTICO: Aplicar estilos directamente después de que el brush se crea
       // Esto asegura que los estilos se apliquen incluso si el CSS no se carga correctamente
+      // Y que el overlay capture eventos correctamente
       setTimeout(function() {
-        brushGroup.selectAll('.overlay')
-          .style('cursor', 'crosshair')
-          .style('pointer-events', 'all')
-          .style('fill', 'transparent');
+        const overlay = brushGroup.selectAll('.overlay');
+        if (overlay.size() > 0) {
+          overlay
+            .style('cursor', 'crosshair')
+            .style('pointer-events', 'all')
+            .style('fill', 'transparent')
+            .style('z-index', '1000');  // Asegurar que esté encima
+          
+          // CRÍTICO: Asegurar que el overlay capture eventos de pointer
+          overlay.on('pointerdown', function(event) {
+            event.stopPropagation();
+          });
+        }
         
         brushGroup.selectAll('.selection')
           .attr('stroke', '#2563eb')
