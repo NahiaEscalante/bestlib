@@ -112,13 +112,17 @@ class EventManager:
         handlers = self.get_handlers(event)
         
         if handlers:
-            for handler in handlers:
+            if self._debug:
+                print(f"🔄 [EventManager] Encontrados {len(handlers)} handler(s) para evento '{event}'")
+            for idx, handler in enumerate(handlers):
                 try:
                     if self._debug:
-                        print(f"🔄 [EventManager] Ejecutando handler para evento '{event}'")
+                        print(f"   🔄 [EventManager] Ejecutando handler #{idx+1}/{len(handlers)}")
                     handler(payload)
+                    if self._debug:
+                        print(f"   ✅ [EventManager] Handler #{idx+1} completado")
                 except Exception as e:
-                    error_msg = f"❌ [EventManager] Error en handler para evento '{event}': {e}"
+                    error_msg = f"❌ [EventManager] Error en handler #{idx+1} para evento '{event}': {e}"
                     if self._debug:
                         print(error_msg)
                         import traceback
@@ -128,4 +132,6 @@ class EventManager:
         else:
             if self._debug:
                 print(f"⚠️ [EventManager] No hay handler registrado para '{event}'")
+                print(f"   Handlers disponibles: {list(self._handlers.keys())}")
+                print(f"   Handlers globales: {list(self._global_handlers.keys())}")
 

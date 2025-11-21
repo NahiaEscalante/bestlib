@@ -160,9 +160,39 @@ class CommManager:
             # Buscar instancia por div_id
             instance = cls.get_instance(div_id)
             
-            if instance and hasattr(instance, "_event_manager"):
-                # Usar EventManager de la instancia
-                instance._event_manager.emit(event_type, payload)
+            if instance:
+                # ✅ CORRECCIÓN CRÍTICA: Usar EventManager si está disponible (sistema modular)
+                if hasattr(instance, "_event_manager"):
+                    # Usar EventManager de la instancia (sistema modular)
+                    instance._event_manager.emit(event_type, payload)
+                    if cls._debug:
+                        print(f"   ✅ Evento emitido a EventManager de instancia")
+                    return  # ✅ IMPORTANTE: Salir después de emitir al EventManager
+                
+                # ✅ CORRECCIÓN: También verificar sistema legacy (_handlers) para compatibilidad
+                if hasattr(instance, "_handlers"):
+                    # Sistema legacy: buscar handlers en _handlers
+                    handlers = instance._handlers.get(event_type, [])
+                    if handlers:
+                        if not isinstance(handlers, list):
+                            handlers = [handlers]
+                        for handler in handlers:
+                            try:
+                                handler(payload)
+                            except Exception as e:
+                                if cls._debug:
+                                    print(f"   ❌ Error en handler legacy: {e}")
+                                    import traceback
+                                    traceback.print_exc()
+                        if cls._debug:
+                            print(f"   ✅ {len(handlers)} handler(s) legacy ejecutado(s)")
+                        return  # ✅ IMPORTANTE: Salir después de ejecutar handlers legacy
+                    else:
+                        if cls._debug:
+                            print(f"   ⚠️ No hay handler registrado para '{event_type}' en sistema legacy")
+                else:
+                    if cls._debug:
+                        print(f"   ⚠️ Instancia no tiene _event_manager ni _handlers")
             else:
                 if cls._debug:
                     print(f"   ⚠️ No se encontró instancia para div_id '{div_id}'")

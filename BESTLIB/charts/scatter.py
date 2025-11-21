@@ -205,10 +205,20 @@ class ScatterChart(ChartBase):
         if options:
             spec['options'] = options
         
-        # Agregar interaction
-        interaction = {}
+        # ✅ CORRECCIÓN CRÍTICA: Asegurar que interactive esté en el spec directamente
+        # El JavaScript busca spec.interactive, no spec.interaction.interactive
         if 'interactive' in kwargs:
-            interaction['interactive'] = kwargs.pop('interactive', False)
+            spec['interactive'] = kwargs.pop('interactive', False)
+        elif 'interaction' in kwargs and isinstance(kwargs.get('interaction'), dict):
+            # Si viene en interaction dict, extraerlo
+            interaction = kwargs.pop('interaction', {})
+            spec['interactive'] = interaction.get('interactive', False)
+        else:
+            # Por defecto, scatter plots son interactivos
+            spec['interactive'] = kwargs.pop('interactive', True)
+        
+        # Agregar interaction (para compatibilidad)
+        interaction = {}
         if 'zoom' in kwargs:
             interaction['zoom'] = kwargs.pop('zoom', False)
         if 'brush' in kwargs:
