@@ -5,7 +5,9 @@ setup(
     version="0.1.0",
     description="MatrixLayout widget for dashboards",
     author="Nahia, Alejandro, Max",
-    packages=["BESTLIB"],
+    # Usar find_packages() para incluir automáticamente todos los subpaquetes
+    # Esto incluye BESTLIB, BESTLIB.charts, BESTLIB.core, BESTLIB.data, etc.
+    packages=find_packages(),
     include_package_data=True,
     package_data={
         "BESTLIB": ["*.js", "*.css"],

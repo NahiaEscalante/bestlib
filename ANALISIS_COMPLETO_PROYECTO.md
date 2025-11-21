@@ -1,673 +1,760 @@
 # 📊 Análisis Completo del Proyecto BESTLIB
 
-**Fecha de Análisis:** 2025-01-27  
-**Versión del Proyecto:** 0.1.0  
-**Autor del Análisis:** Auto (AI Assistant)
+## 🎯 Resumen Ejecutivo
+
+**BESTLIB** es una librería de visualización interactiva para Jupyter Notebooks que permite crear dashboards con layouts ASCII y gráficos D3.js. El proyecto está diseñado con una arquitectura modular que soporta múltiples tipos de gráficos, vistas enlazadas, sistema reactivo y comunicación bidireccional entre Python y JavaScript.
 
 ---
 
-## 📋 Resumen Ejecutivo
-
-**BESTLIB** es una librería de visualización interactiva para Jupyter Notebooks que permite crear dashboards con layouts ASCII y gráficos D3.js. El proyecto tiene una arquitectura sólida y funcional, con **11+ tipos de gráficos** implementados, **sistema de vistas enlazadas**, **comunicación bidireccional Python ↔ JavaScript**, y **soporte para DataFrames de pandas**.
-
-### Estado General del Proyecto
-
-| Aspecto | Estado | Notas |
-|---------|--------|-------|
-| **Funcionalidad Core** | ✅ Funcional | Todos los gráficos principales funcionan |
-| **Arquitectura** | ✅ Sólida | Separación clara de módulos, diseño extensible |
-| **Código** | ⚠️ Mejorable | Algunos problemas menores, código muerto |
-| **Documentación** | ✅ Buena | README, CHANGELOG, ejemplos completos |
-| **Testing** | ⚠️ Parcial | Notebooks de ejemplo, pero sin tests unitarios |
-| **Dependencias** | ⚠️ Desincronizadas | `requirements.txt` vs `setup.py` vs `pyproject.toml` |
-| **Compatibilidad** | ✅ Buena | Jupyter Notebook, JupyterLab, Google Colab |
-
----
-
-## 🏗️ Arquitectura del Proyecto
+## 🏗️ Arquitectura General
 
 ### Estructura de Directorios
 
 ```
-bestlib/
-├── BESTLIB/                    # Módulo principal
-│   ├── __init__.py            # Exports y registro de comm
-│   ├── matrix.py              # Clase MatrixLayout (1,627 líneas)
-│   ├── reactive.py            # Sistema reactivo (2,082 líneas)
-│   ├── linked.py              # Vistas enlazadas (352 líneas)
-│   ├── matrix.js              # JavaScript/D3.js (4,197 líneas)
-│   ├── style.css              # Estilos CSS (72 líneas)
-│   └── d3.min.js              # D3.js v7 (minificado)
-├── examples/                   # Ejemplos y notebooks
-│   ├── demo_completo_*.ipynb  # Demos completos
-│   ├── test_*.ipynb           # Tests y ejemplos
-│   └── iris.csv               # Dataset de prueba
-├── docs/                       # Documentación
-│   ├── README.md              # Documentación principal
-│   └── QUICK_REFERENCE.md     # Referencia rápida
-├── setup.py                    # Configuración de instalación
-├── pyproject.toml             # Metadata del proyecto
-├── requirements.txt           # Dependencias
-└── README.md                  # README principal
+BESTLIB/
+├── __init__.py              # Punto de entrada principal con importaciones dinámicas
+├── matrix.py                 # Implementación legacy de MatrixLayout (2480 líneas)
+├── matrix.js                 # Código JavaScript para renderizado D3.js
+├── style.css                 # Estilos CSS para layouts
+├── linked.py                 # Sistema de vistas enlazadas (LinkedViews)
+├── reactive.py               # Sistema reactivo legacy
+│
+├── charts/                   # Sistema modular de gráficos
+│   ├── base.py               # Clase base abstracta ChartBase
+│   ├── registry.py           # ChartRegistry para registro dinámico
+│   ├── scatter.py            # Scatter plot
+│   ├── bar.py                # Bar chart
+│   ├── histogram.py          # Histogram
+│   ├── boxplot.py            # Box plot
+│   ├── heatmap.py            # Heatmap
+│   ├── line.py               # Line chart
+│   ├── pie.py                # Pie chart
+│   ├── violin.py             # Violin plot
+│   ├── radviz.py             # Radviz
+│   ├── star_coordinates.py   # Star coordinates
+│   ├── parallel_coordinates.py # Parallel coordinates
+│   ├── grouped_bar.py        # Grouped bar chart
+│   ├── line_plot.py          # Line plot (nuevo)
+│   ├── horizontal_bar.py    # Horizontal bar (nuevo)
+│   ├── hexbin.py             # Hexbin (nuevo)
+│   ├── errorbars.py          # Error bars (nuevo)
+│   ├── fill_between.py       # Fill between (nuevo)
+│   ├── step_plot.py          # Step plot (nuevo)
+│   ├── kde.py                # KDE (avanzado)
+│   ├── distplot.py           # Distribution plot (avanzado)
+│   ├── rug.py                # Rug plot (avanzado)
+│   ├── qqplot.py             # Q-Q plot (avanzado)
+│   ├── ecdf.py               # ECDF (avanzado)
+│   ├── ridgeline.py          # Ridgeline (avanzado)
+│   ├── ribbon.py             # Ribbon (avanzado)
+│   ├── hist2d.py             # 2D Histogram (avanzado)
+│   ├── polar.py              # Polar chart (avanzado)
+│   └── funnel.py             # Funnel chart (avanzado)
+│
+├── core/                     # Módulos core del sistema
+│   ├── comm.py               # CommManager - Comunicación bidireccional JS ↔ Python
+│   ├── events.py             # EventManager - Sistema de eventos y callbacks
+│   ├── layout.py             # LayoutEngine - Parsing de layouts ASCII
+│   ├── registry.py           # Registry global
+│   └── exceptions.py         # Jerarquía de excepciones
+│
+├── data/                     # Procesamiento de datos
+│   ├── preparators.py        # Preparación de datos para cada tipo de gráfico
+│   ├── validators.py         # Validación de datos
+│   ├── transformers.py       # Transformaciones de datos
+│   └── aggregators.py        # Agregaciones de datos
+│
+├── layouts/                   # Layouts modulares
+│   ├── matrix.py             # MatrixLayout refactorizado (versión modular)
+│   └── reactive.py           # ReactiveMatrixLayout
+│
+├── reactive/                  # Sistema reactivo modular
+│   ├── selection.py          # SelectionModel y ReactiveData
+│   ├── engine.py             # ReactiveEngine - Motor reactivo
+│   ├── linking.py            # LinkManager - Gestión de enlaces
+│   └── engines/              # Engines específicos por entorno
+│       ├── base.py           # Base engine
+│       ├── jupyter.py        # Engine para Jupyter
+│       ├── colab.py          # Engine para Google Colab
+│       └── js_only.py        # Engine solo JS
+│
+├── render/                    # Sistema de renderizado
+│   ├── html.py               # HTMLGenerator - Generación de HTML
+│   ├── builder.py            # JSBuilder - Construcción de código JS
+│   └── assets.py            # AssetManager - Gestión de assets (D3.js, CSS)
+│
+└── utils/                     # Utilidades
+    ├── json.py               # sanitize_for_json - Conversión a JSON
+    └── figsize.py            # figsize_to_pixels - Conversión de tamaños
 ```
-
-### Módulos Principales
-
-#### 1. **matrix.py** - Clase MatrixLayout (1,627 líneas)
-
-**Propósito:** Clase principal para crear layouts ASCII y renderizar gráficos D3.js.
-
-**Características Clave:**
-- Sistema de mapeo global (`_map`) para definir contenido por letra
-- Sistema de comunicación bidireccional (Jupyter Comm)
-- Gestión de instancias con `weakref` para evitar memory leaks
-- Soporte para múltiples tipos de gráficos (11+)
-- Métodos helper para crear gráficos desde DataFrames
-- Validación de datos y manejo de errores
-- Caché de archivos JS y CSS
-
-**Métodos Principales:**
-```python
-# Métodos de clase
-- map(mapping)                      # Define contenido por letra
-- map_scatter(letter, data, ...)    # Crea scatter plot
-- map_barchart(letter, data, ...)   # Crea bar chart
-- map_histogram(letter, data, ...)  # Crea histograma
-- map_boxplot(letter, data, ...)    # Crea boxplot
-- map_heatmap(letter, data, ...)    # Crea heatmap
-- map_line(letter, data, ...)       # Crea line chart
-- map_pie(letter, data, ...)        # Crea pie chart
-- map_violin(letter, data, ...)     # Crea violin plot
-- map_radviz(letter, data, ...)     # Crea RadViz
-- map_grouped_barchart(...)         # Crea grouped bar chart
-- map_correlation_heatmap(...)      # Crea correlation heatmap
-- register_comm()                   # Registra comm target
-- on_global(event, func)            # Callback global
-- set_debug(enabled)                # Activa/desactiva debug
-
-# Métodos de instancia
-- __init__(ascii_layout)            # Crea instancia
-- on(event, func)                   # Registra callback
-- display()                         # Renderiza layout
-- connect_selection(model)          # Conecta con modelo reactivo
-- merge(letters)                    # Configura merge de celdas
-```
-
-**Sistema de Comunicación:**
-- Usa Jupyter Comm para comunicación bidireccional
-- Registra target `"bestlib_matrix"` para recibir eventos desde JS
-- Soporta múltiples handlers por evento (útil para LinkedViews)
-- Maneja errores silenciosamente para no romper otros handlers
-
-#### 2. **reactive.py** - Sistema Reactivo (2,082 líneas)
-
-**Propósito:** Sistema de variables reactivas y actualización automática sin re-ejecutar celdas.
-
-**Clases Principales:**
-
-**a) ReactiveData (Widget Base)**
-```python
-class ReactiveData(widgets.Widget):
-    items = List(Dict()).tag(sync=True)  # Sincroniza con JS
-    count = Int(0).tag(sync=True)
-```
-- Hereda de `ipywidgets.Widget`
-- Usa `traitlets` para sincronización automática
-- Los cambios en `items` disparan `_items_changed()`
-
-**b) SelectionModel (Especializada)**
-```python
-class SelectionModel(ReactiveData):
-    history = []  # Historial de selecciones
-```
-- Extiende `ReactiveData`
-- Guarda timestamp de cada selección
-- Útil para análisis de patrones de selección
-
-**c) ReactiveMatrixLayout (Wrapper)**
-```python
-class ReactiveMatrixLayout:
-    _layout = MatrixLayout(...)        # Layout interno
-    selection_model = SelectionModel() # Modelo reactivo
-```
-- Wrapper alrededor de `MatrixLayout`
-- Conecta automáticamente el modelo reactivo
-- Proporciona métodos para agregar gráficos enlazados
-- Soporta múltiples scatter plots con bar charts independientes
-
-**Características:**
-- Actualización automática sin re-ejecutar celdas
-- Historial de selecciones
-- Múltiples callbacks
-- Sincronización bidireccional
-- Soporte para vistas principales y enlazadas
-
-#### 3. **linked.py** - Vistas Enlazadas (352 líneas)
-
-**Propósito:** Sistema de vistas enlazadas que permite que múltiples gráficos se actualicen automáticamente.
-
-**Clase Principal:**
-```python
-class LinkedViews:
-    _views = {}      # {view_id: view_config}
-    _data = []       # Datos originales
-    _selected_data = []  # Datos seleccionados
-    _layouts = {}    # {view_id: MatrixLayout instance}
-```
-
-**Características:**
-- Agrega scatter plots y bar charts enlazados
-- Actualización automática cuando se seleccionan datos
-- Soporte para DataFrames y listas de diccionarios
-- **Nota:** Este módulo está siendo reemplazado por `ReactiveMatrixLayout` (mejor integrado)
-
-#### 4. **matrix.js** - JavaScript/D3.js (4,197 líneas)
-
-**Propósito:** Renderizado de gráficos D3.js y comunicación con Python.
-
-**Características Clave:**
-- Sistema de comunicación (Jupyter Comm) compatible con Jupyter Notebook y Google Colab
-- Carga automática de D3.js si no está disponible
-- Renderizado de 11+ tipos de gráficos
-- Brush selection interactivo
-- Click events y tooltips
-- Actualización dinámica de gráficos enlazados
-- Soporte para layouts ASCII con merge de celdas
-
-**Funciones Principales:**
-```javascript
-- getComm(divId, maxRetries)        // Obtiene comm de Jupyter
-- sendEvent(divId, eventType, payload)  // Envía evento a Python
-- render(divId, layout, mapping)    // Renderiza layout
-- renderD3ScatterPlot(...)          // Renderiza scatter plot
-- renderD3BarChart(...)             // Renderiza bar chart
-- renderD3Histogram(...)            // Renderiza histograma
-- renderD3Boxplot(...)              // Renderiza boxplot
-- renderD3Heatmap(...)              // Renderiza heatmap
-- renderD3LineChart(...)            // Renderiza line chart
-- renderD3PieChart(...)             // Renderiza pie chart
-- renderD3ViolinPlot(...)           // Renderiza violin plot
-- renderD3RadViz(...)               // Renderiza RadViz
-- renderD3GroupedBarChart(...)      // Renderiza grouped bar chart
-- renderD3CorrelationHeatmap(...)   // Renderiza correlation heatmap
-```
-
-**Problemas Conocidos:**
-- ⚠️ Código muerto: `renderD3()`, `renderBarChart()`, `renderScatterPlot()` NO se usan (~330 líneas)
-- ⚠️ Dominio de ejes incorrecto en scatter plot (siempre empieza en 0, debería usar `d3.extent()`)
-
-#### 5. **style.css** - Estilos CSS (72 líneas)
-
-**Propósito:** Estilos para layouts de matriz.
-
-**Características:**
-- Variables CSS para personalización
-- Layouts grid responsivos
-- Media queries para móviles
-- Estilos para celdas de matriz
-- Overflow visible para evitar cortes
 
 ---
 
-## 📊 Tipos de Gráficos Implementados
+## 🔄 Flujo de Funcionamiento
 
-### 1. **Scatter Plot** ✅
-- Puntos con colores por categoría
-- Brush selection interactivo
-- Click en puntos
-- Tooltips
-- Ejes configurables
-- **Problema conocido:** Dominio de ejes incorrecto (siempre empieza en 0)
+### 1. **Inicialización**
 
-### 2. **Bar Chart** ✅
-- Barras simples con colores
-- Brush selection interactivo
-- Click en barras
-- Ejes configurables
-- Soporte para colorMap
+```python
+from BESTLIB import MatrixLayout
+layout = MatrixLayout("AB\nCD")  # Layout ASCII 2x2
+```
 
-### 3. **Grouped Bar Chart** ✅
-- Barras agrupadas por categoría principal y subcategoría
-- Colores por subcategoría
-- Ejes configurables
+**Proceso:**
+1. `MatrixLayout.__init__()` crea una instancia con `div_id` único
+2. Parsea el layout ASCII usando `LayoutEngine.parse_ascii_layout()`
+3. Registra la instancia en `CommManager` para comunicación bidireccional
+4. Inicializa `EventManager` para manejo de eventos
+5. Registra el comm target de Jupyter (`bestlib_matrix`)
 
-### 4. **Histogram** ✅
-- Bins configurables
-- Distribución de datos
-- Ejes configurables
+### 2. **Mapeo de Gráficos**
 
-### 5. **Boxplot** ✅
-- Diagrama de caja y bigotes
-- Por categoría
-- Medianas, cuartiles, outliers
-- Ejes configurables
+```python
+MatrixLayout.map_scatter('A', df, x_col='x', y_col='y', category_col='cat')
+MatrixLayout.map_barchart('B', df, category_col='cat', value_col='val')
+```
 
-### 6. **Heatmap** ✅
-- Mapa de calor genérico
-- Gradiente de colores
-- Ejes configurables
+**Proceso:**
+1. Los métodos `map_*` son `@classmethod` que guardan specs en `MatrixLayout._map`
+2. Cada método usa `ChartRegistry.get(chart_type)` para obtener el gráfico
+3. El gráfico valida y prepara los datos usando `validate_data()` y `prepare_data()`
+4. Genera la spec usando `get_spec()` que retorna un dict con:
+   - `type`: Tipo de gráfico
+   - `data`: Datos procesados
+   - `options`: Opciones de visualización
+   - `interaction`: Configuración de interactividad
+   - `encoding`: Mapeo de campos a canales visuales
 
-### 7. **Correlation Heatmap** ✅
-- Matriz de correlación
-- Simétrica
-- Diagonal = 1
-- Gradiente de colores
+### 3. **Renderizado**
 
-### 8. **Line Chart** ✅
-- Líneas simples y múltiples series
-- Colores por serie
-- Ejes configurables
-- **Nota:** Usa `d3.extent()` correctamente (a diferencia de scatter plot)
+```python
+layout.display()  # O simplemente: layout
+```
 
-### 9. **Pie Chart** ✅
-- Sectores circulares
-- Colores por categoría
-- Etiquetas
-- Proporciones
+**Proceso:**
+1. `_repr_html_()` o `_repr_mimebundle_()` se ejecuta automáticamente
+2. `_prepare_repr_data()` prepara:
+   - Carga JS y CSS (cacheados)
+   - Escapa el layout ASCII
+   - Combina `MatrixLayout._map` con metadata
+   - Serializa a JSON
+3. Genera HTML con:
+   - `<style>` con CSS inline
+   - `<div id="matrix-{uuid}">` contenedor
+   - `<script>` con código JavaScript
+4. El JavaScript ejecuta `render(divId, asciiLayout, mapping)`
+5. `render()` en `matrix.js`:
+   - Parsea el layout ASCII
+   - Crea grid de celdas
+   - Para cada celda, busca el spec en `mapping`
+   - Llama a la función renderizadora correspondiente (ej: `renderScatterD3()`)
+   - Cada renderizador usa D3.js para crear el SVG
 
-### 10. **Violin Plot** ✅
-- Perfiles de densidad
-- Por categoría
-- Bins configurables
-- Ejes configurables
+### 4. **Interactividad**
 
-### 11. **RadViz** ✅
-- Proyección multidimensional
-- Puntos en círculo
-- Colores por clase
-- Ejes radiales
-
-### 12. **Confusion Matrix** ✅ (solo en ReactiveMatrixLayout)
-- Matriz de confusión
-- Requiere scikit-learn
-- Colores por precisión
-- Etiquetas de clases
+**Brush Selection (Selección con cepillo):**
+1. Usuario dibuja rectángulo en scatter plot
+2. JavaScript detecta selección y filtra datos
+3. Envía evento `select` vía comm a Python
+4. `CommManager._handle_message()` recibe el evento
+5. `EventManager.emit()` ejecuta handlers registrados
+6. Handlers pueden:
+   - Actualizar `SelectionModel` (sistema reactivo)
+   - Actualizar otros gráficos (vistas enlazadas)
+   - Ejecutar callbacks personalizados
 
 ---
 
-## 🔄 Sistemas Avanzados
+## 🎨 Sistema de Gráficos
 
-### 1. **Sistema de Vistas Enlazadas (LinkedViews)**
+### Arquitectura de Gráficos
 
-**Características:**
-- Múltiples gráficos sincronizados
-- Actualización automática al seleccionar datos
-- Soporte para scatter plots y bar charts enlazados
-- **Estado:** Funcional pero siendo reemplazado por ReactiveMatrixLayout
+Todos los gráficos heredan de `ChartBase` que define:
 
-### 2. **Sistema Reactivo (ReactiveMatrixLayout)**
+```python
+class ChartBase(ABC):
+    @property
+    @abstractmethod
+    def chart_type(self) -> str
+    
+    @abstractmethod
+    def validate_data(self, data, **kwargs)
+    
+    @abstractmethod
+    def prepare_data(self, data, **kwargs)
+    
+    @abstractmethod
+    def get_spec(self, data, **kwargs) -> dict
+```
 
-**Características:**
-- Actualización automática sin re-ejecutar celdas
-- SelectionModel para gestionar selecciones
-- Historial de selecciones
-- Múltiples scatter plots con bar charts independientes
-- Soporte para vistas principales y enlazadas
-- **Estado:** ✅ Funcional y recomendado
+### Tipos de Gráficos Disponibles
 
-### 3. **Comunicación Bidireccional (Python ↔ JavaScript)**
+**Básicos (11 tipos):**
+1. `scatter` - Scatter plot
+2. `bar` - Bar chart
+3. `histogram` - Histogram
+4. `boxplot` - Box plot
+5. `heatmap` - Heatmap
+6. `line` - Line chart
+7. `pie` - Pie chart
+8. `violin` - Violin plot
+9. `radviz` - Radviz
+10. `star_coordinates` - Star coordinates
+11. `parallel_coordinates` - Parallel coordinates
+
+**Nuevos (6 tipos):**
+12. `line_plot` - Line plot
+13. `horizontal_bar` - Horizontal bar
+14. `hexbin` - Hexbin
+15. `errorbars` - Error bars
+16. `fill_between` - Fill between
+17. `step_plot` - Step plot
+
+**Avanzados (10 tipos):**
+18. `kde` - Kernel Density Estimation
+19. `distplot` - Distribution plot
+20. `rug` - Rug plot
+21. `qqplot` - Q-Q plot
+22. `ecdf` - Empirical CDF
+23. `ridgeline` - Ridgeline plot
+24. `ribbon` - Ribbon chart
+25. `hist2d` - 2D Histogram
+26. `polar` - Polar chart
+27. `funnel` - Funnel chart
+
+**Total: 27 tipos de gráficos**
+
+### Registro de Gráficos
+
+Los gráficos se registran automáticamente al importar `charts/__init__.py`:
+
+```python
+ChartRegistry.register(ScatterChart)
+ChartRegistry.register(BarChart)
+# ... etc
+```
+
+El `ChartRegistry` mantiene un diccionario `_charts: Dict[str, Type[ChartBase]]` que mapea `chart_type` a la clase.
+
+---
+
+## 🔗 Sistema de Comunicación
+
+### CommManager
+
+Gestiona la comunicación bidireccional JavaScript ↔ Python usando Jupyter Comm API.
 
 **Flujo:**
-1. **Python → JavaScript:** Datos y configuración via `MatrixLayout.map()`
-2. **JavaScript → Python:** Eventos via Jupyter Comm (`bestlib_matrix`)
-3. **Callbacks:** Handlers por instancia o globales
+1. `CommManager.register_comm()` registra el comm target `bestlib_matrix`
+2. JavaScript crea un comm cuando se renderiza un gráfico interactivo
+3. Eventos (select, click, brush) se envían desde JS a Python
+4. `CommManager._handle_message()` recibe y enruta eventos
+5. `EventManager.emit()` ejecuta handlers registrados
 
-**Eventos Disponibles:**
-- `select`: Selección con brush (barras o puntos)
-- `point_click`: Click en punto individual (scatter)
-- Extensible: puedes agregar tus propios eventos
+**Eventos soportados:**
+- `select` - Selección de datos (brush)
+- `click` - Click en elemento
+- `brush` - Evento de brush
+- `hover` - Hover sobre elemento
 
-**Compatibilidad:**
-- ✅ Jupyter Notebook clásico
-- ✅ JupyterLab
-- ✅ Google Colab
-- ✅ Manejo de errores si comm no está disponible
+### EventManager
 
----
+Sistema de eventos con soporte para:
+- **Handlers de instancia**: Específicos para cada `MatrixLayout`
+- **Handlers globales**: Se ejecutan para todos los layouts
 
-## 📦 Dependencias y Configuración
-
-### Dependencias Requeridas
-
-| Paquete | Versión | Propósito | Estado |
-|---------|---------|-----------|--------|
-| `ipython` | >= 7.0 | Kernel de Jupyter | ✅ Opcional (try/except) |
-| `ipywidgets` | >= 7.0 | Widgets interactivos | ✅ Opcional (try/except) |
-| `pandas` | >= 1.3.0 | DataFrames | ✅ Opcional (try/except) |
-| `numpy` | >= 1.20.0 | Operaciones numéricas | ✅ Opcional (try/except) |
-| `scikit-learn` | >= 1.0.0 | Confusion matrix | ⚠️ Opcional (solo para `add_confusion_matrix`) |
-
-### Archivos de Configuración
-
-#### 1. **requirements.txt** ✅
-```
-ipython>=8
-jupyterlab>=4
-ipywidgets>=8
-pandas>=1.3.0
-numpy>=1.20.0
-```
-
-#### 2. **setup.py** ⚠️
 ```python
-install_requires=[],  # ❌ Vacío (debería tener dependencias)
+# Handler de instancia
+layout.on('select', lambda payload: print(f"Seleccionados: {payload['count']}"))
+
+# Handler global
+MatrixLayout.on_global('select', lambda payload: log_to_file(payload))
 ```
-
-#### 3. **pyproject.toml** ⚠️
-```toml
-dependencies = []  # ❌ Vacío (debería tener dependencias)
-```
-
-**Problema:** Dependencias desincronizadas entre archivos.
-
-**Solución Recomendada:**
-- Sincronizar dependencias en todos los archivos
-- Documentar dependencias opcionales vs requeridas
-- Usar `try/except` para dependencias opcionales (ya implementado)
 
 ---
 
-## 🧪 Testing y Ejemplos
+## ⚡ Sistema Reactivo
 
-### Notebooks de Ejemplo
+### Componentes
 
-| Archivo | Propósito | Estado |
-|---------|-----------|--------|
-| `demo_completo_bestlib.ipynb` | Demo completo con Iris | ✅ Funcional |
-| `demo_completo_todas_funcionalidades.ipynb` | Todas las funcionalidades | ✅ Funcional |
-| `demo_completo_dataset_grande.ipynb` | Dataset grande | ✅ Funcional |
-| `demo_todos_graficos_dataset_real.ipynb` | Todos los gráficos | ✅ Funcional |
-| `test_completo_iris.ipynb` | Tests con Iris | ✅ Funcional |
-| `test_graficos.ipynb` | Tests de gráficos | ✅ Funcional |
-| `COLAB_INSTALLATION.ipynb` | Guía de instalación en Colab | ✅ Funcional |
+1. **SelectionModel**: Modelo reactivo especializado para selecciones
+   - Hereda de `ReactiveData`
+   - Mantiene historial de selecciones
+   - Sincroniza con widgets de ipywidgets
 
-### Dataset de Prueba
+2. **ReactiveData**: Widget reactivo base
+   - Traits: `items` (List[Dict]), `count` (Int)
+   - Callbacks con `on_change()`
+   - Conversión a DataFrame con `to_dataframe()`
 
-- **iris.csv**: Dataset Iris clásico (150 filas, 5 columnas)
-- **Columnas:** `sepal_length`, `sepal_width`, `petal_length`, `petal_width`, `species`
-- **Especies:** setosa (50), versicolor (50), virginica (50)
+3. **ReactiveEngine**: Motor reactivo centralizado
+   - Estado centralizado (`_state`)
+   - Sistema de suscripciones
+   - Prevención de loops infinitos
 
-### Tests Unitarios
+4. **LinkManager**: Gestión de enlaces entre gráficos
+   - Define relaciones entre gráficos
+   - Propaga actualizaciones
 
-- ❌ **No hay tests unitarios** (solo notebooks de ejemplo)
-- ⚠️ **Recomendación:** Agregar tests unitarios con pytest
+### Uso
 
----
+```python
+from BESTLIB.reactive import SelectionModel
 
-## 🐛 Problemas y Errores Conocidos
+selection = SelectionModel()
+selection.on_change(lambda items, count: print(f"{count} seleccionados"))
 
-### Críticos (Corregir Urgente)
-
-#### 1. 🔴 Dominio de Ejes Incorrecto en Scatter Plot
-**Ubicación:** `matrix.js` - `renderScatterPlotD3()` (líneas 1109-1116)
-
-**Problema:**
-```javascript
-.domain([0, d3.max(data, d => d.x) || 100])  // ❌ INCORRECTO
-.domain([0, d3.max(data, d => d.y) || 100])  // ❌ INCORRECTO
+layout = MatrixLayout("S")
+layout.connect_selection(selection, scatter_letter='S')
+layout.display()
 ```
 
-**Solución:**
-```javascript
-.domain(d3.extent(data, d => d.x))  // ✅ CORRECTO
-.domain(d3.extent(data, d => d.y))  // ✅ CORRECTO
+---
+
+## 🔄 Vistas Enlazadas (LinkedViews)
+
+Sistema que permite que múltiples gráficos se actualicen automáticamente cuando se seleccionan datos.
+
+**Flujo:**
+1. `LinkedViews` mantiene múltiples `MatrixLayout` instances
+2. Un gráfico es "principal" (con brush selection)
+3. Otros gráficos son "secundarios" (se actualizan automáticamente)
+4. Cuando hay selección en el principal:
+   - Se filtran los datos
+   - Se actualizan los secundarios vía JavaScript
+   - Se mantiene sincronización
+
+**Ejemplo:**
+```python
+from BESTLIB.linked import LinkedViews
+
+linked = LinkedViews()
+linked.add_scatter('scatter1', data, interactive=True)
+linked.add_barchart('bar1', category_col='category')
+linked.display()
 ```
 
-**Impacto:** Los scatter plots no muestran correctamente los datos si los valores no empiezan cerca de 0.
+---
 
-#### 2. 🔴 Dependencias Desincronizadas
-**Ubicación:** `setup.py`, `pyproject.toml`
+## 📐 Layouts ASCII
 
-**Problema:** `install_requires=[]` y `dependencies = []` están vacíos, pero `requirements.txt` tiene dependencias.
+### Formato
 
-**Solución:** Sincronizar dependencias en todos los archivos.
+Los layouts se definen con texto ASCII donde cada letra representa una celda:
 
-#### 3. 🔴 Código JavaScript Muerto
-**Ubicación:** `matrix.js`
+```
+AB
+CD
+```
 
-**Problema:** `renderD3()`, `renderBarChart()`, `renderScatterPlot()` NO se usan (~330 líneas).
+Esto crea un grid 2x2 con celdas A, B, C, D.
 
-**Solución:** Eliminar código muerto o documentar por qué existe.
+### Parsing
 
-### Importantes (Corregir Pronto)
+`LayoutEngine.parse_ascii_layout()`:
+1. Divide por líneas (`\n`)
+2. Valida que todas las filas tengan igual longitud
+3. Crea estructura `Grid` con:
+   - `rows`: Número de filas
+   - `cols`: Número de columnas
+   - `cells`: Diccionario de celdas con posición y letra
 
-#### 4. ⚠️ Carga de D3.js
-**Problema:** Puede cargar múltiples veces si no se verifica correctamente.
+### Configuración Avanzada
 
-**Solución:** Verificar si D3.js ya está cargado antes de cargar.
-
-#### 5. ⚠️ Manejo de Errores
-**Problema:** Comms pueden fallar silenciosamente.
-
-**Solución:** Mejorar manejo de errores y logging.
-
-#### 6. ⚠️ Validación de Datos
-**Problema:** Falta validación en algunos métodos `map_*`.
-
-**Solución:** Agregar validación consistente en todos los métodos.
-
-#### 7. ⚠️ Actualización de Gráficos Enlazados
-**Problema:** Puede fallar si contenedor no está listo.
-
-**Solución:** Agregar retry y verificación de contenedor.
-
-### Menores (Mejorar Después)
-
-#### 8. ⚠️ Código Duplicado
-**Problema:** Lógica duplicada en `_repr_html_()` y `_repr_mimebundle_()`.
-
-**Solución:** Refactorizar para eliminar duplicación.
-
-#### 9. ⚠️ Archivos No Cacheados
-**Problema:** JS y CSS se leen en cada renderizado (aunque hay caché, puede mejorar).
-
-**Solución:** Mejorar sistema de caché.
-
-#### 10. ⚠️ Documentación
-**Problema:** Falta documentación en algunos métodos.
-
-**Solución:** Agregar docstrings completos.
+```python
+layout = MatrixLayout(
+    "AB\nCD",
+    figsize=(400, 300),        # Tamaño global de gráficos
+    row_heights=[200, 300],    # Alturas por fila (px o fr)
+    col_widths=[1, 2],         # Anchos por columna (ratios o px)
+    gap=12,                    # Espaciado entre celdas (px)
+    cell_padding=15,           # Padding de celdas (px)
+    max_width=1200             # Ancho máximo del layout (px)
+)
+```
 
 ---
 
-## 📈 Métricas del Proyecto
+## 🎨 Renderizado JavaScript
 
-### Líneas de Código
+### Archivo `matrix.js`
 
-| Archivo | Líneas | Tipo | Estado |
-|---------|--------|------|--------|
-| `matrix.py` | 1,627 | Python | ✅ Funcional |
-| `reactive.py` | 2,082 | Python | ✅ Funcional |
-| `linked.py` | 352 | Python | ✅ Funcional |
-| `matrix.js` | 4,197 | JavaScript | ✅ Funcional |
-| `style.css` | 72 | CSS | ✅ Funcional |
-| **Total** | **8,330** | - | - |
+Contiene:
+1. **Función `render()`**: Función principal que renderiza el layout
+2. **Funciones renderizadoras**: Una por cada tipo de gráfico
+   - `renderScatterD3()`
+   - `renderBarD3()`
+   - `renderHistogramD3()`
+   - etc.
+3. **Utilidades**: Funciones helper para escalas, colores, etc.
+4. **Comunicación**: Código para crear comms y enviar eventos
 
-### Complejidad
+### Flujo de Renderizado
 
-| Métrica | Valor |
-|---------|-------|
-| **Clases** | 4 principales |
-| **Métodos** | ~76 métodos |
-| **Tipos de gráficos** | 11+ |
-| **Archivos principales** | 6 |
-| **Líneas de código** | ~8,330 |
+1. `render(divId, asciiLayout, mapping)` se ejecuta
+2. Parsea `asciiLayout` en grid
+3. Crea contenedor con CSS Grid
+4. Para cada celda:
+   - Busca spec en `mapping[letter]`
+   - Verifica si es spec de BESTLIB o D3.js nativo
+   - Llama a función renderizadora correspondiente
+   - La función renderizadora:
+     - Crea SVG con D3.js
+     - Calcula escalas
+     - Dibuja elementos (círculos, barras, líneas, etc.)
+     - Agrega ejes, tooltips, interactividad
 
-### Calidad del Código
+### Soporte para Google Colab
 
-| Aspecto | Estado | Notas |
-|---------|--------|-------|
-| **Sintaxis** | ✅ Correcta | Sin errores de sintaxis |
-| **Indentación** | ✅ Correcta | Corregida en v0.1.1 |
-| **Imports** | ✅ Correctos | Manejo opcional con try/except |
-| **Documentación** | ⚠️ Parcial | Algunos métodos sin docstrings |
-| **Tests** | ❌ Faltantes | Solo notebooks de ejemplo |
-| **Linter** | ⚠️ Warnings | Warnings por imports opcionales |
+El proyecto incluye detección automática de Colab y carga de assets:
+- `AssetManager.ensure_colab_assets_loaded()` carga D3.js desde CDN
+- `wait_for_d3=True` hace que el código espere a D3 antes de renderizar
+- Evita race conditions donde JS se ejecuta antes de que D3 esté disponible
 
 ---
 
-## 🎯 Fortalezas del Proyecto
+## 📊 Procesamiento de Datos
 
-### 1. ✅ Arquitectura Sólida
-- Separación clara de módulos
-- Diseño extensible
-- Fácil de mantener y extender
+### Preparadores (`data/preparators.py`)
 
-### 2. ✅ Funcionalidad Completa
-- 11+ tipos de gráficos implementados
-- Sistema de vistas enlazadas
-- Comunicación bidireccional
-- Soporte para DataFrames
+Cada tipo de gráfico tiene su preparador:
+- `prepare_scatter_data()`: Convierte DataFrame/list a formato scatter
+- `prepare_bar_data()`: Agrupa y agrega datos para bar chart
+- `prepare_histogram_data()`: Binea datos y almacena filas originales por bin
+- etc.
 
-### 3. ✅ Compatibilidad
-- Jupyter Notebook clásico
-- JupyterLab
-- Google Colab
-- Manejo de errores si comm no está disponible
+**Características:**
+- Soporte para DataFrames de pandas y listas de diccionarios
+- Preserva datos originales en `_original_row` y `_original_rows`
+- Operaciones vectorizadas para mejor rendimiento
+- Sampling automático si hay muchos puntos (`maxPoints`)
 
-### 4. ✅ Documentación
-- README completo
-- CHANGELOG detallado
-- Ejemplos y notebooks
-- Guías de instalación
+### Validadores (`data/validators.py`)
 
-### 5. ✅ Interactividad
-- Brush selection
+Validan que los datos sean adecuados:
+- `validate_scatter_data()`: Verifica columnas x, y existen
+- `validate_bar_data()`: Verifica columnas de categoría
+- `validate_data_structure()`: Verifica estructura general
+
+### Transformadores (`data/transformers.py`)
+
+Transformaciones de datos:
+- Normalización
+- Agregación
+- Filtrado
+
+### Agregadores (`data/aggregators.py`)
+
+Funciones de agregación:
+- `count`, `sum`, `mean`, `median`, etc.
+
+---
+
+## 🔧 Utilidades
+
+### `utils/json.py`
+
+`sanitize_for_json()`: Convierte tipos numpy a tipos Python nativos para JSON serialization.
+
+### `utils/figsize.py`
+
+`figsize_to_pixels()`: Convierte figsize de pulgadas a píxeles (asumiendo 96 DPI).
+
+---
+
+## 🚨 Manejo de Errores
+
+### Jerarquía de Excepciones
+
+```python
+BestlibError (base)
+├── LayoutError      # Errores en layouts
+├── ChartError       # Errores en gráficos
+├── DataError        # Errores en datos
+├── RenderError      # Errores en renderizado
+└── CommunicationError  # Errores en comunicación JS ↔ Python
+```
+
+### Validaciones
+
+- Layouts ASCII deben tener filas de igual longitud
+- Columnas requeridas deben existir en DataFrames
+- Datos no pueden estar vacíos
+- Tipos de datos deben ser correctos
+
+---
+
+## 🔄 Compatibilidad y Fallbacks
+
+El proyecto tiene múltiples niveles de fallback:
+
+1. **Importaciones opcionales**: Maneja dependencias faltantes con try/except
+2. **Múltiples rutas de importación**: Intenta importar desde módulos modulares, luego legacy
+3. **Stubs**: Si un módulo no está disponible, crea funciones stub básicas
+4. **Detección de entorno**: Detecta Jupyter, Colab, o script standalone
+
+### Flags de Disponibilidad
+
+- `HAS_WIDGETS`: ipywidgets disponible
+- `HAS_PANDAS`: pandas disponible
+- `HAS_CORE`: módulos core disponibles
+- `HAS_CHARTS`: módulos de gráficos disponibles
+- `HAS_DATA`: módulos de datos disponibles
+- `HAS_UTILS`: módulos de utilidades disponibles
+- `HAS_REACTIVE`: módulos reactivos disponibles
+- `HAS_LINKED`: módulos de vistas enlazadas disponibles
+
+---
+
+## 📦 Dependencias
+
+### Requeridas (pero opcionales en código)
+
+- `ipython` >= 7.0 (para Jupyter)
+- `ipywidgets` >= 7.0 (para widgets interactivos)
+- `pandas` >= 1.3.0 (para DataFrames)
+- `numpy` >= 1.20.0 (para operaciones numéricas)
+
+### Opcionales
+
+- `scikit-learn` >= 1.0.0 (solo para `add_confusion_matrix`)
+
+**Nota**: El código maneja todas las dependencias como opcionales con try/except, permitiendo que funcione incluso sin algunas dependencias (con funcionalidades limitadas).
+
+---
+
+## 🎯 Características Principales
+
+### 1. **Layouts ASCII**
+- Define disposición de gráficos con texto simple
+- Soporte para grids complejos
+- Configuración de dimensiones, espaciado, padding
+
+### 2. **27+ Tipos de Gráficos**
+- Desde básicos (scatter, bar) hasta avanzados (ridgeline, polar)
+- Sistema extensible con registro dinámico
+- Cada gráfico es una clase independiente
+
+### 3. **Interactividad**
+- Brush selection en scatter plots
 - Click events
 - Tooltips
-- Actualización automática
+- Zoom (en algunos gráficos)
+
+### 4. **Vistas Enlazadas**
+- Múltiples gráficos sincronizados
+- Actualización automática cuando se seleccionan datos
+- Visualización de conexiones con líneas SVG
+
+### 5. **Sistema Reactivo**
+- `SelectionModel` para selecciones
+- `ReactiveData` para datos reactivos
+- Callbacks y observadores
+- Integración con ipywidgets
+
+### 6. **Comunicación Bidireccional**
+- JavaScript → Python: Eventos de selección, click, etc.
+- Python → JavaScript: Actualización de datos (futuro)
+- Usa Jupyter Comm API
+
+### 7. **Soporte Multi-entorno**
+- Jupyter Notebook
+- Jupyter Lab
+- Google Colab (con detección automática)
+- Scripts standalone (modo limitado)
+
+### 8. **Optimizaciones**
+- Caché de JS y CSS (carga una sola vez)
+- Operaciones vectorizadas con pandas
+- Sampling automático para datasets grandes
+- Lazy loading de módulos
 
 ---
 
-## ⚠️ Áreas de Mejora
+## 🔍 Puntos Clave de la Arquitectura
 
-### 1. 🔴 Problemas Críticos
-- Corregir dominio de ejes en scatter plot
-- Sincronizar dependencias
-- Eliminar código muerto
+### 1. **Dualidad Legacy/Modular**
 
-### 2. ⚠️ Calidad del Código
-- Agregar tests unitarios
-- Mejorar manejo de errores
-- Agregar validación de datos
-- Eliminar código duplicado
+El proyecto tiene dos implementaciones:
+- **Legacy**: `matrix.py` (2480 líneas, todo en un archivo)
+- **Modular**: `layouts/matrix.py` + módulos separados
 
-### 3. ⚠️ Funcionalidades Faltantes
-- Brush selection en más gráficos (histogram, boxplot, heatmap, line)
-- Zoom y pan en todos los gráficos
-- Tooltips mejorados
-- Exportación de gráficos (PNG, SVG, PDF)
-- Más tipos de gráficos (area, stacked, treemap, sankey, network, 3D)
+El `__init__.py` intenta importar modular primero, luego hace fallback a legacy.
 
-### 4. ⚠️ Documentación
-- Agregar docstrings completos
-- Documentar APIs públicas
-- Agregar guías de uso avanzado
-- Documentar troubleshooting
+### 2. **Sistema de Especificaciones (Specs)**
 
----
+Cada gráfico genera una "spec" (especificación) que es un dict con:
+- `type`: Tipo de gráfico
+- `data`: Datos procesados
+- `options`: Opciones de visualización
+- `interaction`: Configuración de interactividad
+- `encoding`: Mapeo de campos a canales visuales
 
-## 🚀 Recomendaciones
+Las specs se serializan a JSON y se pasan a JavaScript.
 
-### Prioridad Alta (Hacer Ahora)
+### 3. **Registro Dinámico**
 
-1. ✅ **Corregir dominio de ejes en scatter plot**
-   - Cambiar `[0, d3.max()]` a `d3.extent()`
-   - Impacto: Crítico para visualización correcta
+Los gráficos se registran automáticamente al importar, permitiendo:
+- Extensibilidad sin modificar código existente
+- Hot-reload en desarrollo
+- Verificación de tipos disponibles
 
-2. ✅ **Sincronizar dependencias**
-   - Actualizar `setup.py` y `pyproject.toml`
-   - Documentar dependencias opcionales vs requeridas
+### 4. **Preservación de Datos Originales**
 
-3. ✅ **Eliminar código muerto**
-   - Eliminar funciones no usadas en `matrix.js`
-   - Reducir tamaño del archivo
+Cada dato procesado incluye:
+- `_original_row`: Fila original completa (para scatter, bar, etc.)
+- `_original_rows`: Lista de filas originales (para histogram bins, etc.)
+- `_original_index`: Índice original
 
-### Prioridad Media (Hacer Pronto)
+Esto permite que las vistas enlazadas accedan a los datos completos.
 
-4. ✅ **Agregar tests unitarios**
-   - Usar pytest
-   - Tests para cada tipo de gráfico
-   - Tests para sistemas avanzados
+### 5. **Gestión de Estado**
 
-5. ✅ **Mejorar manejo de errores**
-   - Logging consistente
-   - Mensajes de error descriptivos
-   - Manejo de errores en comms
-
-6. ✅ **Agregar validación de datos**
-   - Validación consistente en todos los métodos
-   - Mensajes de error claros
-
-### Prioridad Baja (Mejorar Después)
-
-7. ✅ **Agregar más funcionalidades**
-   - Brush selection en más gráficos
-   - Zoom y pan
-   - Exportación de gráficos
-   - Más tipos de gráficos
-
-8. ✅ **Mejorar documentación**
-   - Docstrings completos
-   - Guías de uso avanzado
-   - Troubleshooting
+- `MatrixLayout._map`: Mapping global de letras a specs (compartido entre instancias)
+- `CommManager._instances`: Registro de instancias activas (weakref)
+- `EventManager._handlers`: Handlers por instancia y globales
+- `ReactiveEngine._state`: Estado reactivo centralizado
 
 ---
 
-## 📚 Conclusión
+## 🐛 Problemas Conocidos y Soluciones
 
-### Estado General: ✅ **Funcional con Mejoras Necesarias**
+### 1. **Race Condition en Colab**
 
-**BESTLIB** es una librería **funcional y bien estructurada** con una arquitectura sólida y características avanzadas. El proyecto tiene **11+ tipos de gráficos** implementados, **sistema de vistas enlazadas**, **comunicación bidireccional**, y **soporte para DataFrames**.
+**Problema**: JS se ejecuta antes de que D3.js esté disponible.
 
-### Problemas Principales
+**Solución**: `wait_for_d3=True` hace que el código espere a D3.
 
-1. 🔴 **Dominio de ejes incorrecto en scatter plot** (crítico)
-2. 🔴 **Dependencias desincronizadas** (importante)
-3. 🔴 **Código JavaScript muerto** (menor)
+### 2. **Expansión Infinita de Matriz**
 
-### Recomendación Final
+**Problema**: Layouts grandes se expanden infinitamente.
 
-**El proyecto está listo para usar** con algunas correcciones menores. Las funcionalidades core funcionan correctamente, pero se recomienda:
+**Solución**: `max_width` automático basado en número de celdas.
 
-1. ✅ Corregir dominio de ejes en scatter plot (prioridad alta)
-2. ✅ Sincronizar dependencias (prioridad alta)
-3. ✅ Eliminar código muerto (prioridad media)
-4. ✅ Agregar tests unitarios (prioridad media)
-5. ✅ Mejorar documentación (prioridad baja)
+### 3. **Datos Vacíos en Vistas Enlazadas**
 
-### Próximos Pasos
+**Problema**: Histogramas no preservaban filas originales por bin.
 
-1. Corregir problemas críticos
-2. Agregar tests unitarios
-3. Mejorar documentación
-4. Agregar más funcionalidades
-5. Optimizar rendimiento
+**Solución**: `prepare_histogram_data()` ahora almacena `_original_rows` por bin.
+
+### 4. **Import Errors en Jupyter**
+
+**Problema**: Caché de módulos causa errores de importación.
+
+**Solución**: Múltiples rutas de importación con fallbacks y `_ensure_reactive_imported()`.
 
 ---
 
-## 📖 Referencias
+## 📈 Flujo de Datos Completo
 
-### Archivos Principales
-- `/BESTLIB/matrix.py` - Clase base MatrixLayout
-- `/BESTLIB/reactive.py` - Sistema reactivo
-- `/BESTLIB/linked.py` - Vistas enlazadas
-- `/BESTLIB/matrix.js` - JavaScript/D3.js
-- `/BESTLIB/style.css` - Estilos CSS
-
-### Documentación
-- `/README.md` - README principal
-- `/CHANGELOG.md` - Historial de cambios
-- `/ANALISIS_ERRORES_Y_SOLUCION.md` - Análisis de errores
-- `/docs/README.md` - Documentación técnica
-- `/docs/QUICK_REFERENCE.md` - Referencia rápida
-
-### Ejemplos
-- `/examples/demo_completo_bestlib.ipynb` - Demo completo
-- `/examples/test_completo_iris.ipynb` - Tests con Iris
-- `/examples/COLAB_INSTALLATION.ipynb` - Guía de instalación en Colab
+```
+1. Usuario crea DataFrame/list
+   ↓
+2. Llama a MatrixLayout.map_scatter('A', data, ...)
+   ↓
+3. ChartRegistry.get('scatter') obtiene ScatterChart
+   ↓
+4. ScatterChart.validate_data() valida
+   ↓
+5. ScatterChart.prepare_data() prepara datos
+   ↓
+6. ScatterChart.get_spec() genera spec
+   ↓
+7. Spec se guarda en MatrixLayout._map['A']
+   ↓
+8. Usuario llama a layout.display()
+   ↓
+9. _repr_html_() genera HTML con JS
+   ↓
+10. JavaScript ejecuta render(divId, layout, mapping)
+    ↓
+11. render() parsea layout y crea grid
+    ↓
+12. Para cada celda, busca spec en mapping
+    ↓
+13. Llama a renderScatterD3(cell, spec)
+    ↓
+14. renderScatterD3() crea SVG con D3.js
+    ↓
+15. Usuario interactúa (brush selection)
+    ↓
+16. JavaScript detecta selección y filtra datos
+    ↓
+17. Envía evento 'select' vía comm a Python
+    ↓
+18. CommManager recibe y enruta a EventManager
+    ↓
+19. EventManager ejecuta handlers registrados
+    ↓
+20. Handlers pueden actualizar SelectionModel o otros gráficos
+```
 
 ---
 
-**Fin del Análisis**
+## 🎓 Conceptos Clave
 
+### 1. **Spec-based Architecture**
+
+Todo se basa en "specs" (especificaciones) que son dicts serializables a JSON. Esto permite:
+- Separación entre lógica Python y renderizado JS
+- Fácil debugging (puedes inspeccionar la spec)
+- Extensibilidad (nuevos gráficos solo necesitan generar specs)
+
+### 2. **Event-driven Communication**
+
+La comunicación JS ↔ Python es event-driven:
+- JavaScript emite eventos
+- Python registra handlers
+- No hay polling ni estado compartido directo
+
+### 3. **Reactive Programming**
+
+El sistema reactivo permite:
+- Actualización automática cuando cambian datos
+- Propagación de cambios entre componentes
+- Prevención de loops infinitos
+
+### 4. **Modular Design**
+
+Cada componente es independiente:
+- Gráficos: Clases separadas, registro dinámico
+- Data: Preparadores, validadores, transformadores separados
+- Core: Comm, Events, Layout, Registry separados
+- Render: HTML, JS Builder, Assets separados
+
+---
+
+## 🔮 Extensiones Futuras
+
+### Posibles Mejoras
+
+1. **Más tipos de gráficos**: Sankey, treemap, network, etc.
+2. **Animaciones**: Transiciones suaves entre estados
+3. **Exportación**: PNG, SVG, PDF
+4. **Temas**: Múltiples temas visuales
+5. **Dashboard builder**: UI para crear layouts visualmente
+6. **Streaming data**: Actualización en tiempo real
+7. **3D plots**: Gráficos 3D con WebGL
+8. **Machine learning**: Integración con scikit-learn para visualizaciones ML
+
+---
+
+## 📝 Notas Finales
+
+Este proyecto es un ejemplo excelente de:
+- **Arquitectura modular** bien diseñada
+- **Compatibilidad hacia atrás** mantenida durante refactorización
+- **Manejo robusto de errores** con múltiples fallbacks
+- **Documentación extensa** en código y archivos MD
+- **Soporte multi-entorno** (Jupyter, Colab, standalone)
+
+El código muestra madurez en:
+- Separación de responsabilidades
+- Extensibilidad
+- Manejo de edge cases
+- Optimizaciones de rendimiento
+
+---
+
+**Fecha de Análisis**: 2024
+**Versión Analizada**: 0.1.0-modular
+**Estado**: En desarrollo activo, modularización en progreso
