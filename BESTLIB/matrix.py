@@ -466,6 +466,112 @@ class MatrixLayout:
         if 'select' not in self._handlers:
             self._handlers['select'] = []
         self._handlers['select'].append(default_select_handler)
+    
+    def get_selected_data(self, as_dataframe=True):
+        """
+        ✅ NUEVO: Obtiene los datos seleccionados como DataFrame o lista.
+        
+        Args:
+            as_dataframe (bool): Si True, retorna DataFrame de pandas. Si False, retorna lista.
+        
+        Returns:
+            DataFrame de pandas o lista de diccionarios con los datos seleccionados.
+        
+        Ejemplo:
+            layout = MatrixLayout("S")
+            layout.map_scatter('S', df, interactive=True)
+            layout.display()
+            
+            # Después de hacer brush selection...
+            selected_df = layout.get_selected_data()  # DataFrame
+            selected_list = layout.get_selected_data(as_dataframe=False)  # Lista
+        """
+        if as_dataframe:
+            if self._selected_dataframe is not None:
+                return self._selected_dataframe
+            # Intentar convertir si hay datos pero no DataFrame
+            if self._selected_data:
+                try:
+                    from .reactive.selection import _items_to_dataframe
+                    self._selected_dataframe = _items_to_dataframe(self._selected_data)
+                    return self._selected_dataframe
+                except Exception as e:
+                    if MatrixLayout._debug:
+                        print(f"⚠️ [MatrixLayout] No se pudo convertir a DataFrame: {e}")
+                    return self._selected_data
+            try:
+                import pandas as pd
+                return pd.DataFrame()
+            except ImportError:
+                return []
+        else:
+            return self._selected_data
+    
+    @property
+    def selected_data(self):
+        """
+        ✅ NUEVO: Propiedad que retorna los datos seleccionados como DataFrame.
+        
+        Ejemplo:
+            layout = MatrixLayout("S")
+            layout.map_scatter('S', df, interactive=True)
+            layout.display()
+            
+            # Después de hacer brush selection...
+            selected = layout.selected_data  # DataFrame automáticamente
+        """
+        return self.get_selected_data(as_dataframe=True)
+    
+    def get_selected_data(self, as_dataframe=True):
+        """
+        ✅ NUEVO: Obtiene los datos seleccionados como DataFrame o lista.
+        
+        Args:
+            as_dataframe (bool): Si True, retorna DataFrame de pandas. Si False, retorna lista.
+        
+        Returns:
+            DataFrame de pandas o lista de diccionarios con los datos seleccionados.
+        
+        Ejemplo:
+            layout = MatrixLayout("S")
+            layout.map_scatter('S', df, interactive=True)
+            layout.display()
+            
+            # Después de hacer brush selection...
+            selected_df = layout.get_selected_data()  # DataFrame
+            selected_list = layout.get_selected_data(as_dataframe=False)  # Lista
+        """
+        if as_dataframe:
+            if self._selected_dataframe is not None:
+                return self._selected_dataframe
+            # Intentar convertir si hay datos pero no DataFrame
+            if self._selected_data:
+                try:
+                    from ..reactive.selection import _items_to_dataframe
+                    self._selected_dataframe = _items_to_dataframe(self._selected_data)
+                    return self._selected_dataframe
+                except Exception as e:
+                    if self._debug:
+                        print(f"⚠️ [MatrixLayout] No se pudo convertir a DataFrame: {e}")
+                    return self._selected_data
+            return pd.DataFrame() if HAS_PANDAS else []
+        else:
+            return self._selected_data
+    
+    @property
+    def selected_data(self):
+        """
+        ✅ NUEVO: Propiedad que retorna los datos seleccionados como DataFrame.
+        
+        Ejemplo:
+            layout = MatrixLayout("S")
+            layout.map_scatter('S', df, interactive=True)
+            layout.display()
+            
+            # Después de hacer brush selection...
+            selected = layout.selected_data  # DataFrame automáticamente
+        """
+        return self.get_selected_data(as_dataframe=True)
 
     @classmethod
     def map(cls, mapping):
@@ -2065,8 +2171,29 @@ class MatrixLayout:
         # Se mantiene por compatibilidad pero _prepare_repr_data usa MatrixLayout._map directamente
         self._map = {}
         
+        # ✅ NUEVO: Sistema de selección para MatrixLayout básico
+        self._selected_data = []  # Datos seleccionados (lista de diccionarios)
+        self._selected_dataframe = None  # DataFrame de pandas (si está disponible)
+        
         # Registrar handler por defecto para eventos 'select' que muestre los datos seleccionados
         self._register_default_select_handler()
+        
+        # ✅ NUEVO: Registrar handler automático que guarda datos seleccionados
+        def auto_save_selection_handler(payload):
+            """Handler automático que guarda datos seleccionados en la instancia"""
+            items = payload.get('items', [])
+            if items:
+                self._selected_data = items
+                # Intentar convertir a DataFrame
+                try:
+                    from .reactive.selection import _items_to_dataframe
+                    self._selected_dataframe = _items_to_dataframe(items)
+                except Exception as e:
+                    if MatrixLayout._debug:
+                        print(f"⚠️ [MatrixLayout] No se pudo convertir selección a DataFrame: {e}")
+                    self._selected_dataframe = None
+        
+        self.on('select', auto_save_selection_handler)
         self._figsize = figsize  # Tamaño global de gráficos
         self._row_heights = row_heights
         self._col_widths = col_widths

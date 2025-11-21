@@ -115,6 +115,7 @@ class CommManager:
     def _handle_message(cls, div_id, msg):
         """
         Maneja un mensaje recibido desde JavaScript.
+        ✅ MEJORADO: Validación de payload y mejor manejo de errores.
         
         Args:
             div_id (str): ID del div contenedor
@@ -125,11 +126,36 @@ class CommManager:
             event_type = data.get("type")
             payload = data.get("payload")
             
+            # ✅ CORRECCIÓN: Validar estructura básica del payload
+            if not isinstance(payload, dict):
+                if cls._debug:
+                    print(f"⚠️ [CommManager] Payload no es dict: {type(payload)}")
+                # Intentar convertir o crear payload vacío
+                if payload is None:
+                    payload = {}
+                else:
+                    payload = {"raw": payload}
+            
+            # ✅ CORRECCIÓN: Validar que items exista si es evento de selección
+            if event_type == 'select':
+                if 'items' not in payload:
+                    if cls._debug:
+                        print(f"⚠️ [CommManager] Evento 'select' sin campo 'items', agregando items vacío")
+                    payload['items'] = []
+                # Asegurar que items sea una lista
+                if not isinstance(payload.get('items'), list):
+                    if cls._debug:
+                        print(f"⚠️ [CommManager] items no es lista: {type(payload.get('items'))}, convirtiendo")
+                    items = payload.get('items')
+                    payload['items'] = [items] if items is not None else []
+            
             if cls._debug:
                 print(f"📩 [CommManager] Evento recibido:")
                 print(f"   - Tipo: {event_type}")
                 print(f"   - Div ID: {div_id}")
-                print(f"   - Payload: {payload}")
+                print(f"   - Payload keys: {list(payload.keys())}")
+                if event_type == 'select':
+                    print(f"   - Items count: {len(payload.get('items', []))}")
             
             # Buscar instancia por div_id
             instance = cls.get_instance(div_id)

@@ -1,1357 +1,891 @@
-# Análisis Exhaustivo Completo - bestlib
+# 🔍 Análisis Exhaustivo del Código BESTLIB
 
-**Fecha**: 2025-01-XX  
-**Versión analizada**: 0.1.0 (actualizada)  
-**Analista**: AI Assistant
+**Fecha:** 2024  
+**Versión analizada:** 0.1.0-modular  
+**Alcance:** Análisis completo de estructura, funcionalidad, errores y áreas de mejora
 
 ---
 
 ## 📋 Tabla de Contenidos
 
 1. [Resumen Ejecutivo](#resumen-ejecutivo)
-2. [Arquitectura del Proyecto](#arquitectura-del-proyecto)
-3. [Tipos de Gráficos Implementados](#tipos-de-gráficos-implementados)
-4. [Sistema de Interacción](#sistema-de-interacción)
-5. [Linked Views y Sistema Reactivo](#linked-views-y-sistema-reactivo)
-6. [Comunicación Bidireccional](#comunicación-bidireccional)
-7. [Funcionalidades que Funcionan](#funcionalidades-que-funcionan)
-8. [Problemas y Errores Encontrados](#problemas-y-errores-encontrados)
-9. [Lo que Falta por Implementar](#lo-que-falta-por-implementar)
-10. [Recomendaciones](#recomendaciones)
+2. [Estructura del Proyecto](#estructura-del-proyecto)
+3. [Problemas Críticos](#problemas-críticos)
+4. [Problemas de Diseño y Arquitectura](#problemas-de-diseño-y-arquitectura)
+5. [Problemas de Implementación](#problemas-de-implementación)
+6. [Problemas de Compatibilidad](#problemas-de-compatibilidad)
+7. [Problemas de Rendimiento](#problemas-de-rendimiento)
+8. [Problemas de Mantenibilidad](#problemas-de-mantenibilidad)
+9. [Recomendaciones Prioritarias](#recomendaciones-prioritarias)
 
 ---
 
-## 🎯 Resumen Ejecutivo
+## 📊 Resumen Ejecutivo
 
 ### Estado General
-El proyecto **bestlib** ha evolucionado significativamente desde su versión inicial. Ahora es un sistema completo de visualización de datos con:
+- ✅ **Sintaxis:** Correcta en todos los módulos
+- ⚠️ **Arquitectura:** Mezcla de código legacy y modular (en transición)
+- ⚠️ **Errores:** Múltiples problemas de diseño y compatibilidad
+- ⚠️ **Mantenibilidad:** Código complejo con muchas dependencias circulares potenciales
 
-- ✅ **11+ tipos de gráficos** implementados
-- ✅ **Sistema de interacción** completo (brushing, selection, clicks)
-- ✅ **Linked Views** funcional
-- ✅ **Sistema reactivo** con ReactiveMatrixLayout
-- ✅ **Comunicación bidireccional** JS ↔ Python
-- ⚠️ **Algunos problemas** menores en implementación
-- ⚠️ **Funcionalidades avanzadas** que necesitan refinamiento
-
-### Métricas del Proyecto
-
-| Métrica | Valor |
-|---------|-------|
-| **Archivos Python** | 3 principales (matrix.py, linked.py, reactive.py) |
-| **Archivos JavaScript** | 1 (matrix.js - ~1700 líneas) |
-| **Tipos de gráficos** | 11+ |
-| **Líneas de código Python** | ~1600+ |
-| **Líneas de código JavaScript** | ~1700 |
-| **Funcionalidades core** | ✅ Funcional |
-| **Problemas críticos** | 5 (2 nuevos: ejes scatter plot, instalación dependencias) |
-| **Problemas importantes** | 8 (3 nuevos: control tamaños, versatilidad matriz, etiquetas ejes) |
+### Estadísticas
+- **Archivos Python analizados:** ~50+
+- **Líneas de código:** ~15,000+
+- **Problemas críticos encontrados:** 12
+- **Problemas de diseño:** 18
+- **Problemas de implementación:** 25+
+- **Áreas que requieren ajustes:** 15+
 
 ---
 
-## 🏗️ Arquitectura del Proyecto
+## 🏗️ Estructura del Proyecto
 
-### Estructura de Archivos
-
+### Organización Modular
+El proyecto tiene una estructura modular bien organizada:
 ```
 BESTLIB/
-├── __init__.py          # Exporta MatrixLayout, LinkedViews, ReactiveMatrixLayout
-├── matrix.py            # Clase principal (1218 líneas)
-├── matrix.js            # Lógica de renderizado D3 (1697 líneas)
-├── style.css            # Estilos CSS (36 líneas)
-├── linked.py            # Sistema LinkedViews (352 líneas)
-├── reactive.py          # Sistema reactivo (1635 líneas)
-└── d3.min.js            # D3.js (opcional, puede cargarse desde CDN)
+├── __init__.py          # Punto de entrada con múltiples fallbacks
+├── matrix.py           # Implementación legacy (2526 líneas)
+├── linked.py           # Sistema de vistas enlazadas
+├── reactive.py         # Sistema reactivo legacy (3981 líneas)
+├── charts/             # Sistema modular de gráficos
+├── core/               # Módulos core (comm, events, exceptions)
+├── data/               # Preparación y validación de datos
+├── layouts/             # Layouts modulares
+├── reactive/           # Sistema reactivo modular
+├── render/             # Renderizado HTML/JS
+└── utils/              # Utilidades
 ```
 
-### Componentes Principales
+### Problema: Dualidad Legacy/Modular
+**CRÍTICO:** El proyecto mantiene DOS implementaciones paralelas:
+1. **Legacy:** `matrix.py`, `reactive.py` (código monolítico)
+2. **Modular:** `layouts/matrix.py`, `layouts/reactive.py` (refactorizado)
 
-1. **MatrixLayout** (`matrix.py`)
-   - Clase principal para crear layouts ASCII
-   - Sistema de comunicación bidireccional
-   - Helpers para crear gráficos desde DataFrames
-   - Sistema de eventos y callbacks
-
-2. **LinkedViews** (`linked.py`)
-   - Sistema para vistas enlazadas (está siendo reemplazado por ReactiveMatrixLayout)
-   - Sincronización automática entre gráficos
-   - Compatibilidad con DataFrames de pandas
-
-3. **ReactiveMatrixLayout** (`reactive.py`)
-   - Sistema reactivo integrado
-   - Actualización automática de gráficos
-   - SelecciónModel para gestionar selecciones
-   - Soporte para múltiples scatter plots independientes
-
-4. **matrix.js** (JavaScript)
-   - Renderizado de gráficos con D3.js
-   - Sistema de comunicación con Python (comms)
-   - Implementación de brushing y selection
-   - Soporte para múltiples tipos de gráficos
+Esto causa:
+- Confusión sobre qué versión usar
+- Duplicación de código
+- Posibles inconsistencias entre versiones
+- Mayor superficie de bugs
 
 ---
 
-## 📊 Tipos de Gráficos Implementados
+## 🚨 Problemas Críticos
 
-### 1. ✅ Scatter Plot (Gráfico de Dispersión)
+### 1. **Importaciones Circulares y Fallbacks Excesivos**
 
-**Estado**: ✅ **COMPLETAMENTE IMPLEMENTADO**
+**Ubicación:** `BESTLIB/__init__.py`
 
-**Ubicación**:
-- Python: `matrix.py` - `map_scatter()` (línea 259)
-- JavaScript: `matrix.js` - `renderScatterPlotD3()` (línea 1089)
-
-**Funcionalidades**:
-- ✅ Renderizado de puntos
-- ✅ Escalas automáticas (x, y)
-- ✅ Colores por categoría (`colorMap`)
-- ✅ Tamaño de puntos variable (`size_col`)
-- ✅ Ejes con etiquetas (`xLabel`, `yLabel`)
-- ✅ **Brush selection** (arrastrar para seleccionar)
-- ✅ **Click en puntos** (`point_click` event)
-- ✅ Hover effects (resaltado de puntos)
-- ✅ Tooltips (en versión alternativa)
-- ✅ Zoom (en versión alternativa, línea 1621)
-- ✅ Envío de datos originales completos
-
-**Características de Interacción**:
-- ✅ `interactive: True` → Habilita brush selection
-- ✅ Brush selection → Emite evento `select` con `items`, `count`, `indices`
-- ✅ Click en punto → Emite evento `point_click` con `point`, `index`
-- ✅ Hover → Resalta punto y cambia tamaño
-
-**Ejemplo**:
+**Problema:**
 ```python
-MatrixLayout.map_scatter('S', df, 
-    x_col='edad', 
-    y_col='salario', 
-    category_col='dept',
-    interactive=True,
-    pointRadius=5,
-    colorMap={'A': '#e74c3c', 'B': '#3498db'}
-)
+# Múltiples niveles de fallback que pueden causar problemas
+try:
+    from .layouts.matrix import MatrixLayout
+except:
+    try:
+        from . import layouts
+        MatrixLayout = layouts.MatrixLayout
+    except:
+        try:
+            from .matrix import MatrixLayout
+        except:
+            MatrixLayout = None
 ```
 
-**Linked Views**: ✅ **SÍ** - Puede ser usado como vista principal para linked views
+**Impacto:**
+- Dificulta debugging (no se sabe qué versión se está usando)
+- Puede causar importaciones circulares
+- Oculta errores reales
 
-**Selection/Brushing**: ✅ **SÍ** - Brush selection completamente funcional
+**Solución:**
+- Definir claramente qué versión es la "oficial"
+- Eliminar fallbacks innecesarios
+- Usar logging en lugar de silenciar errores
 
 ---
 
-### 2. ✅ Bar Chart (Gráfico de Barras)
+### 2. **Manejo Excesivo de Excepciones Genéricas**
 
-**Estado**: ✅ **COMPLETAMENTE IMPLEMENTADO**
+**Ubicación:** Todo el código
 
-**Ubicación**:
-- Python: `matrix.py` - `map_barchart()` (línea 329)
-- JavaScript: `matrix.js` - `renderBarChartD3()` (línea 912)
+**Problema:**
+Se encontraron **227+ bloques** `except Exception:` o `except:` que silencian errores:
 
-**Funcionalidades**:
-- ✅ Renderizado de barras verticales
-- ✅ Escala de bandas (categorías)
-- ✅ Escala lineal (valores)
-- ✅ Colores personalizados (`color`)
-- ✅ Hover effects (`hoverColor`)
-- ✅ Ejes con etiquetas
-- ✅ **Brush selection** (brushX para seleccionar barras)
-- ✅ **Click en barras** (evento `select`)
-- ✅ Animaciones de entrada
-- ✅ Soporte para datos agrupados (`grouped: True`)
-
-**Características de Interacción**:
-- ✅ `interactive: True` → Habilita brush selection y clicks
-- ✅ Brush selection → Emite evento `select` con `items`, `indices`
-- ✅ Click en barra → Emite evento `select` con datos de la barra
-- ✅ Hover → Cambia color de la barra
-
-**Grouped Bar Chart**:
-- ✅ Soporte para barras agrupadas (`map_grouped_barchart`)
-- ✅ Múltiples series por categoría
-- ✅ Colores diferentes por serie
-
-**Ejemplo**:
 ```python
-MatrixLayout.map_barchart('B', df,
-    category_col='dept',
-    value_col='ventas',
-    interactive=True,
-    color='#4a90e2',
-    hoverColor='#357abd'
-)
+except Exception as e:
+    # Silenciar errores de importación para permitir que otros charts se importen
+    pass
 ```
 
-**Linked Views**: ✅ **SÍ** - Se actualiza automáticamente cuando se selecciona en scatter
+**Impacto:**
+- Errores críticos se ocultan
+- Dificulta debugging
+- Puede causar comportamientos inesperados
 
-**Selection/Brushing**: ✅ **SÍ** - Brush selection funcional
-
----
-
-### 3. ✅ Histogram (Histograma)
-
-**Estado**: ✅ **COMPLETAMENTE IMPLEMENTADO**
-
-**Ubicación**:
-- Python: `matrix.py` - `map_histogram()` (línea 470)
-- JavaScript: `matrix.js` - `renderHistogramD3()` (línea 805)
-
-**Funcionalidades**:
-- ✅ Cálculo de bins automático
-- ✅ Bins configurables (número o secuencia)
-- ✅ Renderizado de barras
-- ✅ Ejes con etiquetas
-- ✅ Animaciones de entrada
-- ✅ Soporte para DataFrames y listas
-
-**Características de Interacción**:
-- ⚠️ **NO tiene brush selection** (solo visualización)
-- ⚠️ **NO tiene clicks** (solo visualización)
-
-**Ejemplo**:
-```python
-MatrixLayout.map_histogram('H', df,
-    value_col='edad',
-    bins=20,
-    color='#4a90e2'
-)
-```
-
-**Linked Views**: ✅ **SÍ** - Se puede enlazar a scatter plot para actualización automática
-
-**Selection/Brushing**: ❌ **NO** - No tiene interacción propia
+**Solución:**
+- Capturar excepciones específicas
+- Logging apropiado
+- Re-raise cuando sea necesario
 
 ---
 
-### 4. ✅ Boxplot (Diagrama de Caja y Bigotes)
+### 3. **Duplicación de MatrixLayout**
 
-**Estado**: ✅ **COMPLETAMENTE IMPLEMENTADO**
+**Ubicación:** 
+- `BESTLIB/matrix.py` (2526 líneas, legacy)
+- `BESTLIB/layouts/matrix.py` (835 líneas, modular)
 
-**Ubicación**:
-- Python: `matrix.py` - `map_boxplot()` (línea 555)
-- JavaScript: `matrix.js` - `renderBoxplotD3()` (línea 672)
+**Problema:**
+Dos implementaciones diferentes de la misma clase con:
+- APIs similares pero no idénticas
+- Diferentes sistemas de renderizado
+- Diferentes manejos de eventos
 
-**Funcionalidades**:
-- ✅ Cálculo de cuartiles (Q1, Q3, mediana)
-- ✅ Bigotes (whiskers) con límites 1.5*IQR
-- ✅ Renderizado de cajas
-- ✅ Soporte por categoría (múltiples boxplots)
-- ✅ Ejes con etiquetas
-- ✅ Colores personalizados
+**Impacto:**
+- Confusión sobre qué versión usar
+- Bugs pueden aparecer en una versión pero no en otra
+- Mantenimiento duplicado
 
-**Características de Interacción**:
-- ⚠️ **NO tiene brush selection** (solo visualización)
-- ⚠️ **NO tiene clicks** (solo visualización)
-
-**Ejemplo**:
-```python
-MatrixLayout.map_boxplot('B', df,
-    value_col='salario',
-    category_col='dept',
-    color='#4a90e2'
-)
-```
-
-**Linked Views**: ✅ **SÍ** - Se puede enlazar a scatter plot
-
-**Selection/Brushing**: ❌ **NO** - No tiene interacción propia
+**Solución:**
+- **URGENTE:** Decidir cuál es la versión oficial
+- Deprecar la versión legacy
+- Migrar toda la funcionalidad a la versión modular
+- Eliminar código duplicado
 
 ---
 
-### 5. ✅ Heatmap (Mapa de Calor)
+### 4. **Sistema de Comm (Comunicación JS↔Python) Complejo**
 
-**Estado**: ✅ **COMPLETAMENTE IMPLEMENTADO**
+**Ubicación:** `BESTLIB/core/comm.py`, `BESTLIB/matrix.js`
 
-**Ubicación**:
-- Python: `matrix.py` - `map_heatmap()` (línea 643)
-- JavaScript: `matrix.js` - `renderHeatmapD3()` (línea 347)
+**Problema:**
+- Múltiples intentos de registro de comm
+- Cache de comms puede causar problemas
+- Manejo de errores inconsistente entre Jupyter y Colab
 
-**Funcionalidades**:
-- ✅ Renderizado de celdas con colores
-- ✅ Escalas de color (Viridis, diverging)
-- ✅ Etiquetas de ejes (x, y)
-- ✅ Animaciones de entrada
-- ✅ Soporte para DataFrames y listas
-
-**Correlation Heatmap**:
-- ✅ `map_correlation_heatmap()` - Calcula matriz de correlación automáticamente
-- ✅ Solo requiere DataFrame de pandas
-- ✅ Selecciona columnas numéricas automáticamente
-
-**Características de Interacción**:
-- ⚠️ **NO tiene brush selection** (solo visualización)
-- ⚠️ **NO tiene clicks** (solo visualización)
-
-**Ejemplo**:
-```python
-MatrixLayout.map_heatmap('H', df,
-    x_col='col1',
-    y_col='col2',
-    value_col='valor',
-    colorScale='diverging'  # o 'sequential'
-)
-```
-
-**Linked Views**: ✅ **SÍ** - Se puede enlazar a scatter plot
-
-**Selection/Brushing**: ❌ **NO** - No tiene interacción propia
-
----
-
-### 6. ✅ Line Chart (Gráfico de Líneas)
-
-**Estado**: ✅ **COMPLETAMENTE IMPLEMENTADO**
-
-**Ubicación**:
-- Python: `matrix.py` - `map_line()` (línea 721)
-- JavaScript: `matrix.js` - `renderLineD3()` (línea 428)
-
-**Funcionalidades**:
-- ✅ Líneas simples y múltiples series
-- ✅ Colores diferentes por serie
-- ✅ Hover sincronizado (resalta puntos con mismo x)
-- ✅ Ejes con etiquetas
-- ✅ Animaciones de entrada
-- ✅ Soporte para DataFrames con `series_col`
-
-**Características de Interacción**:
-- ✅ Hover sincronizado (resalta puntos con mismo x en todas las series)
-- ⚠️ **NO tiene brush selection** (solo visualización)
-- ⚠️ **NO tiene clicks** (solo visualización)
-
-**Ejemplo**:
-```python
-MatrixLayout.map_line('L', df,
-    x_col='tiempo',
-    y_col='valor',
-    series_col='serie',  # Múltiples series
-    xLabel='Tiempo',
-    yLabel='Valor'
-)
-```
-
-**Linked Views**: ✅ **SÍ** - Se puede enlazar a scatter plot
-
-**Selection/Brushing**: ❌ **NO** - No tiene brush selection (solo hover)
-
----
-
-### 7. ✅ Pie Chart (Gráfico Circular)
-
-**Estado**: ✅ **COMPLETAMENTE IMPLEMENTADO**
-
-**Ubicación**:
-- Python: `matrix.py` - `map_pie()` (línea 768)
-- JavaScript: `matrix.js` - `renderPieD3()` (línea 541)
-
-**Funcionalidades**:
-- ✅ Renderizado de sectores
-- ✅ Colores automáticos por categoría
-- ✅ Soporte para donut chart (`donut: True`, `innerRadius`)
-- ✅ Animaciones
-- ✅ Click en sectores (si `interactive: True`)
-
-**Características de Interacción**:
-- ✅ `interactive: True` → Habilita clicks en sectores
-- ✅ Click en sector → Emite evento `select` con `category`
-- ⚠️ **NO tiene brush selection** (solo clicks)
-
-**Ejemplo**:
-```python
-MatrixLayout.map_pie('P', df,
-    category_col='dept',
-    value_col='ventas',
-    interactive=True,
-    donut=True,
-    innerRadius=50
-)
-```
-
-**Linked Views**: ✅ **SÍ** - Se puede enlazar a scatter plot
-
-**Selection/Brushing**: ⚠️ **PARCIAL** - Solo clicks, no brush
-
----
-
-### 8. ✅ Violin Plot (Gráfico de Violín)
-
-**Estado**: ✅ **COMPLETAMENTE IMPLEMENTADO**
-
-**Ubicación**:
-- Python: `matrix.py` - `map_violin()` (línea 800)
-- JavaScript: `matrix.js` - `renderViolinD3()` (línea 581)
-
-**Funcionalidades**:
-- ✅ Perfiles de densidad normalizada
-- ✅ Soporte por categoría (múltiples violines)
-- ✅ Bins configurables
-- ✅ Ejes con etiquetas
-- ✅ Colores por categoría
-
-**Características de Interacción**:
-- ⚠️ **NO tiene brush selection** (solo visualización)
-- ⚠️ **NO tiene clicks** (solo visualización)
-
-**Ejemplo**:
-```python
-MatrixLayout.map_violin('V', df,
-    value_col='salario',
-    category_col='dept',
-    bins=20
-)
-```
-
-**Linked Views**: ✅ **SÍ** - Se puede enlazar a scatter plot
-
-**Selection/Brushing**: ❌ **NO** - No tiene interacción propia
-
----
-
-### 9. ✅ RadViz (Visualización Radial)
-
-**Estado**: ✅ **COMPLETAMENTE IMPLEMENTADO**
-
-**Ubicación**:
-- Python: `matrix.py` - `map_radviz()` (línea 856)
-- JavaScript: `matrix.js` - `renderRadVizD3()` (línea 625)
-
-**Funcionalidades**:
-- ✅ Proyección radial multidimensional
-- ✅ Anclas uniformes
-- ✅ Colores por categoría
-- ✅ Normalización automática de features
-- ✅ Solo funciona con DataFrames de pandas
-
-**Características de Interacción**:
-- ⚠️ **NO tiene brush selection** (solo visualización)
-- ⚠️ **NO tiene clicks** (solo visualización)
-
-**Ejemplo**:
-```python
-MatrixLayout.map_radviz('R', df,
-    features=['f1', 'f2', 'f3', 'f4'],
-    class_col='clase'
-)
-```
-
-**Linked Views**: ✅ **SÍ** - Se puede enlazar a scatter plot
-
-**Selection/Brushing**: ❌ **NO** - No tiene interacción propia
-
----
-
-### 10. ✅ Elementos Visuales Simples
-
-**Estado**: ✅ **IMPLEMENTADO**
-
-**Tipos**:
-- ✅ Círculo (`shape: 'circle'`)
-- ✅ Rectángulo (`shape: 'rect'`)
-- ✅ Línea (`shape: 'line'`)
-
-**Funcionalidades**:
-- ✅ Renderizado con D3.js
-- ✅ Animaciones de entrada
-- ✅ Colores personalizados
-- ✅ Opacidad configurable
-
-**Características de Interacción**:
-- ❌ **NO tiene interacción** (solo visualización)
-
----
-
-## 🎮 Sistema de Interacción
-
-### Eventos Disponibles
-
-| Evento | Descripción | Gráficos que lo Emiten | Payload |
-|--------|-------------|------------------------|---------|
-| `select` | Selección con brush o click | bar, scatter, pie | `{type, items, count, indices, original_items}` |
-| `point_click` | Click en punto individual | scatter | `{type, point, index, original_point}` |
-
-### Brush Selection
-
-**Gráficos con Brush Selection**:
-1. ✅ **Scatter Plot** - Brush 2D (arrastrar para seleccionar región rectangular)
-2. ✅ **Bar Chart** - Brush X (arrastrar horizontalmente para seleccionar barras)
-
-**Cómo Funciona**:
-1. Usuario arrastra para crear región de selección
-2. JavaScript filtra puntos/barras dentro de la región
-3. Se envía evento `select` a Python con datos seleccionados
-4. Los callbacks registrados se ejecutan automáticamente
-
-**Datos Enviados**:
-- `items`: Lista de filas originales completas (DataFrame rows)
-- `count`: Número de elementos seleccionados
-- `indices`: Índices de los elementos seleccionados
-- `original_items`: Datos del gráfico (para compatibilidad)
-
-### Click Events
-
-**Gráficos con Click Events**:
-1. ✅ **Scatter Plot** - Click en punto individual
-2. ✅ **Bar Chart** - Click en barra individual
-3. ✅ **Pie Chart** - Click en sector
-
-**Cómo Funciona**:
-1. Usuario hace click en elemento
-2. JavaScript identifica el elemento clickeado
-3. Se envía evento `select` o `point_click` a Python
-4. Los callbacks registrados se ejecutan
-
-### Hover Effects
-
-**Gráficos con Hover**:
-1. ✅ **Scatter Plot** - Resalta punto y cambia tamaño
-2. ✅ **Bar Chart** - Cambia color de barra
-3. ✅ **Line Chart** - Hover sincronizado (resalta puntos con mismo x)
-
----
-
-## 🔗 Linked Views y Sistema Reactivo
-
-### LinkedViews (Clase Legacy)
-
-**Estado**: ⚠️ **EN DESUSO** (está siendo reemplazado por ReactiveMatrixLayout)
-
-**Ubicación**: `linked.py`
-
-**Funcionalidades**:
-- ✅ Sincronización entre scatter plot y bar chart
-- ✅ Actualización automática cuando se selecciona en scatter
-- ✅ Soporte para DataFrames
-
-**Limitaciones**:
-- ⚠️ Requiere llamar `display()` múltiples veces
-- ⚠️ No integrado en matriz ASCII
-- ⚠️ Menos flexible que ReactiveMatrixLayout
-
-### ReactiveMatrixLayout (Sistema Moderno)
-
-**Estado**: ✅ **COMPLETAMENTE IMPLEMENTADO**
-
-**Ubicación**: `reactive.py`
-
-**Funcionalidades**:
-- ✅ Integrado en matriz ASCII
-- ✅ Actualización automática sin re-ejecutar celdas
-- ✅ Múltiples scatter plots independientes
-- ✅ Múltiples bar charts enlazados a scatter plots específicos
-- ✅ SelectionModel para gestionar selecciones
-- ✅ Soporte para todos los tipos de gráficos
-- ✅ Actualización vía JavaScript (no requiere re-renderizado completo)
-
-**Características Avanzadas**:
-- ✅ Múltiples scatter plots con bar charts independientes
-- ✅ Enlace explícito (`linked_to='S'`) o automático (último scatter)
-- ✅ Histogramas enlazados
-- ✅ Boxplots enlazados
-- ✅ Heatmaps enlazados
-- ✅ Pie charts enlazados
-- ✅ Violin plots enlazados
-- ✅ RadViz enlazados
-- ✅ Correlation heatmaps enlazados
-- ✅ Line charts enlazados
-- ✅ Grouped bar charts enlazados
-
-**Ejemplo**:
-```python
-from BESTLIB.reactive import ReactiveMatrixLayout, SelectionModel
-
-selection = SelectionModel()
-layout = ReactiveMatrixLayout("SB", selection_model=selection)
-
-layout.set_data(df)
-layout.add_scatter('S', df, x_col='edad', y_col='salario', interactive=True)
-layout.add_barchart('B', category_col='dept', linked_to='S')
-layout.display()
-
-# Los datos seleccionados se actualizan automáticamente
-selected = selection.get_items()  # Lista de filas completas
-```
-
-### SelectionModel
-
-**Estado**: ✅ **COMPLETAMENTE IMPLEMENTADO**
-
-**Funcionalidades**:
-- ✅ Almacena datos seleccionados
-- ✅ Callbacks automáticos cuando cambia selección
-- ✅ Historial de selecciones
-- ✅ Widget de Jupyter para mostrar selección
-- ✅ Sincronización con JavaScript
-
----
-
-## 📡 Comunicación Bidireccional
-
-### Sistema de Comms de Jupyter
-
-**Estado**: ✅ **COMPLETAMENTE IMPLEMENTADO**
-
-**Ubicación**:
-- Python: `matrix.py` - `_ensure_comm_target()` (línea 131)
-- JavaScript: `matrix.js` - `getComm()`, `sendEvent()` (líneas 13, 68)
-
-**Funcionalidades**:
-- ✅ Comunicación JS → Python
-- ✅ Soporte para Jupyter Notebook clásico
-- ✅ Soporte para Google Colab
-- ✅ Cache de comms por div_id
-- ✅ Manejo de errores
-- ✅ Registro automático de comm target
-
-**Cómo Funciona**:
-1. JavaScript crea comm cuando se renderiza gráfico
-2. Cuando hay evento (brush, click), JavaScript envía mensaje
-3. Python recibe mensaje y ejecuta callbacks registrados
-4. Los callbacks pueden actualizar otros gráficos o datos
-
-**Eventos Soportados**:
-- ✅ `select` - Selección con brush
-- ✅ `point_click` - Click en punto
-
-### Callbacks
-
-**Tipos de Callbacks**:
-1. ✅ **Callbacks por instancia** - `layout.on('select', callback)`
-2. ✅ **Callbacks globales** - `MatrixLayout.on_global('select', callback)`
-3. ✅ **Múltiples callbacks** - Se pueden registrar múltiples callbacks para el mismo evento
-
-**Ejemplo**:
-```python
-# Callback por instancia
-layout.on('select', lambda payload: print(f"Seleccionados: {len(payload['items'])}"))
-
-# Callback global
-MatrixLayout.on_global('select', lambda payload: print(f"Evento global: {payload}"))
-```
-
----
-
-## ✅ Funcionalidades que Funcionan
-
-### Core Functionality
-- ✅ Renderizado de layouts ASCII
-- ✅ Merge de celdas (explícito con `merge()`)
-- ✅ Validación de layouts
-- ✅ Soporte para HTML seguro/inseguro
-- ✅ Múltiples tipos de gráficos (11+)
-- ✅ Integración con Jupyter Notebooks
-- ✅ Integración con Google Colab
-
-### Gráficos
-- ✅ Scatter Plot (completo con brush)
-- ✅ Bar Chart (completo con brush)
-- ✅ Histogram (visualización)
-- ✅ Boxplot (visualización)
-- ✅ Heatmap (visualización)
-- ✅ Correlation Heatmap (visualización)
-- ✅ Line Chart (visualización con hover)
-- ✅ Pie Chart (visualización con clicks)
-- ✅ Violin Plot (visualización)
-- ✅ RadViz (visualización)
-- ✅ Grouped Bar Chart (visualización)
-- ✅ Elementos visuales simples (círculo, rect, línea)
-
-### Interacción
-- ✅ Brush selection en scatter plot (2D)
-- ✅ Brush selection en bar chart (1D)
-- ✅ Click en puntos (scatter)
-- ✅ Click en barras (bar chart)
-- ✅ Click en sectores (pie chart)
-- ✅ Hover effects (scatter, bar, line)
-- ✅ Tooltips (en versión alternativa)
-
-### Linked Views
-- ✅ ReactiveMatrixLayout (sistema moderno)
-- ✅ Actualización automática de gráficos enlazados
-- ✅ Múltiples scatter plots independientes
-- ✅ Múltiples bar charts enlazados
-- ✅ Todos los tipos de gráficos enlazables
-- ✅ SelectionModel para gestionar selecciones
-
-### Comunicación
-- ✅ Comms de Jupyter (JS → Python)
-- ✅ Callbacks por instancia
-- ✅ Callbacks globales
-- ✅ Múltiples callbacks por evento
-- ✅ Envío de datos originales completos
-
-### Helpers
-- ✅ `map_scatter()` - Helper para scatter plots
-- ✅ `map_barchart()` - Helper para bar charts
-- ✅ `map_histogram()` - Helper para histogramas
-- ✅ `map_boxplot()` - Helper para boxplots
-- ✅ `map_heatmap()` - Helper para heatmaps
-- ✅ `map_correlation_heatmap()` - Helper para correlaciones
-- ✅ `map_line()` - Helper para line charts
-- ✅ `map_pie()` - Helper para pie charts
-- ✅ `map_violin()` - Helper para violin plots
-- ✅ `map_radviz()` - Helper para RadViz
-- ✅ `map_grouped_barchart()` - Helper para barras agrupadas
-- ✅ Soporte para DataFrames de pandas
-- ✅ Soporte para listas de diccionarios
-
----
-
-## ❌ Problemas y Errores Encontrados
-
-### Problemas Críticos
-
-#### 1. 🔴 ERROR CRÍTICO - Dominio de Ejes Incorrecto en Scatter Plot
-
-**Ubicación**: `matrix.js` - `renderScatterPlotD3()` (líneas 1109-1116)
-
-**Problema**: 
-- El dominio de los ejes X e Y **siempre empieza en 0**:
-  ```javascript
-  .domain([0, d3.max(data, d => d.x) || 100])  // ❌ INCORRECTO
-  .domain([0, d3.max(data, d => d.y) || 100])  // ❌ INCORRECTO
-  ```
-- Debería usar `d3.extent()` para obtener el rango completo de los datos
-- Esto hace que los scatter plots no muestren correctamente los datos, especialmente si los valores son negativos o no empiezan cerca de 0
-
-**Comparación**:
-- **Line Chart** (línea 438): ✅ Usa `d3.extent()` correctamente
-- **Scatter Plot** (línea 1110): ❌ Usa `[0, d3.max()]` incorrectamente
-
-**Impacto**: 
-- Los scatter plots no muestran correctamente los datos
-- Los puntos pueden estar agrupados en una esquina
-- No se puede visualizar correctamente datos con valores negativos
-- Pérdida de resolución visual
-
-**Solución**: Cambiar a:
+**Código problemático:**
 ```javascript
-const x = d3.scaleLinear()
-  .domain(d3.extent(data, d => d.x) || [0, 100])  // ✅ CORRECTO
-  .nice()
-  .range([0, chartWidth]);
-
-const y = d3.scaleLinear()
-  .domain(d3.extent(data, d => d.y) || [0, 100])  // ✅ CORRECTO
-  .nice()
-  .range([chartHeight, 0]);
+// matrix.js - Múltiples intentos de crear comm
+function getComm(divId, maxRetries = 3) {
+    // Cache global que puede quedar obsoleto
+    if (global._bestlibComms[divId]) {
+        // ¿Qué pasa si el comm se cerró?
+    }
+}
 ```
 
-#### 2. 🔴 ERROR CRÍTICO - Sistema de Instalación de Dependencias
+**Impacto:**
+- Eventos pueden no llegar a Python
+- Comms pueden quedar en estado inválido
+- Dificulta debugging de interacciones
 
-**Ubicación**: `setup.py`, `pyproject.toml`, `requirements.txt`
+**Solución:**
+- Validar estado de comms antes de usar
+- Limpiar cache de comms inválidos
+- Mejorar logging de eventos
 
-**Problema**: 
-- **`setup.py`**: `install_requires=[]` (vacío) ❌
-- **`pyproject.toml`**: `dependencies = []` (vacío) ❌
-- **`requirements.txt`**: Tiene dependencias pero **NO se instalan automáticamente** ❌
-- Las dependencias solo se instalan si el usuario las instala manualmente:
-  ```bash
-  !pip install --upgrade --force-reinstall git+https://github.com/NahiaEscalante/bestlib.git@widget_mod
-  ```
-  Pero esto **NO instala las dependencias** de `requirements.txt`
+---
 
-**Dependencias Necesarias** (según `requirements.txt`):
-- `ipython>=8`
-- `jupyterlab>=4`
-- `ipywidgets>=8`
-- `pandas>=1.3.0`
-- `numpy>=1.20.0`
+### 5. **Preparación de Datos Inconsistente**
 
-**Impacto**: 
-- La librería **NO funciona** después de instalar porque faltan dependencias
-- Los usuarios deben instalar manualmente las dependencias
-- No es una experiencia de usuario profesional
-- Puede causar errores de importación
+**Ubicación:** `BESTLIB/matrix.py`, `BESTLIB/data/preparators.py`
 
-**Solución**: 
-1. Agregar dependencias a `setup.py`:
-   ```python
-   install_requires=[
-       "ipython>=8",
-       "jupyterlab>=4",
-       "ipywidgets>=8",
-       "pandas>=1.3.0",
-       "numpy>=1.20.0",
-   ],
-   ```
+**Problema:**
+Múltiples funciones que hacen lo mismo:
+- `MatrixLayout._prepare_data()`
+- `prepare_scatter_data()` en `data/preparators.py`
+- `_prepare_scatter_data()` en `linked.py`
 
-2. Agregar dependencias a `pyproject.toml`:
-   ```toml
-   dependencies = [
-       "ipython>=8",
-       "jupyterlab>=4",
-       "ipywidgets>=8",
-       "pandas>=1.3.0",
-       "numpy>=1.20.0",
-   ]
-   ```
+**Impacto:**
+- Inconsistencias en formato de datos
+- Bugs pueden aparecer en algunos gráficos pero no en otros
+- Difícil mantener
 
-3. Sincronizar `requirements.txt` con los otros archivos
+**Solución:**
+- Unificar en un solo módulo
+- Crear funciones centralizadas
+- Eliminar duplicación
 
-#### 3. ⚠️ Código JavaScript Duplicado/Muerto
+---
 
-**Ubicación**: `matrix.js`
+### 6. **Sistema Reactivo Duplicado**
 
-**Problema**: Hay dos sistemas de renderizado:
-- **Sistema ACTIVO** (se usa):
-  - `renderChartD3()` (línea 317) - Función principal que se llama
-  - `renderBarChartD3()` (línea 912) - Renderiza bar chart
-  - `renderScatterPlotD3()` (línea 1089) - Renderiza scatter plot
-  - Soporta todos los tipos de gráficos (histogram, boxplot, heatmap, line, pie, violin, radviz)
+**Ubicación:**
+- `BESTLIB/reactive.py` (3981 líneas, legacy)
+- `BESTLIB/layouts/reactive.py` (3609 líneas, modular)
+- `BESTLIB/reactive/` (módulos modulares)
 
-- **Sistema INACTIVO** (código muerto, NO se usa):
-  - `renderD3()` (línea 1363) - Función que NO se llama nunca
-  - `renderBarChart()` (línea 1374) - Versión alternativa de bar chart
-  - `renderScatterPlot()` (línea 1511) - Versión alternativa de scatter plot
-  - Solo soporta bar y scatter, con tooltips y zoom
+**Problema:**
+Tres implementaciones diferentes del sistema reactivo:
+1. `ReactiveMatrixLayout` en `reactive.py` (legacy)
+2. `ReactiveMatrixLayout` en `layouts/reactive.py` (modular)
+3. `ReactiveEngine`, `SelectionModel` en `reactive/` (componentes modulares)
 
-**Impacto**: 
-- Código muerto (~330 líneas) que confunde
-- Mantenimiento difícil
-- Posibles bugs si se usa código incorrecto
-- Archivo JavaScript más grande de lo necesario
+**Impacto:**
+- Confusión sobre qué usar
+- Bugs pueden aparecer en una versión pero no en otra
+- Mantenimiento extremadamente difícil
 
-**Solución**: 
-1. Eliminar código muerto (`renderD3()`, `renderBarChart()`, `renderScatterPlot()`)
-2. Si las funcionalidades de tooltips y zoom son necesarias, integrarlas en las funciones activas
-3. Documentar claramente qué funciones se usan
+**Solución:**
+- **CRÍTICO:** Consolidar en una sola implementación
+- Usar la versión modular como base
+- Migrar funcionalidad de legacy
+- Eliminar código duplicado
 
-#### 4. ⚠️ Inconsistencia en setup.py
+---
 
-**Ubicación**: `setup.py` (línea 9)
+### 7. **Manejo de Pandas Defensivo Excesivo**
 
-**Problema**: 
+**Ubicación:** Múltiples archivos
+
+**Problema:**
+Código extremadamente defensivo para importar pandas:
+
 ```python
-packages=["BESTLIB", "bestlib"],  # "bestlib" no existe
+# BESTLIB/matrix.py líneas 12-43
+try:
+    import sys
+    if 'pandas' in sys.modules:
+        try:
+            pd_test = sys.modules['pandas']
+            _ = pd_test.__version__
+        except (AttributeError, ImportError):
+            del sys.modules['pandas']
+            # Limpiar submódulos...
 ```
 
-**Impacto**: Puede causar errores durante la instalación
-
-**Solución**: Cambiar a `packages=["BESTLIB"]`
-
-#### 5. ⚠️ Dependencias Desincronizadas (RELACIONADO CON #2)
-
-**Ubicación**: `setup.py`, `pyproject.toml`, `requirements.txt`
-
-**Problema**:
-- `setup.py`: `install_requires=[]` (vacío)
-- `pyproject.toml`: `dependencies = []` (vacío)
-- `requirements.txt`: Tiene dependencias reales
-- Las dependencias NO se instalan automáticamente al instalar el paquete
-
-**Impacto**: La instalación no incluye dependencias necesarias.
-
-**Nota**: Este problema está relacionado con el problema #2 (Sistema de Instalación de Dependencias). La solución es la misma.
-
-**Solución**: Sincronizar dependencias en todos los archivos (ver solución del problema #2)
-
-### Problemas Importantes
-
-#### 4. ⚠️ Carga de D3.js
-
-**Ubicación**: `matrix.js` - `ensureD3()` (línea 1326)
-
-**Problema**: 
-- Puede cargar D3 múltiples veces si hay varios gráficos
-- Verificación de script existente puede fallar en algunos casos
-- Timeout de 5 segundos puede ser insuficiente
-
-**Impacto**: Puede causar problemas de rendimiento o errores
-
-**Solución**: Mejorar lógica de carga única de D3
-
-#### 10. ⚠️ Manejo de Errores en Comms
-
-**Ubicación**: `matrix.js` - `getComm()`, `sendEvent()` (líneas 13, 68)
-
-**Problema**: 
-- Si comm falla, no hay feedback al usuario
-- Errores se silencian con `console.error`
-- No hay retry logic
-
-**Impacto**: Los eventos pueden fallar silenciosamente
-
-**Solución**: Agregar manejo de errores más robusto y feedback visual
-
-#### 11. ⚠️ Actualización de Gráficos Enlazados
-
-**Ubicación**: `reactive.py` - `update_barchart()` (línea 388)
-
-**Problema**:
-- Actualización vía JavaScript puede fallar si el contenedor no está listo
-- No hay verificación de que el gráfico existe antes de actualizar
-- Puede causar errores si se llama `display()` múltiples veces
-
-**Impacto**: Los gráficos enlazados pueden no actualizarse correctamente
-
-**Solución**: Agregar verificación de estado y manejo de errores
-
-#### 12. ⚠️ Dimensiones de Gráficos (RELACIONADO CON #6)
-
-**Ubicación**: `matrix.js` - Múltiples funciones de renderizado
-
-**Problema**:
-- Usa `clientWidth/clientHeight` que pueden ser 0 si el contenedor no está renderizado
-- Valores por defecto pueden no ser apropiados
-- No hay ajuste dinámico cuando el contenedor cambia de tamaño
-
-**Impacto**: Los gráficos pueden renderizarse con dimensiones incorrectas
-
-**Solución**: Usar ResizeObserver para ajuste dinámico
-
-#### 13. ⚠️ Validación de Datos
-
-**Ubicación**: `matrix.py` - Múltiples métodos `map_*`
-
-**Problema**:
-- No valida que los datos estén en el formato correcto
-- Puede fallar silenciosamente con datos mal formateados
-- No hay mensajes de error claros
-
-**Impacto**: Errores difíciles de debuggear
-
-**Solución**: Agregar validación de datos y mensajes de error claros
-
-#### 6. ⚠️ Falta Control de Tamaños de Gráficos (como matplotlib)
-
-**Ubicación**: `matrix.js`, `matrix.py`, `style.css`
-
-**Problema**: 
-- **NO hay parámetro `figsize`** o similar para controlar tamaños
-- Los tamaños están **hardcodeados** en múltiples lugares:
-  - JavaScript: `350px`, `320px`, `400px`, `500px`, etc.
-  - CSS: `min-height: 350px`, `min-height: 320px`
-  - No hay forma de controlar el tamaño desde Python
-
-**Comparación con matplotlib**:
-- **matplotlib**: `plt.figure(figsize=(10, 6))` ✅
-- **bestlib**: ❌ No hay forma de especificar tamaño
-
-**Tamaños Hardcodeados Encontrados**:
-- Grid rows: `minmax(350px, auto)` (línea 116 de matrix.js)
-- CSS min-height: `350px` (style.css línea 15)
-- CSS min-height: `320px` (style.css línea 32)
-- Scatter plot: `height = Math.min(availableHeight, 350)` (línea 1094)
-- Bar chart: `height = Math.min(availableHeight, 350)` (línea 917)
-- Heatmap: `height = Math.min(availableHeight, 400)` (línea 351)
-- Line chart: `height = Math.min(availableHeight, 380)` (línea 432)
-
-**Impacto**: 
-- No se puede personalizar el tamaño de los gráficos
-- Los gráficos siempre tienen el mismo tamaño
-- No se puede hacer gráficos más grandes o más pequeños según necesidad
-- Limitación importante para dashboards personalizados
-
-**Solución**: 
-1. Agregar parámetro `figsize` a métodos `map_*`:
-   ```python
-   MatrixLayout.map_scatter('S', df, x_col='x', y_col='y', figsize=(10, 6))
-   ```
-
-2. Agregar parámetro `cell_size` a `MatrixLayout()`:
-   ```python
-   layout = MatrixLayout("AB\nCD", cell_size=(400, 300))  # width, height
-   ```
-
-3. Pasar tamaños desde Python a JavaScript via mapping
-4. Usar tamaños en JavaScript en lugar de valores hardcodeados
-5. Permitir tamaños por gráfico individual o por layout completo
-
-#### 7. ⚠️ Sistema de Matriz Poco Versátil
-
-**Ubicación**: `matrix.js` - función `render()` (líneas 104-237)
-
-**Problema**: 
-- **Grid fijo**: `gridTemplateRows: repeat(${R}, minmax(350px, auto))` (hardcodeado)
-- **Gap fijo**: `gap: "12px"` (hardcodeado)
-- **Columnas fijas**: `gridTemplateColumns: repeat(${C}, 1fr)` (igual tamaño para todas)
-- **No hay control desde Python** de:
-  - Tamaño de celdas individuales
-  - Espaciado entre celdas (gap)
-  - Proporciones de columnas/filas
-  - Padding de celdas
-  - Altura mínima/máxima de filas
-  - Ancho de columnas
-
-**Limitaciones Actuales**:
-- Todas las filas tienen la misma altura mínima (350px)
-- Todas las columnas tienen el mismo ancho (1fr = igual)
-- No se puede especificar que una columna sea más ancha que otra
-- No se puede especificar que una fila sea más alta que otra
-- El gap es fijo (12px)
-
-**Impacto**: 
-- Layouts limitados y poco flexibles
-- No se puede crear dashboards con proporciones personalizadas
-- Difícil crear layouts complejos con diferentes tamaños de gráficos
-- Limitación importante para casos de uso avanzados
-
-**Solución**: 
-1. Agregar parámetros de configuración del grid:
-   ```python
-   layout = MatrixLayout("AB\nCD", 
-       row_heights=[400, 300],  # Alturas personalizadas por fila
-       col_widths=[2, 1],       # Anchos relativos (2:1)
-       gap=20,                   # Espaciado personalizado
-       cell_padding=10           # Padding personalizado
-   )
-   ```
-
-2. Pasar configuración desde Python a JavaScript via mapping
-3. Usar configuración en JavaScript para crear grid dinámico:
-   ```javascript
-   // En lugar de:
-   container.style.gridTemplateRows = `repeat(${R}, minmax(350px, auto))`;
-   container.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
-   container.style.gap = "12px";
-   
-   // Usar:
-   const rowHeights = mapping.__row_heights__ || Array(R).fill('minmax(350px, auto)');
-   const colWidths = mapping.__col_widths__ || Array(C).fill('1fr');
-   const gap = mapping.__gap__ || 12;
-   container.style.gridTemplateRows = rowHeights.join(' ');
-   container.style.gridTemplateColumns = colWidths.join(' ');
-   container.style.gap = `${gap}px`;
-   ```
-4. Agregar validación de que los arrays tienen el tamaño correcto
-
-#### 8. ⚠️ Problemas con Etiquetas de Ejes
-
-**Ubicación**: `matrix.js` - Múltiples funciones de renderizado
-
-**Problema**: 
-- **Posicionamiento fijo**: Las etiquetas tienen posiciones hardcodeadas
-  - X-axis label: `y: chartHeight + 35` (línea 1048, 1203, etc.)
-  - Y-axis label: `y: -40` (línea 1075, 1230, etc.)
-- **Pueden cortarse**: Si el gráfico es pequeño, las etiquetas pueden cortarse
-- **No hay espacio suficiente**: Las etiquetas pueden superponerse con los ejes
-- **Fuente pequeña**: Algunas etiquetas usan `font-size: 10px` (muy pequeño)
-- **Inconsistencia**: Diferentes gráficos usan diferentes tamaños de fuente y posiciones
-
-**Problemas Específicos por Gráfico**:
-
-1. **Heatmap** (líneas 391, 407): 
-   - Etiquetas de ejes con `font-size: 10px` (muy pequeño)
-   - Posición Y fija: `y: -55` (línea 414) puede no ser suficiente
-   - No hay espacio para etiquetas largas
-
-2. **Scatter Plot** (líneas 1200, 1226): 
-   - Posiciones fijas que pueden no funcionar con todos los tamaños
-   - `y: chartHeight + 35` puede cortarse si el gráfico es pequeño
-   - `y: -40` puede no ser suficiente para etiquetas largas
-
-3. **Bar Chart** (líneas 1048, 1075): 
-   - Posiciones fijas que pueden cortarse
-   - No hay ajuste dinámico según el tamaño del gráfico
-
-4. **Histogram** (líneas 868, 895): 
-   - Falta de espacio para etiquetas largas
-   - Posiciones fijas
-
-5. **Boxplot** (líneas 762, 790): 
-   - Etiquetas pueden cortarse si son largas
-   - Posiciones fijas
-
-6. **Line Chart** (líneas 498, 523): 
-   - Posiciones fijas
-   - Pueden cortarse con etiquetas largas
-
-**Impacto**: 
-- Las etiquetas de ejes pueden no mostrarse correctamente
-- Etiquetas cortadas o superpuestas
-- Dificultad para leer las etiquetas
-- Aspecto poco profesional
-- Pérdida de información (etiquetas cortadas)
-
-**Solución**: 
-1. Calcular dinámicamente el espacio necesario para etiquetas:
-   ```javascript
-   // Calcular altura necesaria para etiqueta X
-   const xLabelHeight = spec.xLabel ? 40 : 20;
-   const margin = { 
-     top: 20, 
-     right: 20, 
-     bottom: xLabelHeight,  // Dinámico
-     left: 50 
-   };
-   ```
-
-2. Ajustar márgenes automáticamente según el tamaño de las etiquetas
-3. Permitir rotación de etiquetas para evitar cortes:
-   ```javascript
-   xAxis.selectAll('text')
-     .attr('transform', 'rotate(-45)')
-     .attr('text-anchor', 'end')
-     .attr('dx', '-0.5em')
-     .attr('dy', '0.5em');
-   ```
-
-4. Agregar parámetros para personalizar tamaño de fuente y posición:
-   ```python
-   MatrixLayout.map_scatter('S', df, 
-       xLabel='Long Label Name',
-       xLabelFontSize=14,
-       xLabelRotation=45,  # Rotar 45 grados
-       yLabel='Another Long Label',
-       yLabelFontSize=14
-   )
-   ```
-
-5. Usar `textLength` y `lengthAdjust` de SVG para ajustar texto largo
-6. Truncar etiquetas largas con ellipsis (`...`)
-7. Agregar tooltips para etiquetas completas cuando se cortan
-
-### Problemas Menores
-
-#### 14. ⚠️ Código Duplicado en matrix.py
-
-**Ubicación**: `matrix.py` - `_repr_html_()` y `_repr_mimebundle_()`
-
-**Problema**: Lógica duplicada para preparar datos
-
-**Solución**: Extraer a método privado común
-
-#### 15. ⚠️ Archivos No Cacheados
-
-**Ubicación**: `matrix.py` - `_repr_html_()`, `_repr_mimebundle_()`, `display()`
-
-**Problema**: JS y CSS se leen desde disco en cada renderizado
-
-**Solución**: Cachear contenido de archivos
-
-#### 16. ⚠️ Estilos CSS
-
-**Ubicación**: `style.css`
-
-**Problema**: 
-- Altura hardcodeada en JavaScript (350px)
-- No hay variables CSS para personalización
-- Falta de responsividad
-
-**Solución**: Mover a CSS y agregar variables
-
-#### 17. ⚠️ Documentación
-
-**Problema**: 
-- Algunos métodos no tienen docstrings completos
-- Falta documentación de parámetros opcionales
-- Ejemplos no cubren todos los casos de uso
-
-**Solución**: Mejorar documentación
+**Impacto:**
+- Código complejo y difícil de mantener
+- Puede causar problemas si pandas está corrupto
+- Overhead innecesario
+
+**Solución:**
+- Simplificar manejo de pandas
+- Si pandas está corrupto, dejar que falle claramente
+- Documentar dependencias claramente
 
 ---
 
-## 🚧 Lo que Falta por Implementar
+### 8. **Falta de Validación de Datos Consistente**
 
-### Funcionalidades Faltantes
+**Ubicación:** Múltiples archivos
 
-#### 1. ❌ Brush Selection en Más Gráficos
+**Problema:**
+Validación de datos inconsistente:
+- Algunos métodos validan datos
+- Otros asumen que los datos son correctos
+- Mensajes de error inconsistentes
 
-**Estado Actual**: Solo scatter plot y bar chart tienen brush selection
+**Ejemplo:**
+```python
+# Algunos métodos validan:
+if not isinstance(data, pd.DataFrame):
+    raise ValueError("Se esperaba DataFrame")
 
-**Faltante**: 
-- Histogram (brush en bins)
-- Boxplot (brush en categorías)
-- Heatmap (brush en regiones)
-- Line Chart (brush en tiempo)
+# Otros no validan:
+def map_scatter(cls, letter, data, **kwargs):
+    # No valida que data sea válido
+```
 
-#### 2. ❌ Zoom y Pan
+**Solución:**
+- Crear validadores centralizados
+- Validar en puntos de entrada
+- Mensajes de error consistentes
 
-**Estado Actual**: Solo scatter plot tiene zoom (en versión alternativa)
+---
 
-**Faltante**: 
-- Zoom y pan en todos los gráficos
-- Zoom con rueda del mouse
-- Pan con arrastre
-- Reset de zoom
+### 9. **Sistema de Eventos Complejo**
 
-#### 3. ❌ Tooltips Mejorados
+**Ubicación:** `BESTLIB/core/events.py`, `BESTLIB/matrix.py`
 
-**Estado Actual**: Tooltips básicos en versión alternativa
+**Problema:**
+Múltiples sistemas de eventos:
+- `EventManager` en `core/events.py`
+- Sistema de callbacks en `matrix.py`
+- Sistema de eventos en `reactive.py`
 
-**Faltante**: 
-- Tooltips en todos los gráficos
-- Tooltips con información detallada
-- Tooltips personalizables
-- Tooltips con formato HTML
+**Impacto:**
+- Eventos pueden no propagarse correctamente
+- Difícil debugging
+- Posibles memory leaks (callbacks no desregistrados)
 
-#### 4. ❌ Exportación de Gráficos
+**Solución:**
+- Unificar en un solo sistema
+- Usar weak references para callbacks
+- Mejorar logging de eventos
 
-**Faltante**: 
-- Exportar a PNG
-- Exportar a SVG
-- Exportar a PDF
-- Descargar datos seleccionados
+---
 
-#### 5. ❌ Filtros y Búsqueda
+### 10. **JavaScript Inline en Python**
 
-**Faltante**: 
-- Filtrar datos por criterios
-- Búsqueda en gráficos
-- Filtros interactivos
-- Filtros por rango
+**Ubicación:** `BESTLIB/linked.py`, `BESTLIB/reactive.py`
 
-#### 6. ❌ Animaciones Avanzadas
+**Problema:**
+Grandes bloques de JavaScript como strings en Python:
 
-**Estado Actual**: Animaciones básicas de entrada
+```python
+# linked.py líneas 426-579
+js_update = f"""
+(function() {{
+    const divId = '{div_id}';
+    // ... 150+ líneas de JavaScript
+}})();
+"""
+```
 
-**Faltante**: 
-- Animaciones de transición
-- Animaciones de actualización
-- Animaciones personalizables
-- Control de velocidad de animación
+**Impacto:**
+- Difícil mantener
+- No hay syntax highlighting
+- Difícil debugging
+- Posibles problemas de escape
 
-#### 7. ❌ Leyendas Interactivas
+**Solución:**
+- Mover JavaScript a archivos separados
+- Usar templates
+- Minificar en build time
 
-**Faltante**: 
-- Leyendas clickeables (filtrar series)
-- Leyendas con hover
-- Leyendas personalizables
-- Leyendas con checkboxes
+---
 
-#### 8. ❌ Gráficos Adicionales
+### 11. **Falta de Type Hints**
 
-**Faltante**: 
-- Area Chart
-- Stacked Bar Chart
-- Treemap
-- Sankey Diagram
-- Network Graph
-- 3D Scatter Plot
+**Ubicación:** Todo el código
 
-#### 9. ❌ Comunicación Python → JavaScript
+**Problema:**
+Casi ningún archivo tiene type hints:
 
-**Estado Actual**: Solo JS → Python
+```python
+def map_scatter(cls, letter, data, **kwargs):
+    # ¿Qué tipo es letter? ¿data? ¿kwargs?
+```
 
-**Faltante**: 
-- Enviar comandos desde Python a JavaScript
-- Actualizar gráficos desde Python
-- Controlar interacción desde Python
+**Impacto:**
+- Dificulta uso de la librería
+- No hay autocompletado en IDEs
+- Errores solo se descubren en runtime
 
-#### 10. ❌ Testing
+**Solución:**
+- Agregar type hints progresivamente
+- Usar `typing` module
+- Validar con mypy
 
-**Faltante**: 
-- Tests unitarios
+---
+
+### 12. **Falta de Tests Unitarios**
+
+**Ubicación:** Proyecto completo
+
+**Problema:**
+No se encontraron tests unitarios estructurados:
+- Solo scripts de prueba manuales
+- No hay `tests/` directory
+- No hay framework de testing
+
+**Impacto:**
+- Difícil detectar regresiones
+- Cambios pueden romper funcionalidad existente
+- No hay confianza para refactorizar
+
+**Solución:**
+- Crear suite de tests
+- Tests para cada tipo de gráfico
 - Tests de integración
-- Tests de regresión
-- Tests de rendimiento
+- CI/CD con tests automáticos
 
 ---
 
-## 💡 Recomendaciones
+## 🏛️ Problemas de Diseño y Arquitectura
 
-### Prioridad Alta (URGENTE)
+### 13. **API Inconsistente**
 
-1. 🔴 **Corregir dominio de ejes en Scatter Plot** (problema #1) - CRÍTICO
-   - Los scatter plots no muestran correctamente los datos
-   - Cambiar `domain([0, d3.max()])` a `domain(d3.extent())` en líneas 1110 y 1115 de matrix.js
-   
-2. 🔴 **Agregar dependencias a setup.py y pyproject.toml** (problema #2) - CRÍTICO
-   - La librería NO funciona después de instalar porque faltan dependencias
-   - Agregar todas las dependencias de requirements.txt a setup.py y pyproject.toml
-   - Asegurar que se instalen automáticamente al instalar el paquete
-   
-3. ✅ **Eliminar código duplicado** en `matrix.js` (problema #3)
-   
-4. ✅ **Corregir setup.py** para remover paquete inexistente (problema #4)
-   
-5. ⚠️ **Agregar control de tamaños de gráficos** (problema #6) - IMPORTANTE
-   - No hay parámetro `figsize` como en matplotlib
-   - Agregar parámetro `figsize` a métodos `map_*`
-   - Permitir control de tamaños desde Python
-   
-6. ⚠️ **Mejorar versatilidad del sistema de matriz** (problema #7) - IMPORTANTE
-   - No se puede controlar tamaños de celdas, espaciado, proporciones desde Python
-   - Agregar parámetros `row_heights`, `col_widths`, `gap`, etc.
-   - Permitir control de layout desde Python
-   
-7. ⚠️ **Corregir problemas con etiquetas de ejes** (problema #8) - IMPORTANTE
-   - Etiquetas se cortan, posiciones fijas, fuentes pequeñas
-   - Calcular dinámicamente espacio para etiquetas
-   - Permitir rotación de etiquetas
-   - Agregar parámetros de personalización
-   
-8. ✅ **Mejorar manejo de errores** en comms
-9. ✅ **Agregar validación de datos** en métodos `map_*`
+**Problema:**
+Diferentes formas de hacer lo mismo:
 
-### Prioridad Media
+```python
+# Opción 1: Métodos de clase
+MatrixLayout.map_scatter('S', data, x_col='x', y_col='y')
 
-6. ✅ **Mejorar carga de D3.js** (verificar script existente)
-7. ✅ **Agregar ResizeObserver** para ajuste dinámico
-8. ✅ **Mejorar actualización de gráficos enlazados** (verificación de estado)
-9. ✅ **Cachear archivos** JS y CSS
-10. ✅ **Agregar tooltips** en todos los gráficos
+# Opción 2: Método de instancia
+layout = MatrixLayout("S")
+layout.map({'S': {'type': 'scatter', 'data': data}})
 
-### Prioridad Baja
+# Opción 3: ReactiveMatrixLayout
+reactive = ReactiveMatrixLayout("S")
+reactive.add_scatter('S', data, x_col='x', y_col='y')
+```
 
-11. ✅ **Agregar brush selection** en más gráficos
-12. ✅ **Agregar zoom y pan** en todos los gráficos
-13. ✅ **Mejorar documentación** (docstrings, ejemplos)
-14. ✅ **Agregar tests** (unitarios, integración)
-15. ✅ **Agregar más tipos de gráficos** (area, stacked, treemap)
+**Solución:**
+- Documentar claramente qué API usar
+- Deprecar APIs antiguas
+- Crear guía de migración
 
 ---
 
-## 📊 Resumen de Gráficos
+### 14. **Falta de Documentación de API**
 
-| Gráfico | Implementado | Brush Selection | Clicks | Hover | Linked Views | Estado |
-|---------|--------------|-----------------|--------|-------|--------------|--------|
-| Scatter Plot | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Completo |
-| Bar Chart | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Completo |
-| Grouped Bar Chart | ✅ | ❌ | ✅ | ❌ | ✅ | ⚠️ Parcial |
-| Histogram | ✅ | ❌ | ❌ | ❌ | ✅ | ⚠️ Visualización |
-| Boxplot | ✅ | ❌ | ❌ | ❌ | ✅ | ⚠️ Visualización |
-| Heatmap | ✅ | ❌ | ❌ | ❌ | ✅ | ⚠️ Visualización |
-| Correlation Heatmap | ✅ | ❌ | ❌ | ❌ | ✅ | ⚠️ Visualización |
-| Line Chart | ✅ | ❌ | ❌ | ✅ | ✅ | ⚠️ Visualización |
-| Pie Chart | ✅ | ❌ | ✅ | ❌ | ✅ | ⚠️ Parcial |
-| Violin Plot | ✅ | ❌ | ❌ | ❌ | ✅ | ⚠️ Visualización |
-| RadViz | ✅ | ❌ | ❌ | ❌ | ✅ | ⚠️ Visualización |
+**Problema:**
+- Pocos docstrings
+- Parámetros no documentados
+- Ejemplos limitados
+
+**Solución:**
+- Agregar docstrings completos
+- Generar documentación con Sphinx
+- Crear ejemplos para cada funcionalidad
 
 ---
 
-## 🎯 Conclusión
+### 15. **Dependencias Opcionales Mal Gestionadas**
 
-El proyecto **bestlib** ha evolucionado significativamente y ahora es un sistema completo de visualización de datos con:
+**Problema:**
+Dependencias marcadas como "opcionales" pero críticas:
+- `pandas`: Usado en casi todos los gráficos
+- `ipywidgets`: Necesario para interactividad
+- `numpy`: Necesario para muchos gráficos
 
-### ✅ Fortalezas
-
-1. **11+ tipos de gráficos** implementados y funcionales
-2. **Sistema de interacción** completo (brush, clicks, hover)
-3. **Linked Views** funcional con ReactiveMatrixLayout
-4. **Comunicación bidireccional** JS ↔ Python
-5. **Soporte para DataFrames** de pandas
-6. **Sistema reactivo** con actualización automática
-7. **Integración con Jupyter** y Google Colab
-
-### ⚠️ Áreas de Mejora Críticas (Nuevas)
-
-1. 🔴 **Dominio de ejes incorrecto en Scatter Plot** - Los scatter plots no muestran correctamente los datos porque los ejes siempre empiezan en 0
-2. 🔴 **Sistema de instalación de dependencias** - Las dependencias NO se instalan automáticamente, la librería no funciona después de instalar
-3. ⚠️ **Falta control de tamaños** - No hay parámetro `figsize` como en matplotlib, los tamaños están hardcodeados
-4. ⚠️ **Sistema de matriz poco versátil** - No se puede controlar tamaños de celdas, espaciado, proporciones desde Python
-5. ⚠️ **Problemas con etiquetas de ejes** - Etiquetas se cortan, posiciones fijas, fuentes pequeñas, inconsistencias
-
-### ⚠️ Áreas de Mejora Existentes
-
-1. **Código duplicado** que necesita limpieza
-2. **Problemas de configuración** (setup.py, dependencias)
-3. **Falta de brush selection** en algunos gráficos
-4. **Manejo de errores** que necesita mejorarse
-5. **Documentación** que necesita ampliarse
-
-### 🚀 Recomendación Final
-
-El proyecto está **funcional pero con problemas críticos** que deben corregirse antes de usar en producción. Las funcionalidades core funcionan, pero los problemas encontrados durante el uso real (ejes, dependencias, tamaños, versatilidad) son críticos para la experiencia del usuario.
-
-**Prioridad URGENTE**: 
-1. 🔴 Corregir dominio de ejes en Scatter Plot (problema #1)
-2. 🔴 Agregar dependencias a setup.py y pyproject.toml (problema #2)
-3. ⚠️ Agregar control de tamaños de gráficos (problema #6)
-4. ⚠️ Mejorar versatilidad del sistema de matriz (problema #7)
-5. ⚠️ Corregir problemas con etiquetas de ejes (problema #8)
-
-**Prioridad MEDIA**: Limpiar código duplicado, mejorar manejo de errores, agregar validación de datos.
+**Solución:**
+- Definir dependencias requeridas vs opcionales claramente
+- Validar al inicio si dependencias están disponibles
+- Mensajes de error claros si faltan
 
 ---
 
-**Fin del Análisis**
+### 16. **Sistema de Renderizado Fragmentado**
 
+**Problema:**
+Múltiples formas de renderizar:
+- `_repr_html_()` para Jupyter clásico
+- `_repr_mimebundle_()` para JupyterLab
+- `display()` para ambos
+- JavaScript inline vs archivos externos
+
+**Solución:**
+- Unificar sistema de renderizado
+- Detectar entorno automáticamente
+- Usar mismo código base para todos
+
+---
+
+### 17. **Gestión de Estado Global**
+
+**Problema:**
+Variables de clase globales:
+```python
+class MatrixLayout:
+    _map = {}  # Estado global compartido entre instancias
+    _instances = {}  # Cache global
+```
+
+**Impacto:**
+- Puede causar bugs si se usan múltiples instancias
+- Difícil testing
+- Problemas de thread safety
+
+**Solución:**
+- Mover estado a instancias
+- Usar weak references apropiadamente
+- Documentar comportamiento
+
+---
+
+### 18. **Falta de Manejo de Errores Apropiado**
+
+**Problema:**
+Errores se silencian o se imprimen pero no se propagan:
+
+```python
+except Exception as e:
+    print(f"Error: {e}")  # ¿Qué pasa después?
+    # No se re-raise, no se log, no se notifica al usuario
+```
+
+**Solución:**
+- Usar logging apropiado
+- Re-raise cuando sea necesario
+- Crear excepciones específicas
+- Manejar errores en UI
+
+---
+
+## 🔧 Problemas de Implementación
+
+### 19. **Código JavaScript No Minificado en Producción**
+
+**Problema:**
+`matrix.js` tiene 8571+ líneas sin minificar en el código fuente.
+
+**Solución:**
+- Minificar en build time
+- Usar source maps para debugging
+- Separar código de desarrollo y producción
+
+---
+
+### 20. **Falta de Validación de Layout ASCII**
+
+**Problema:**
+Layouts ASCII pueden ser inválidos pero no se validan completamente:
+
+```python
+# layouts/matrix.py
+try:
+    self._grid = LayoutEngine.parse_ascii_layout(ascii_layout)
+except LayoutError as e:
+    raise LayoutError(f"Layout ASCII inválido: {e}")
+```
+
+Pero no valida:
+- Letras duplicadas
+- Caracteres inválidos
+- Layouts vacíos
+
+**Solución:**
+- Validación exhaustiva
+- Mensajes de error claros
+- Sugerencias de corrección
+
+---
+
+### 21. **Memory Leaks Potenciales**
+
+**Problema:**
+- Callbacks no se desregistran
+- Comms no se cierran
+- Event listeners no se limpian
+
+**Solución:**
+- Implementar `__del__` apropiadamente
+- Usar weak references
+- Limpiar recursos en destrucción
+
+---
+
+### 22. **Falta de Caché para Assets**
+
+**Problema:**
+JS y CSS se cargan cada vez:
+
+   ```python
+# render/assets.py
+_cached_js = None
+_cached_css = None
+```
+
+Pero el cache no se invalida apropiadamente.
+
+**Solución:**
+- Cache con versioning
+- Invalidación apropiada
+- Lazy loading
+
+---
+
+### 23. **Problemas de Thread Safety**
+
+**Problema:**
+Código no es thread-safe:
+- Variables globales compartidas
+- Sin locks
+- Posibles race conditions
+
+**Solución:**
+- Usar locks donde sea necesario
+- Documentar thread safety
+- Evitar estado global
+
+---
+
+### 24. **Falta de Validación de Parámetros**
+
+**Problema:**
+Parámetros no se validan:
+
+```python
+def map_scatter(cls, letter, data, **kwargs):
+    # No valida que letter sea string
+    # No valida que data no sea None
+    # No valida kwargs
+```
+
+**Solución:**
+- Validar todos los parámetros
+- Mensajes de error claros
+- Type checking
+
+---
+
+### 25. **Código Duplicado en Charts**
+
+**Problema:**
+Cada chart tiene código similar:
+- Validación de datos
+- Preparación de datos
+- Generación de spec
+
+**Solución:**
+- Crear clase base con funcionalidad común
+- Usar mixins
+- Reducir duplicación
+
+---
+
+## 🔄 Problemas de Compatibilidad
+
+### 26. **Compatibilidad Jupyter vs Colab**
+
+**Problema:**
+Código diferente para Jupyter y Colab:
+
+   ```python
+# Detectar Colab
+is_colab = "google.colab" in sys.modules
+
+# Código diferente para cada uno
+if is_colab:
+    # Código específico de Colab
+else:
+    # Código específico de Jupyter
+```
+
+**Impacto:**
+- Bugs pueden aparecer en un entorno pero no en otro
+- Mantenimiento duplicado
+
+**Solución:**
+- Abstraer diferencias
+- Crear adaptadores
+- Tests en ambos entornos
+
+---
+
+### 27. **Versiones de Dependencias**
+
+**Problema:**
+No se especifican versiones exactas:
+   ```python
+# requirements.txt
+ipython>=8
+pandas>=1.3.0
+```
+
+**Impacto:**
+- Puede romper con versiones nuevas
+- Difícil reproducir bugs
+
+**Solución:**
+- Especificar versiones exactas o rangos estrechos
+- Testear con múltiples versiones
+- Documentar versiones soportadas
+
+---
+
+### 28. **Compatibilidad Python 3.8+**
+
+**Problema:**
+Código usa características de Python 3.8+ pero no se valida:
+- Type hints (3.5+)
+- f-strings (3.6+)
+- Walrus operator (3.8+)
+
+**Solución:**
+- Documentar versión mínima de Python
+- Validar en CI
+- Usar `__future__` imports cuando sea necesario
+
+---
+
+## ⚡ Problemas de Rendimiento
+
+### 29. **Carga de Assets en Cada Render**
+
+**Problema:**
+JS y CSS se cargan cada vez que se renderiza un gráfico.
+
+**Solución:**
+- Cargar una sola vez
+- Usar CDN cuando sea posible
+- Lazy loading
+
+---
+
+### 30. **Procesamiento de Datos Ineficiente**
+
+**Problema:**
+Algunos métodos usan `iterrows()` que es lento:
+
+   ```python
+# Código optimizado existe pero no se usa en todos lados
+for idx, row in df.iterrows():  # LENTO
+    # ...
+```
+
+**Solución:**
+- Usar operaciones vectorizadas
+- Evitar iterrows()
+- Optimizar hot paths
+
+---
+
+### 31. **Re-renderizado Innecesario**
+
+**Problema:**
+Gráficos se re-renderizan cuando no es necesario.
+
+**Solución:**
+- Implementar dirty checking
+- Solo re-renderizar cuando cambian datos
+- Usar virtual DOM si es necesario
+
+---
+
+## 🛠️ Problemas de Mantenibilidad
+
+### 32. **Archivos Muy Grandes**
+
+**Problema:**
+- `matrix.py`: 2526 líneas
+- `reactive.py`: 3981 líneas
+- `layouts/reactive.py`: 3609 líneas
+
+**Solución:**
+- Dividir en módulos más pequeños
+- Máximo 500-1000 líneas por archivo
+- Separar responsabilidades
+
+---
+
+### 33. **Falta de Logging Estructurado**
+
+**Problema:**
+Uso de `print()` en lugar de logging:
+
+```python
+print(f"Error: {e}")  # No estructurado
+```
+
+**Solución:**
+- Usar módulo `logging`
+- Niveles apropiados (DEBUG, INFO, WARNING, ERROR)
+- Formato estructurado
+
+---
+
+### 34. **Falta de Comentarios**
+
+**Problema:**
+Código complejo sin comentarios explicativos.
+
+**Solución:**
+- Agregar comentarios donde sea necesario
+- Documentar decisiones de diseño
+- Explicar algoritmos complejos
+
+---
+
+### 35. **Nombres de Variables Inconsistentes**
+
+**Problema:**
+- `x_col` vs `x_field`
+- `category_col` vs `category_field`
+- `value_col` vs `value_field`
+
+**Solución:**
+- Estandarizar nombres
+- Usar mismo naming convention
+- Documentar convenciones
+
+---
+
+## 🎯 Recomendaciones Prioritarias
+
+### Prioridad ALTA (Crítico - Hacer Inmediatamente)
+
+1. **Consolidar implementaciones duplicadas**
+   - Decidir entre legacy y modular
+   - Migrar funcionalidad
+   - Eliminar código duplicado
+
+2. **Mejorar manejo de errores**
+   - Reemplazar `except Exception` con excepciones específicas
+   - Agregar logging apropiado
+   - No silenciar errores críticos
+
+3. **Unificar sistema de preparación de datos**
+   - Crear módulo centralizado
+   - Eliminar duplicación
+   - Validación consistente
+
+4. **Agregar tests unitarios**
+   - Framework de testing
+   - Tests para cada gráfico
+   - CI/CD
+
+### Prioridad MEDIA (Importante - Hacer Pronto)
+
+5. **Mejorar documentación**
+   - Docstrings completos
+   - Ejemplos para cada funcionalidad
+   - Guías de uso
+
+6. **Refactorizar archivos grandes**
+   - Dividir `matrix.py`, `reactive.py`
+   - Separar responsabilidades
+   - Máximo 1000 líneas por archivo
+
+7. **Agregar type hints**
+   - Empezar con APIs públicas
+   - Validar con mypy
+   - Mejorar IDE support
+
+8. **Mejorar sistema de comm**
+   - Validar estado de comms
+   - Limpiar cache apropiadamente
+   - Mejor logging
+
+### Prioridad BAJA (Mejoras - Hacer Cuando Sea Posible)
+
+9. **Optimizar rendimiento**
+   - Caché de assets
+   - Operaciones vectorizadas
+   - Re-renderizado inteligente
+
+10. **Mejorar compatibilidad**
+    - Abstraer diferencias Jupyter/Colab
+    - Especificar versiones de dependencias
+    - Validar versiones de Python
+
+11. **Mejorar mantenibilidad**
+    - Logging estructurado
+    - Comentarios apropiados
+    - Nombres consistentes
+
+---
+
+## 📝 Conclusión
+
+El proyecto BESTLIB tiene una base sólida pero requiere trabajo significativo en:
+
+1. **Consolidación:** Eliminar duplicación entre legacy y modular
+2. **Calidad de código:** Mejorar manejo de errores, logging, tests
+3. **Documentación:** Mejorar docstrings y ejemplos
+4. **Arquitectura:** Simplificar y unificar sistemas
+
+**Estimación de esfuerzo:**
+- **Prioridad ALTA:** 2-3 semanas
+- **Prioridad MEDIA:** 3-4 semanas
+- **Prioridad BAJA:** 2-3 semanas
+
+**Total:** ~8-10 semanas de trabajo dedicado
+
+---
+
+## 🔗 Referencias
+
+- Archivos analizados: ~50 archivos Python
+- Líneas de código: ~15,000+
+- Problemas identificados: 35+
+- Recomendaciones: 11 priorizadas
+
+---
+
+**Última actualización:** 2024  
+**Próxima revisión:** Después de implementar prioridades ALTAS

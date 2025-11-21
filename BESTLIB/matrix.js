@@ -206,6 +206,115 @@
   }
   
   // ==========================================
+  // Funciones Helper para Selección
+  // ==========================================
+  
+  /**
+   * Extrae datos originales de un item de forma consistente.
+   * Maneja _original_row, _original_rows, y fallbacks apropiadamente.
+   * 
+   * @param {object} item - Item del que extraer datos originales
+   * @param {string} itemName - Nombre del item para logging (opcional)
+   * @returns {Array} Array de items originales (puede ser array vacío)
+   */
+  function extractOriginalRows(item, itemName = 'item') {
+    if (!item || typeof item !== 'object') {
+      console.warn(`[BESTLIB] extractOriginalRows: item no es un objeto válido:`, item);
+      return [];
+    }
+    
+    // Prioridad 1: _original_rows (array) - usado por bar charts, pie charts, etc.
+    if (item._original_rows && Array.isArray(item._original_rows) && item._original_rows.length > 0) {
+      // Validar que todos los elementos sean objetos válidos
+      const validRows = item._original_rows.filter(row => row && typeof row === 'object');
+      if (validRows.length > 0) {
+        return validRows;
+      }
+    }
+    
+    // Prioridad 2: _original_row (objeto único) - usado por scatter plots
+    if (item._original_row && typeof item._original_row === 'object') {
+      return [item._original_row];
+    }
+    
+    // Prioridad 3: Si el item mismo parece ser un dato original (tiene muchas propiedades)
+    // y no es solo un dato procesado (x, y, category), usarlo directamente
+    const processedKeys = ['x', 'y', 'category', 'value', 'bin', 'size', 'color'];
+    const itemKeys = Object.keys(item).filter(k => !k.startsWith('_'));
+    const hasManyKeys = itemKeys.length > processedKeys.length;
+    const isProcessed = processedKeys.every(k => item.hasOwnProperty(k)) && itemKeys.length <= processedKeys.length + 2;
+    
+    if (hasManyKeys && !isProcessed) {
+      // Parece ser un dato original, usarlo
+      return [item];
+    }
+    
+    // Fallback: usar el item como está (puede ser dato procesado)
+    // Esto es mejor que retornar array vacío
+    console.warn(`[BESTLIB] extractOriginalRows: No se encontraron datos originales para ${itemName}, usando item procesado`);
+    return [item];
+  }
+  
+  /**
+   * Crea un payload estandarizado para eventos de selección.
+   * 
+   * @param {string} divId - ID del contenedor
+   * @param {Array} items - Array de items seleccionados
+   * @param {object} spec - Spec del gráfico
+   * @param {object} container - Contenedor DOM
+   * @param {string} graphType - Tipo de gráfico ('scatter', 'bar', 'pie', etc.)
+   * @param {object} metadata - Metadata adicional (opcional)
+   * @returns {object} Payload estandarizado
+   */
+  function createSelectPayload(divId, items, spec, container, graphType, metadata = {}) {
+    // Obtener letra de la vista desde múltiples fuentes
+    let viewLetter = spec.__view_letter__ || spec.__scatter_letter__ || null;
+    if (!viewLetter && container) {
+      const letterAttr = container.getAttribute('data-letter');
+      if (letterAttr) {
+        viewLetter = letterAttr;
+      } else {
+        // Intentar extraer del ID del contenedor
+        const idMatch = container.id && container.id.match(/-cell-([A-Z])-/);
+        if (idMatch) {
+          viewLetter = idMatch[1];
+        }
+      }
+    }
+    
+    // Crear payload estandarizado
+    const payload = {
+      type: 'select',
+      items: items || [],
+      count: items ? items.length : 0,
+      __view_letter__: viewLetter,
+      __graph_type__: graphType,
+      __is_primary_view__: spec.__is_primary_view__ || false
+    };
+    
+    // Agregar metadata adicional
+    if (metadata.indices) {
+      payload.indices = metadata.indices;
+    }
+    if (metadata.original_items) {
+      payload.original_items = metadata.original_items;
+    }
+    if (metadata.selected_category) {
+      payload.selected_category = metadata.selected_category;
+    }
+    if (metadata.selected_bin) {
+      payload.selected_bin = metadata.selected_bin;
+    }
+    
+    // Para compatibilidad hacia atrás, también incluir _original_rows
+    if (items && items.length > 0) {
+      payload._original_rows = items;
+    }
+    
+    return payload;
+  }
+  
+  // ==========================================
   // Renderizado Principal
   // ==========================================
   
@@ -2250,31 +2359,23 @@
           }
         }
         
-        // IMPORTANTE: Enviar todas las filas originales que corresponden a esta categoría
-        // El slice tiene _original_rows que contiene todas las filas del DataFrame con esta categoría
-        const originalRows = d.data._original_rows || d._original_row || (d._original_row ? [d._original_row] : null) || [];
-        
-        // Asegurar que originalRows sea un array
-        const items = Array.isArray(originalRows) && originalRows.length > 0 ? originalRows : [];
+        // ✅ CORRECCIÓN: Usar función helper para extraer datos originales
+        const originalRows = extractOriginalRows(d.data, `pie chart category ${category}`);
         
         // Si no hay filas originales, intentar enviar al menos información de la categoría
-        // (esto puede pasar si los datos no se prepararon correctamente)
-        if (items.length === 0) {
+        if (originalRows.length === 0) {
           console.warn(`[Pie Chart] No se encontraron filas originales para la categoría ${category}. Asegúrese de que los datos se prepararon correctamente.`);
           // Enviar información de la categoría como fallback
-          items.push({ category: category });
+          originalRows.push({ category: category });
         }
         
-        sendEvent(divId, 'select', {
-          type: 'select',
-          items: items,  // Enviar todas las filas originales de esta categoría
-          indices: [],
+        // ✅ CORRECCIÓN: Usar función helper para crear payload estandarizado
+        const payload = createSelectPayload(divId, originalRows, spec, container, 'pie', {
           original_items: [d.data],
-          _original_rows: items,  // También incluir como _original_rows para compatibilidad
-          selected_category: category,
-          __view_letter__: viewLetter,
-          __is_primary_view__: spec.__is_primary_view__ || false
+          selected_category: category
         });
+        
+        sendEvent(divId, 'select', payload);
       })
       .on('mouseenter', function(event, d) {
         // Resaltar el segmento al pasar el mouse
@@ -3135,22 +3236,18 @@
               .attr('opacity', 0.6)
               .attr('r', 3);
             
-            const allItems = validPoints.map((p, i) => {
-              const item = {
-                ...p,
-                index: i
-              };
-              // Preservar _original_row si existe
-              if (p._original_row) {
-                item._original_row = p._original_row;
-              }
-              return item;
+            // ✅ CORRECCIÓN: Usar función helper para extraer datos originales
+            const allItems = [];
+            validPoints.forEach((p, i) => {
+              const originalRows = extractOriginalRows(p, `radviz point ${i}`);
+              originalRows.forEach(row => {
+                allItems.push({ ...row, index: i });
+              });
             });
-            sendEvent(divId, 'select', {
-              type: 'select',
-              items: allItems,
-              count: allItems.length
-            });
+            
+            // ✅ CORRECCIÓN: Usar función helper para crear payload estandarizado
+            const payload = createSelectPayload(divId, allItems, spec, container, 'radviz');
+            sendEvent(divId, 'select', payload);
             return;
           }
           
@@ -3176,17 +3273,15 @@
               console.warn('RadViz: Error verificando selección para punto', p, err);
               return false;
             }
-          }).map((p, i) => {
-            // Agregar datos originales si están disponibles
-            const item = {
-              ...p,
-              index: validPoints.indexOf(p)
-            };
-            // Preservar _original_row si existe
-            if (p._original_row) {
-              item._original_row = p._original_row;
-            }
-            return item;
+          });
+          
+          // ✅ CORRECCIÓN: Usar función helper para extraer datos originales
+          const selectedItems = [];
+          selected.forEach((p, i) => {
+            const originalRows = extractOriginalRows(p, `radviz point ${validPoints.indexOf(p)}`);
+            originalRows.forEach(row => {
+              selectedItems.push({ ...row, index: validPoints.indexOf(p) });
+            });
           });
           
           // Restaurar visualización de puntos
@@ -3195,17 +3290,14 @@
             .attr('r', 3);
           
           // Resaltar puntos seleccionados
-          g.selectAll('.rvpt').filter((d, i) => selected.some(s => s.index === i))
+          g.selectAll('.rvpt').filter((d, i) => selected.some(s => validPoints.indexOf(s) === i))
             .attr('r', 5)
             .attr('opacity', 1)
             .attr('stroke-width', 2);
           
-          // Enviar evento de selección
-          sendEvent(divId, 'select', {
-            type: 'select',
-            items: selected,
-            count: selected.length
-          });
+          // ✅ CORRECCIÓN: Usar función helper para crear payload estandarizado
+          const payload = createSelectPayload(divId, selectedItems, spec, container, 'radviz');
+          sendEvent(divId, 'select', payload);
         });
       
       // Agregar brush al grupo (después de dibujar puntos)
@@ -3797,22 +3889,18 @@
               .attr('opacity', 0.6)
               .attr('r', 3);
             
-            const allItems = validPoints.map((p, i) => {
-              const item = {
-                ...p,
-                index: i
-              };
-              // Preservar _original_row si existe
-              if (p._original_row) {
-                item._original_row = p._original_row;
-              }
-              return item;
+            // ✅ CORRECCIÓN: Usar función helper para extraer datos originales
+            const allItems = [];
+            validPoints.forEach((p, i) => {
+              const originalRows = extractOriginalRows(p, `star coordinates point ${i}`);
+              originalRows.forEach(row => {
+                allItems.push({ ...row, index: i });
+              });
             });
-            sendEvent(divId, 'select', {
-              type: 'select',
-              items: allItems,
-              count: allItems.length
-            });
+            
+            // ✅ CORRECCIÓN: Usar función helper para crear payload estandarizado
+            const payload = createSelectPayload(divId, allItems, spec, container, 'star_coordinates');
+            sendEvent(divId, 'select', payload);
             return;
           }
           
@@ -3838,17 +3926,15 @@
               console.warn('Star Coordinates: Error verificando selección para punto', p, err);
               return false;
             }
-          }).map((p, i) => {
-            // Agregar datos originales si están disponibles
-            const item = {
-              ...p,
-              index: validPoints.indexOf(p)
-            };
-            // Preservar _original_row si existe
-            if (p._original_row) {
-              item._original_row = p._original_row;
-            }
-            return item;
+          });
+          
+          // ✅ CORRECCIÓN: Usar función helper para extraer datos originales
+          const selectedItems = [];
+          selected.forEach((p, i) => {
+            const originalRows = extractOriginalRows(p, `star coordinates point ${validPoints.indexOf(p)}`);
+            originalRows.forEach(row => {
+              selectedItems.push({ ...row, index: validPoints.indexOf(p) });
+            });
           });
           
           // Restaurar visualización de puntos
@@ -3857,17 +3943,14 @@
             .attr('r', 3);
           
           // Resaltar puntos seleccionados
-          g.selectAll('.scpt').filter((d, i) => selected.some(s => s.index === i))
+          g.selectAll('.scpt').filter((d, i) => selected.some(s => validPoints.indexOf(s) === i))
             .attr('r', 5)
             .attr('opacity', 1)
             .attr('stroke-width', 2);
           
-          // Enviar evento de selección
-          sendEvent(divId, 'select', {
-            type: 'select',
-            items: selected,
-            count: selected.length
-          });
+          // ✅ CORRECCIÓN: Usar función helper para crear payload estandarizado
+          const payload = createSelectPayload(divId, selectedItems, spec, container, 'star_coordinates');
+          sendEvent(divId, 'select', payload);
         });
       
       // Agregar brush al grupo (después de dibujar puntos)
@@ -4290,35 +4373,18 @@
             // Actualizar visualización
             updateLineVisualization();
             
-            // 🔒 CORRECCIÓN: Enviar evento de selección con identificador de vista
-            const selected = Array.from(selectedLineIndices).map(i => {
-              const item = {
-                ...validData[i],
-                index: i
-              };
-              // Preservar _original_row si existe
-              if (validData[i]._original_row) {
-                item._original_row = validData[i]._original_row;
-              }
-              return item;
+            // ✅ CORRECCIÓN: Usar función helper para extraer datos originales
+            const selectedItems = [];
+            Array.from(selectedLineIndices).forEach(i => {
+              const originalRows = extractOriginalRows(validData[i], `parallel coordinates line ${i}`);
+              originalRows.forEach(row => {
+                selectedItems.push({ ...row, index: i });
+              });
             });
             
-            // 🔒 Obtener letra de la vista desde el spec o el contenedor
-            let viewLetter = spec.__view_letter__ || null;
-            if (!viewLetter && container) {
-              const letterAttr = container.getAttribute('data-letter');
-              if (letterAttr) {
-                viewLetter = letterAttr;
-              }
-            }
-            
-            sendEvent(divId, 'select', {
-              type: 'select',
-              items: selected,
-              count: selected.length,
-              __view_letter__: viewLetter,  // 🔒 Incluir identificador de vista
-              __is_primary_view__: spec.__is_primary_view__ || false
-            });
+            // ✅ CORRECCIÓN: Usar función helper para crear payload estandarizado
+            const payload = createSelectPayload(divId, selectedItems, spec, container, 'parallel_coordinates');
+            sendEvent(divId, 'select', payload);
           });
         
         // Inicializar visualización
@@ -4721,22 +4787,18 @@
               .attr('opacity', 0.6)
               .attr('stroke-width', 1.5);
             
-            const allItems = validData.map((d, i) => {
-              const item = {
-                ...d,
-                index: i
-              };
-              // Preservar _original_row si existe
-              if (d._original_row) {
-                item._original_row = d._original_row;
-              }
-              return item;
+            // ✅ CORRECCIÓN: Usar función helper para extraer datos originales
+            const allItems = [];
+            validData.forEach((d, i) => {
+              const originalRows = extractOriginalRows(d, `parallel coordinates line ${i}`);
+              originalRows.forEach(row => {
+                allItems.push({ ...row, index: i });
+              });
             });
-            sendEvent(divId, 'select', {
-              type: 'select',
-              items: allItems,
-              count: allItems.length
-            });
+            
+            // ✅ CORRECCIÓN: Usar función helper para crear payload estandarizado
+            const payload = createSelectPayload(divId, allItems, spec, container, 'parallel_coordinates');
+            sendEvent(divId, 'select', payload);
             return;
           }
           
@@ -4777,17 +4839,15 @@
               console.warn('Parallel Coordinates: Error verificando selección para línea', d, err);
               return false;
             }
-          }).map((d, i) => {
-            // Agregar datos originales si están disponibles
-            const item = {
-              ...d,
-              index: validData.indexOf(d)
-            };
-            // Preservar _original_row si existe
-            if (d._original_row) {
-              item._original_row = d._original_row;
-            }
-            return item;
+          });
+          
+          // ✅ CORRECCIÓN: Usar función helper para extraer datos originales
+          const selectedItems = [];
+          selected.forEach((d, i) => {
+            const originalRows = extractOriginalRows(d, `parallel coordinates line ${validData.indexOf(d)}`);
+            originalRows.forEach(row => {
+              selectedItems.push({ ...row, index: validData.indexOf(d) });
+            });
           });
           
           // Restaurar visualización de líneas
@@ -4796,17 +4856,14 @@
             .attr('stroke-width', 1.5);
           
           // Resaltar líneas seleccionadas
-          const selectedIndices = new Set(selected.map(s => s.index));
+          const selectedIndices = new Set(selectedItems.map(s => s.index));
           g.selectAll('.pcline').filter((d, i) => selectedIndices.has(i))
             .attr('stroke-width', 3)
             .attr('opacity', 1);
           
-          // Enviar evento de selección
-          sendEvent(divId, 'select', {
-            type: 'select',
-            items: selected,
-            count: selected.length
-          });
+          // ✅ CORRECCIÓN: Usar función helper para crear payload estandarizado
+          const payload = createSelectPayload(divId, selectedItems, spec, container, 'parallel_coordinates');
+          sendEvent(divId, 'select', payload);
         });
       
       // Agregar brush al grupo (después de dibujar todo)
@@ -4924,29 +4981,23 @@
             }
           }
           
-          // IMPORTANTE: Enviar todas las filas originales que corresponden a esta categoría
-          const originalRows = d._original_rows || d._original_row || (d._original_row ? [d._original_row] : null) || [];
-          
-          // Asegurar que originalRows sea un array
-          const items = Array.isArray(originalRows) && originalRows.length > 0 ? originalRows : [];
+          // ✅ CORRECCIÓN: Usar función helper para extraer datos originales
+          const originalRows = extractOriginalRows(d, `boxplot category ${d.category}`);
           
           // Si no hay filas originales, intentar enviar al menos información de la categoría
-          if (items.length === 0) {
+          if (originalRows.length === 0) {
             console.warn(`[Boxplot] No se encontraron filas originales para la categoría ${d.category}. Asegúrese de que los datos se prepararon correctamente.`);
             // Enviar información de la categoría como fallback
-            items.push({ category: d.category });
+            originalRows.push({ category: d.category });
           }
           
-          sendEvent(divId, 'select', {
-            type: 'select',
-            items: items,  // Enviar todas las filas originales de esta categoría
-            indices: [],
+          // ✅ CORRECCIÓN: Usar función helper para crear payload estandarizado
+          const payload = createSelectPayload(divId, originalRows, spec, container, 'boxplot', {
             original_items: [d],
-            _original_rows: items,  // También incluir como _original_rows para compatibilidad
-            selected_category: d.category,
-            __view_letter__: viewLetter,
-            __is_primary_view__: spec.__is_primary_view__ || false
+            selected_category: d.category
           });
+          
+          sendEvent(divId, 'select', payload);
         }
       })
       .on('mouseenter', function(event, d) {
@@ -5199,30 +5250,23 @@
             }
           }
           
-          // IMPORTANTE: Enviar todas las filas originales que corresponden a este bin
-          // El bin tiene _original_rows que contiene todas las filas del DataFrame que caen en este bin
-          const originalRows = d._original_rows || d._original_row || (d._original_row ? [d._original_row] : null) || [];
-          
-          // Asegurar que originalRows sea un array
-          const items = Array.isArray(originalRows) && originalRows.length > 0 ? originalRows : [];
+          // ✅ CORRECCIÓN: Usar función helper para extraer datos originales
+          const originalRows = extractOriginalRows(d, `histogram bin ${d.bin}`);
           
           // Si no hay filas originales, intentar enviar al menos información del bin
-          // (esto puede pasar si los datos no se prepararon correctamente)
-          if (items.length === 0) {
+          if (originalRows.length === 0) {
             console.warn(`[Histogram] No se encontraron filas originales para el bin ${d.bin}. Asegúrese de que los datos se prepararon correctamente.`);
             // Enviar información del bin como fallback
-            items.push({ bin: d.bin, count: d.count });
+            originalRows.push({ bin: d.bin, count: d.count });
           }
           
-          sendEvent(divId, 'select', {
-            type: 'select',
-            items: items,  // Enviar todas las filas originales de este bin
-            indices: [],
+          // ✅ CORRECCIÓN: Usar función helper para crear payload estandarizado
+          const payload = createSelectPayload(divId, originalRows, spec, container, 'histogram', {
             original_items: [d],
-            _original_rows: items,  // También incluir como _original_rows para compatibilidad
-            __view_letter__: viewLetter,
-            __is_primary_view__: spec.__is_primary_view__ || false
+            selected_bin: d.bin
           });
+          
+          sendEvent(divId, 'select', payload);
         }
       })
       .on('mouseenter', function(event, d) {
@@ -5484,23 +5528,17 @@
       .on('click', function(event, d) {
         if (!spec.interactive) return;
         
-        // Obtener letra de la vista (para vistas principales)
-        let viewLetter = spec.__view_letter__ || null;
-        if (!viewLetter && container) {
-          const letterAttr = container.getAttribute('data-letter');
-          if (letterAttr) {
-            viewLetter = letterAttr;
-          }
-        }
+        // ✅ CORRECCIÓN: Usar función helper para extraer datos originales
+        const originalRows = extractOriginalRows(d, `grouped bar group ${d.group} series ${d.series}`);
         
-          sendEvent(divId, 'select', { 
-          type: 'select',
-          items: [{ group: d.group, series: d.series }],
-            indices: [], 
+        // ✅ CORRECCIÓN: Usar función helper para crear payload estandarizado
+        const payload = createSelectPayload(divId, originalRows, spec, container, 'grouped_bar', {
           original_items: [d],
-          __view_letter__: viewLetter,
-          __is_primary_view__: spec.__is_primary_view__ || false
+          selected_group: d.group,
+          selected_series: d.series
         });
+        
+        sendEvent(divId, 'select', payload);
       })
       .on('mouseenter', function(event, d) {
         // Resaltar barra
@@ -5593,37 +5631,17 @@
         if (spec.interactive) {
           const index = data.indexOf(d);
           
-          // Obtener todas las filas originales de esta categoría
-          // El bar chart tiene _original_rows (plural) que contiene todas las filas de esa categoría
-          const originalRows = d._original_rows || d._original_row || (d._original_row ? [d._original_row] : null) || [d];
+          // ✅ CORRECCIÓN: Usar función helper para extraer datos originales
+          const originalRows = extractOriginalRows(d, `bar chart category ${d.category}`);
           
-          // Asegurar que originalRows sea un array
-          const items = Array.isArray(originalRows) ? originalRows : [originalRows];
-          
-          // Obtener letra de la vista (para vistas principales)
-          let viewLetter = spec.__view_letter__ || null;
-          if (!viewLetter && container) {
-            const letterAttr = container.getAttribute('data-letter');
-            if (letterAttr) {
-              viewLetter = letterAttr;
-            } else {
-              // Intentar extraer del ID del contenedor
-              const idMatch = container.id && container.id.match(/-cell-([A-Z])-/);
-              if (idMatch) {
-                viewLetter = idMatch[1];
-            }
-          }
-          }
-
-        sendEvent(divId, 'select', { 
-            type: 'select',
-            items: items,  // Enviar todas las filas originales de esta categoría
+          // ✅ CORRECCIÓN: Usar función helper para crear payload estandarizado
+          const payload = createSelectPayload(divId, originalRows, spec, container, 'bar', {
             indices: [index],
             original_items: [d],
-            _original_rows: items,  // También incluir como _original_rows para compatibilidad
-            __view_letter__: viewLetter,
-            __is_primary_view__: spec.__is_primary_view__ || false
+            selected_category: d.category
           });
+          
+          sendEvent(divId, 'select', payload);
         }
       })
       .on('mouseenter', function(event, d) {
@@ -5891,38 +5909,30 @@
         : indicesArray;
       
       const selected = limitedIndices.map(i => data[i]).filter(d => d !== undefined);
-      const selectedItems = selected.map(d => d._original_row || d);
       
-      // Obtener letra del scatter plot
-      let scatterLetter = spec.__scatter_letter__ || null;
-      if (!scatterLetter && container) {
-        const letterAttr = container.getAttribute('data-letter');
-        if (letterAttr) {
-          scatterLetter = letterAttr;
-        } else {
-          const idMatch = container.id && container.id.match(/-cell-([A-Z])-/);
-          if (idMatch) {
-            scatterLetter = idMatch[1];
-          }
-        }
-      }
-      
-      // Enviar evento de selección
-      sendEvent(divId, 'select', {
-        type: 'select',
-        items: selectedItems,
-        count: indices.size, // Contar total, no solo los enviados
-        indices: limitedIndices,
-        totalCount: indices.size, // Total real de seleccionados
-        __scatter_letter__: scatterLetter,
-        __view_letter__: scatterLetter,  // También incluir como __view_letter__ para compatibilidad
-        __is_primary_view__: spec.__is_primary_view__ || false
+      // ✅ CORRECCIÓN: Usar función helper para extraer datos originales de forma consistente
+      const selectedItems = [];
+      selected.forEach((d, idx) => {
+        const originalRows = extractOriginalRows(d, `scatter point ${limitedIndices[idx]}`);
+        selectedItems.push(...originalRows);
       });
       
       // Advertencia si se limitó el payload
       if (indices.size > MAX_PAYLOAD_ITEMS) {
         console.warn(`[BESTLIB] Selección grande (${indices.size} items). Enviando solo los primeros ${MAX_PAYLOAD_ITEMS} para optimizar rendimiento.`);
       }
+      
+      // ✅ CORRECCIÓN: Usar función helper para crear payload estandarizado
+      const payload = createSelectPayload(divId, selectedItems, spec, container, 'scatter', {
+        indices: limitedIndices,
+        totalCount: indices.size
+      });
+      
+      // Agregar campos específicos de scatter para compatibilidad
+      payload.__scatter_letter__ = payload.__view_letter__;
+      
+      // Enviar evento de selección
+      sendEvent(divId, 'select', payload);
     };
     
     // Puntos con D3 (renderizar PRIMERO)

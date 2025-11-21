@@ -235,32 +235,42 @@ class ReactiveMatrixLayout:
         
         def scatter_handler(payload):
             """Handler que actualiza el SelectionModel de este scatter plot Y el modelo principal"""
-            # Filtrar eventos: solo procesar si viene de este scatter plot
+            # ✅ CORRECCIÓN: Validar items primero
+            items = payload.get('items', [])
+            if not isinstance(items, list):
+                if self._debug or MatrixLayout._debug:
+                    print(f"⚠️ [ReactiveMatrixLayout] items no es lista: {type(items)}")
+                items = []
+            
+            # ✅ CORRECCIÓN: Filtrado más flexible
             # Aceptar tanto __scatter_letter__ como __view_letter__ para compatibilidad
             event_scatter_letter = payload.get('__scatter_letter__') or payload.get('__view_letter__')
-            if event_scatter_letter != scatter_letter_capture:
+            if event_scatter_letter is not None and event_scatter_letter != scatter_letter_capture:
                 # Este evento no es para este scatter plot, ignorar
                 if self._debug or MatrixLayout._debug:
                     print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{scatter_letter_capture}', recibido '{event_scatter_letter}'")
                 return
             
-            # El payload ya viene con __scatter_letter__ o __view_letter__ del JavaScript
-            items = payload.get('items', [])
-            
             if self._debug or MatrixLayout._debug:
                 print(f"✅ [ReactiveMatrixLayout] Evento recibido para scatter '{scatter_letter_capture}': {len(items)} items")
             
-            # Convertir items a DataFrame antes de guardar
+            # ✅ CORRECCIÓN: Validar conversión a DataFrame
             items_df = _items_to_dataframe(items)
+            if items_df is None or (hasattr(items_df, 'empty') and items_df.empty and len(items) > 0):
+                if self._debug or MatrixLayout._debug:
+                    print(f"⚠️ [ReactiveMatrixLayout] Error al convertir {len(items)} items a DataFrame")
+                # Continuar con lista como fallback
+            
+            # ✅ CORRECCIÓN: Guardar DataFrame en SelectionModel también
+            data_to_update = items_df if items_df is not None and not (hasattr(items_df, 'empty') and items_df.empty) else items
             
             # Actualizar el SelectionModel específico de este scatter plot
             # Esto disparará los callbacks registrados (como update_histogram, update_boxplot)
-            # Nota: Los callbacks internos trabajan con listas, así que pasamos items
-            scatter_selection_capture.update(items)
+            scatter_selection_capture.update(data_to_update)
             
             # IMPORTANTE: También actualizar el selection_model principal para que selected_data se actualice
             # Esto asegura que los datos seleccionados estén disponibles globalmente
-            self.selection_model.update(items)
+            self.selection_model.update(data_to_update)
             
             # Actualizar también _selected_data con DataFrame para que el usuario pueda acceder fácilmente
             self._selected_data = items_df if items_df is not None else items
@@ -409,8 +419,16 @@ class ReactiveMatrixLayout:
             # Crear handler para eventos de selección del bar chart
             def barchart_handler(payload):
                 """Handler que actualiza el SelectionModel de este bar chart"""
-                event_letter = payload.get('__view_letter__')
-                if event_letter != letter:
+                # ✅ CORRECCIÓN: Validar items primero
+                items = payload.get('items', [])
+                if not isinstance(items, list):
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⚠️ [ReactiveMatrixLayout] items no es lista: {type(items)}")
+                    items = []
+                
+                # ✅ CORRECCIÓN: Filtrado más flexible
+                event_letter = payload.get('__view_letter__') or payload.get('__scatter_letter__')
+                if event_letter is not None and event_letter != letter:
                     return
                 
                 # CRÍTICO: Prevenir procesamiento si estamos actualizando el bar chart
@@ -420,8 +438,6 @@ class ReactiveMatrixLayout:
                         print(f"⏭️ [ReactiveMatrixLayout] Bar chart '{letter}' está siendo actualizado, ignorando evento")
                     return
                 
-                items = payload.get('items', [])
-                
                 if self._debug or MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Evento recibido para bar chart '{letter}': {len(items)} items")
                 
@@ -430,17 +446,23 @@ class ReactiveMatrixLayout:
                 self._barchart_update_flags[barchart_update_flag] = True
                 
                 try:
-                    # Convertir items a DataFrame antes de guardar
+                    # ✅ CORRECCIÓN: Validar conversión a DataFrame
                     items_df = _items_to_dataframe(items)
+                    if items_df is None or (hasattr(items_df, 'empty') and items_df.empty and len(items) > 0):
+                        if self._debug or MatrixLayout._debug:
+                            print(f"⚠️ [ReactiveMatrixLayout] Error al convertir {len(items)} items a DataFrame")
+                        # Continuar con lista como fallback
+                    
+                    # ✅ CORRECCIÓN: Usar DataFrame si está disponible, sino lista
+                    data_to_update = items_df if items_df is not None and not (hasattr(items_df, 'empty') and items_df.empty) else items
                     
                     # IMPORTANTE: Actualizar el SelectionModel de este bar chart
                     # Esto disparará callbacks registrados (como update_pie para el pie chart 'P')
                     # El callback update_pie NO debe causar que el bar chart se re-renderice
-                    # Nota: Los callbacks internos trabajan con listas, así que pasamos items
-                    barchart_selection.update(items)
+                    barchart_selection.update(data_to_update)
                     
                     # Actualizar también el selection_model principal
-                    self.selection_model.update(items)
+                    self.selection_model.update(data_to_update)
                     
                     # Guardar DataFrame en _selected_data para que el usuario pueda acceder fácilmente
                     self._selected_data = items_df if items_df is not None else items

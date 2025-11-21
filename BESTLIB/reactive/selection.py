@@ -20,6 +20,7 @@ except ImportError:
 def _items_to_dataframe(items):
     """
     Convierte una lista de diccionarios a un DataFrame de pandas.
+    ✅ MEJORADO: Validación exhaustiva y mejor manejo de errores.
     
     Args:
         items: Lista de diccionarios o DataFrame
@@ -33,24 +34,80 @@ def _items_to_dataframe(items):
             print("⚠️ Advertencia: pandas no está disponible. Los datos no se pueden convertir a DataFrame.")
         return None
     
+    # Si ya es un DataFrame, retornar copia
     if HAS_PANDAS and isinstance(items, pd.DataFrame):
         return items.copy()
     
+    # Si es None o vacío, retornar DataFrame vacío
     if not items:
         return pd.DataFrame()
     
-    try:
-        if isinstance(items, list):
-            if len(items) == 0:
-                return pd.DataFrame()
-            if len(items) > 0 and isinstance(items[0], dict):
-                return pd.DataFrame(items)
+    # ✅ CORRECCIÓN: Validar que items sea una lista
+    if not isinstance(items, list):
+        print(f"⚠️ Error: items debe ser lista, recibido: {type(items)}")
+        # Intentar convertir de todas formas
+        try:
+            items = list(items) if hasattr(items, '__iter__') else [items]
+        except Exception as e:
+            print(f"⚠️ Error al convertir items a lista: {e}")
+            return pd.DataFrame()
+    
+    if len(items) == 0:
+        return pd.DataFrame()
+    
+    # ✅ CORRECCIÓN: Validar que todos los items sean diccionarios
+    # Si algunos no lo son, intentar convertirlos o filtrarlos
+    valid_items = []
+    for i, item in enumerate(items):
+        if isinstance(item, dict):
+            # Validar que el dict no esté vacío y tenga al menos una key válida
+            if item and len(item) > 0:
+                valid_items.append(item)
             else:
-                return pd.DataFrame(items)
+                print(f"⚠️ Advertencia: Item {i} es un diccionario vacío, omitiendo")
+        elif item is None:
+            print(f"⚠️ Advertencia: Item {i} es None, omitiendo")
         else:
-            return pd.DataFrame([items] if not isinstance(items, (list, tuple)) else items)
+            # Intentar convertir a dict si es posible
+            try:
+                if hasattr(item, '__dict__'):
+                    valid_items.append(item.__dict__)
+                elif hasattr(item, '_asdict'):  # namedtuple
+                    valid_items.append(item._asdict())
+                else:
+                    print(f"⚠️ Advertencia: Item {i} no es diccionario (tipo: {type(item)}), omitiendo")
+            except Exception as e:
+                print(f"⚠️ Error al convertir item {i} a diccionario: {e}")
+    
+    if len(valid_items) == 0:
+        print("⚠️ Advertencia: No hay items válidos para convertir a DataFrame")
+        return pd.DataFrame()
+    
+    # ✅ CORRECCIÓN: Intentar conversión con mejor manejo de errores
+    try:
+        df = pd.DataFrame(valid_items)
+        
+        # Validar que el DataFrame no esté vacío si había items válidos
+        if df.empty and len(valid_items) > 0:
+            print(f"⚠️ Advertencia: DataFrame resultante está vacío aunque había {len(valid_items)} items válidos")
+            # Intentar debug: mostrar primer item
+            if len(valid_items) > 0:
+                print(f"   Primer item válido: {list(valid_items[0].keys())[:5]}...")
+        
+        return df
     except Exception as e:
         print(f"⚠️ Error al convertir items a DataFrame: {e}")
+        print(f"   Items tipo: {type(items)}, Longitud: {len(items)}")
+        if len(valid_items) > 0:
+            print(f"   Primer item válido tipo: {type(valid_items[0])}")
+            if isinstance(valid_items[0], dict):
+                print(f"   Primer item keys: {list(valid_items[0].keys())[:10]}")
+        
+        # ✅ MEJORADO: Re-raise en modo debug para facilitar debugging
+        import sys
+        if hasattr(sys, '_getframe') and '--debug' in sys.argv:
+            raise
+        
         return pd.DataFrame()
 
 
