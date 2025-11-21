@@ -78,16 +78,27 @@ class DistplotChart(ChartBase):
         if len(values) == 0:
             raise ChartError("No hay datos válidos para distplot")
         
+        # Asegurar que values sea un array numpy para el procesamiento
+        if HAS_NUMPY and not isinstance(values, np.ndarray):
+            values = np.array(values)
+        
         result = {}
         
         # Histograma
         if HAS_NUMPY:
             hist, bin_edges = np.histogram(values, bins=bins, density=True)
             bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-            histogram_data = [
-                {'x': float(x), 'y': float(y), 'bin_start': float(be[0]), 'bin_end': float(be[1])}
-                for x, y, be in zip(bin_centers, hist, zip(bin_edges[:-1], bin_edges[1:]))
-            ]
+            histogram_data = []
+            for x, y, be_start, be_end in zip(bin_centers, hist, bin_edges[:-1], bin_edges[1:]):
+                try:
+                    histogram_data.append({
+                        'x': float(x) if not np.isnan(x) else 0.0,
+                        'y': float(y) if not np.isnan(y) else 0.0,
+                        'bin_start': float(be_start) if not np.isnan(be_start) else 0.0,
+                        'bin_end': float(be_end) if not np.isnan(be_end) else 0.0
+                    })
+                except (ValueError, TypeError, OverflowError):
+                    histogram_data.append({'x': 0.0, 'y': 0.0, 'bin_start': 0.0, 'bin_end': 0.0})
         else:
             # Fallback sin numpy
             min_val, max_val = min(values), max(values)
@@ -118,10 +129,15 @@ class DistplotChart(ChartBase):
                 x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
                 y_density = kde_obj(x_eval)
                 
-                kde_data = [
-                    {'x': float(x), 'y': float(y)} 
-                    for x, y in zip(x_eval, y_density)
-                ]
+                kde_data = []
+                for x, y in zip(x_eval, y_density):
+                    try:
+                        kde_data.append({
+                            'x': float(x) if not np.isnan(x) else 0.0,
+                            'y': float(y) if not np.isnan(y) else 0.0
+                        })
+                    except (ValueError, TypeError, OverflowError):
+                        kde_data.append({'x': 0.0, 'y': 0.0})
                 result['kde'] = kde_data
             except ImportError:
                 # Si no hay scipy, no incluir KDE

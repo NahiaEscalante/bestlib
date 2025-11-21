@@ -76,6 +76,10 @@ class KdeChart(ChartBase):
         if len(values) == 0:
             raise ChartError("No hay datos válidos para calcular KDE")
         
+        # Asegurar que values sea un array numpy para el procesamiento
+        if HAS_NUMPY and not isinstance(values, np.ndarray):
+            values = np.array(values)
+        
         # Calcular KDE usando scipy si está disponible, sino usar numpy
         try:
             from scipy.stats import gaussian_kde
@@ -87,26 +91,48 @@ class KdeChart(ChartBase):
             # Crear rango de valores para evaluar
             x_min, x_max = float(np.min(values)), float(np.max(values))
             x_range = x_max - x_min
+            if x_range == 0:
+                # Si todos los valores son iguales, crear un rango pequeño alrededor del valor
+                x_min = x_min - 0.1
+                x_max = x_max + 0.1
+                x_range = 0.2
             x_padding = x_range * 0.1  # 10% padding
             x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
             y_density = kde(x_eval)
             
-            # Convertir a lista de puntos
-            kde_data = [
-                {'x': float(x), 'y': float(y)} 
-                for x, y in zip(x_eval, y_density)
-            ]
+            # Convertir a lista de puntos - asegurar que sean tipos Python nativos
+            kde_data = []
+            for x, y in zip(x_eval, y_density):
+                try:
+                    kde_data.append({
+                        'x': float(x) if not np.isnan(x) else 0.0,
+                        'y': float(y) if not np.isnan(y) else 0.0
+                    })
+                except (ValueError, TypeError, OverflowError):
+                    # Si hay un error de conversión, usar 0.0
+                    kde_data.append({'x': 0.0, 'y': 0.0})
         except ImportError:
             # Fallback: usar histograma normalizado como aproximación
             if HAS_NUMPY:
                 hist, bin_edges = np.histogram(values, bins=50, density=True)
                 bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-                kde_data = [
-                    {'x': float(x), 'y': float(y)} 
-                    for x, y in zip(bin_centers, hist)
-                ]
+                kde_data = []
+                for x, y in zip(bin_centers, hist):
+                    try:
+                        kde_data.append({
+                            'x': float(x) if not np.isnan(x) else 0.0,
+                            'y': float(y) if not np.isnan(y) else 0.0
+                        })
+                    except (ValueError, TypeError, OverflowError):
+                        kde_data.append({'x': 0.0, 'y': 0.0})
             else:
                 raise ChartError("Se requiere scipy o numpy para calcular KDE")
+        except Exception as e:
+            # Capturar cualquier otro error y proporcionar un mensaje más informativo
+            raise ChartError(f"Error al calcular KDE: {e}")
+        
+        if len(kde_data) == 0:
+            raise ChartError("No se pudieron generar datos para KDE")
         
         return {'data': kde_data}
     

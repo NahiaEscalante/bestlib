@@ -75,13 +75,23 @@ class RugChart(ChartBase):
         if len(values) == 0:
             raise ChartError("No hay datos válidos para rug plot")
         
+        # Asegurar que values sea un array numpy para el procesamiento
+        if HAS_NUMPY and not isinstance(values, np.ndarray):
+            values = np.array(values)
+        
         # Crear datos para rug plot: cada valor se marca en el eje
         rug_data = []
         for val in values:
-            rug_data.append({
-                'x': float(val),
-                'y': 0  # Posición en el eje (se ajustará en JS)
-            })
+            try:
+                rug_data.append({
+                    'x': float(val) if not (HAS_NUMPY and np.isnan(val)) else 0.0,
+                    'y': 0  # Posición en el eje (se ajustará en JS)
+                })
+            except (ValueError, TypeError, OverflowError):
+                continue  # Saltar valores inválidos
+        
+        if len(rug_data) == 0:
+            raise ChartError("No se pudieron generar datos para rug plot")
         
         return {'data': rug_data}
     

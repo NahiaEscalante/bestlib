@@ -105,10 +105,18 @@ class QqplotChart(ChartBase):
             theoretical_quantiles = np.linspace(-2.5, 2.5, n)
         
         # Crear datos para el plot
-        qq_data = [
-            {'x': float(tq), 'y': float(oq)}
-            for tq, oq in zip(theoretical_quantiles, observed_quantiles)
-        ]
+        qq_data = []
+        for tq, oq in zip(theoretical_quantiles, observed_quantiles):
+            try:
+                qq_data.append({
+                    'x': float(tq) if not np.isnan(tq) else 0.0,
+                    'y': float(oq) if not np.isnan(oq) else 0.0
+                })
+            except (ValueError, TypeError, OverflowError):
+                continue  # Saltar valores inválidos
+        
+        if len(qq_data) == 0:
+            raise ChartError("No se pudieron generar datos para Q-Q plot")
         
         return {'data': qq_data, 'dist': dist}
     

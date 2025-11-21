@@ -93,10 +93,16 @@ class EcdfChart(ChartBase):
             # Calcular ECDF: para cada valor, la proporción de datos <= valor
             ecdf_data = []
             for i, val in enumerate(sorted_values):
-                ecdf_data.append({
-                    'x': float(val),
-                    'y': float((i + 1) / n)  # Probabilidad acumulativa
-                })
+                try:
+                    ecdf_data.append({
+                        'x': float(val) if not np.isnan(val) else 0.0,
+                        'y': float((i + 1) / n)  # Probabilidad acumulativa
+                    })
+                except (ValueError, TypeError, OverflowError):
+                    continue  # Saltar valores inválidos
+        
+        if len(ecdf_data) == 0:
+            raise ChartError("No se pudieron generar datos para ECDF")
         
         return {'data': ecdf_data}
     
