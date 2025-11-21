@@ -601,13 +601,23 @@ class MatrixLayout:
     
     def _repr_html_(self):
         """Representación HTML del layout (compatible con Jupyter Notebook clásico)"""
+        import sys
+        is_colab = "google.colab" in sys.modules
+        
+        # Cargar assets automáticamente si es necesario
+        from ..render.assets import AssetManager
+        if is_colab:
+            AssetManager.ensure_colab_assets_loaded()
+        
         data = self._prepare_repr_data()
         
         # Generar JavaScript usando JSBuilder
+        # Siempre esperar a D3.js para asegurar que esté disponible
         render_js = JSBuilder.build_render_call(
             self.div_id,
             data['escaped_layout'],
-            data['mapping_merged']
+            data['mapping_merged'],
+            wait_for_d3=True  # Siempre esperar a D3.js
         ).strip()
         
         # Generar HTML usando HTMLGenerator
@@ -646,13 +656,13 @@ class MatrixLayout:
         )
         
         # Generar JavaScript completo usando JSBuilder
-        # En Colab, esperar a que D3 esté disponible antes de renderizar
+        # Siempre esperar a que D3 esté disponible antes de renderizar
         js = JSBuilder.build_full_js(
             data['js_code'],
             self.div_id,
             data['escaped_layout'],
             data['mapping_merged'],
-            wait_for_d3=is_colab  # Esperar D3 solo en Colab
+            wait_for_d3=True  # Siempre esperar D3.js para asegurar que esté disponible
         )
         
         return {
@@ -683,13 +693,13 @@ class MatrixLayout:
             html_content = HTMLGenerator.generate_style_tag(data['css_code']) + "\n" + html_content
             
             # Generar JavaScript usando JSBuilder
-            # En Colab, esperar a que D3 esté disponible antes de renderizar
+            # Siempre esperar a que D3 esté disponible antes de renderizar
             js_content = JSBuilder.build_full_js(
                 data['js_code'],
                 self.div_id,
                 data['escaped_layout'],
                 data['mapping_merged'],
-                wait_for_d3=is_colab  # Esperar D3 solo en Colab
+                wait_for_d3=True  # Siempre esperar D3.js para asegurar que esté disponible
             )
             
             display(HTML(html_content))

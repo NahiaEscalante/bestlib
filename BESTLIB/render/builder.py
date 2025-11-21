@@ -31,7 +31,7 @@ class JSBuilder:
         mapping_js = json.dumps(sanitize_for_json(mapping))
         
         if wait_for_d3:
-            # Versión que espera a D3 (para Colab)
+            # Versión que espera a D3 y lo carga si no está disponible
             return f"""
 (function() {{
   const mapping = {mapping_js};
@@ -40,8 +40,66 @@ class JSBuilder:
     container.__mapping__ = mapping;
   }}
   
-  // Timeout máximo: 10 segundos
-  const maxWaitTime = 10000;
+  // Función para cargar D3.js si no está disponible
+  function loadD3IfNeeded() {{
+    return new Promise((resolve, reject) => {{
+      // Si D3 ya está disponible, resolver inmediatamente
+      if (typeof d3 !== 'undefined') {{
+        resolve();
+        return;
+      }}
+      
+      // Verificar si ya hay un script de D3 cargándose
+      var existingScript = document.querySelector('script[src*="d3"]');
+      if (existingScript) {{
+        // Esperar a que el script existente se cargue
+        existingScript.onload = function() {{
+          if (typeof d3 !== 'undefined') {{
+            resolve();
+          }} else {{
+            reject(new Error('D3 no se inicializó después de cargar'));
+          }}
+        }};
+        existingScript.onerror = function() {{
+          reject(new Error('Error al cargar script D3 existente'));
+        }};
+        return;
+      }}
+      
+      // Cargar D3 desde CDN
+      var script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js';
+      script.async = true;
+      script.onload = function() {{
+        if (typeof d3 !== 'undefined') {{
+          console.log('✅ [BESTLIB] D3.js cargado desde CDN');
+          resolve();
+        }} else {{
+          reject(new Error('D3 no se inicializó después de cargar'));
+        }}
+      }};
+      script.onerror = function() {{
+        console.warn('⚠️ [BESTLIB] Error al cargar D3.js desde CDN primario, intentando alternativo');
+        // Intentar CDN alternativo
+        script.src = 'https://unpkg.com/d3@7/dist/d3.min.js';
+        script.onload = function() {{
+          if (typeof d3 !== 'undefined') {{
+            console.log('✅ [BESTLIB] D3.js cargado desde CDN alternativo');
+            resolve();
+          }} else {{
+            reject(new Error('D3 no se inicializó después de cargar'));
+          }}
+        }};
+        script.onerror = function() {{
+          reject(new Error('No se pudo cargar D3.js desde ningún CDN'));
+        }};
+      }};
+      document.head.appendChild(script);
+    }});
+  }}
+  
+  // Timeout máximo: 15 segundos
+  const maxWaitTime = 15000;
   const startTime = Date.now();
   
   // Función para esperar a D3 y luego renderizar
@@ -60,8 +118,19 @@ class JSBuilder:
       // D3 y render están disponibles, ejecutar render
       render("{div_id}", `{escaped_layout}`, mapping);
     }} else {{
-      // Esperar 100ms y volver a intentar
-      setTimeout(waitForD3AndRender, 100);
+      // Intentar cargar D3 si no está disponible
+      if (typeof d3 === 'undefined') {{
+        loadD3IfNeeded().then(function() {{
+          // D3 cargado, esperar un poco más para que render esté disponible
+          setTimeout(waitForD3AndRender, 100);
+        }}).catch(function(error) {{
+          console.error('❌ [BESTLIB] Error al cargar D3.js:', error);
+          setTimeout(waitForD3AndRender, 100);
+        }});
+      }} else {{
+        // Esperar 100ms y volver a intentar
+        setTimeout(waitForD3AndRender, 100);
+      }}
     }}
   }}
   
