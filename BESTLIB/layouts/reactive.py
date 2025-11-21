@@ -376,6 +376,13 @@ class ReactiveMatrixLayout:
                 self._selection_variables[letter] = selection_var
                 # Crear variable en el namespace del usuario (inicializar como DataFrame vacío)
                 import __main__
+                # Asegurar que pd esté disponible (usar el del módulo global)
+                if HAS_PANDAS and pd is None:
+                    import sys
+                    if 'pandas' in sys.modules:
+                        pd = sys.modules['pandas']
+                    else:
+                        import pandas as pd
                 empty_df = pd.DataFrame() if HAS_PANDAS else []
                 setattr(__main__, selection_var, empty_df)
                 if self._debug or MatrixLayout._debug:
@@ -956,6 +963,13 @@ class ReactiveMatrixLayout:
             if selection_var:
                 self._selection_variables[letter] = selection_var
                 import __main__
+                # Asegurar que pd esté disponible (usar el del módulo global)
+                if HAS_PANDAS and pd is None:
+                    import sys
+                    if 'pandas' in sys.modules:
+                        pd = sys.modules['pandas']
+                    else:
+                        import pandas as pd
                 empty_df = pd.DataFrame() if HAS_PANDAS else []
                 setattr(__main__, selection_var, empty_df)
                 if self._debug or MatrixLayout._debug:
@@ -1149,6 +1163,13 @@ class ReactiveMatrixLayout:
             if selection_var:
                 self._selection_variables[letter] = selection_var
                 import __main__
+                # Asegurar que pd esté disponible (usar el del módulo global)
+                if HAS_PANDAS and pd is None:
+                    import sys
+                    if 'pandas' in sys.modules:
+                        pd = sys.modules['pandas']
+                    else:
+                        import pandas as pd
                 empty_df = pd.DataFrame() if HAS_PANDAS else []
                 setattr(__main__, selection_var, empty_df)
                 if self._debug or MatrixLayout._debug:
@@ -1363,7 +1384,14 @@ class ReactiveMatrixLayout:
                     # IMPORTANTE: Almacenar filas originales para cada bin
                     bin_rows = [[] for _ in range(len(bin_edges) - 1)]  # Lista de listas para cada bin
                     
-                    if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
+                    # Asegurar que pd esté disponible
+                    if HAS_PANDAS and pd is None:
+                        import sys
+                        if 'pandas' in sys.modules:
+                            pd = sys.modules['pandas']
+                        else:
+                            import pandas as pd
+                    if HAS_PANDAS and pd is not None and isinstance(data_to_use, pd.DataFrame):
                         # Para DataFrame: almacenar todas las filas originales que caen en cada bin
                         original_data = data_to_use.to_dict('records')
                         for row in original_data:
@@ -1782,7 +1810,14 @@ class ReactiveMatrixLayout:
                     data_to_use = self._data
                 
                 # Preparar datos para boxplot
-                if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
+                # Asegurar que pd esté disponible (usar el del módulo global)
+                if HAS_PANDAS and pd is None:
+                    import sys
+                    if 'pandas' in sys.modules:
+                        pd = sys.modules['pandas']
+                    else:
+                        import pandas as pd
+                if HAS_PANDAS and pd is not None and isinstance(data_to_use, pd.DataFrame):
                     if category_col and category_col in data_to_use.columns:
                         # Boxplot por categoría
                         box_data = []
@@ -2125,39 +2160,76 @@ class ReactiveMatrixLayout:
         
         # Crear boxplot inicial con datos filtrados si hay selección, o todos los datos si no
         data_to_use = initial_data if 'initial_data' in locals() else self._data
-        if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
-            if category_col and category_col in data_to_use.columns:
-                # Boxplot por categoría
-                box_data = []
-                for cat in data_to_use[category_col].unique():
-                    cat_data = data_to_use[data_to_use[category_col] == cat][column].dropna()
-                    if len(cat_data) > 0:
-                        q1 = cat_data.quantile(0.25)
-                        median = cat_data.quantile(0.5)
-                        q3 = cat_data.quantile(0.75)
+        # Asegurar que pd esté disponible si HAS_PANDAS es True
+        # Usar globals() para acceder al pd del módulo y evitar UnboundLocalError
+        if HAS_PANDAS:
+            # Obtener pd del módulo global
+            pd_module = globals().get('pd')
+            if pd_module is None:
+                import sys
+                if 'pandas' in sys.modules:
+                    pd_module = sys.modules['pandas']
+                else:
+                    import pandas as pd_module
+                    globals()['pd'] = pd_module
+            # Usar pd_module en lugar de pd para evitar UnboundLocalError
+            if pd_module is not None and isinstance(data_to_use, pd_module.DataFrame):
+                if category_col and category_col in data_to_use.columns:
+                    # Boxplot por categoría
+                    box_data = []
+                    for cat in data_to_use[category_col].unique():
+                        cat_data = data_to_use[data_to_use[category_col] == cat][column].dropna()
+                        if len(cat_data) > 0:
+                            q1 = cat_data.quantile(0.25)
+                            median = cat_data.quantile(0.5)
+                            q3 = cat_data.quantile(0.75)
+                            iqr = q3 - q1
+                            lower = max(q1 - 1.5 * iqr, cat_data.min())
+                            upper = min(q3 + 1.5 * iqr, cat_data.max())
+                            box_data.append({
+                                'category': cat,
+                                'q1': float(q1),
+                                'median': float(median),
+                                'q3': float(q3),
+                                'lower': float(lower),
+                                'upper': float(upper),
+                                'min': float(cat_data.min()),
+                                'max': float(cat_data.max())
+                            })
+                else:
+                    # Boxplot simple
+                    values = data_to_use[column].dropna()
+                    if len(values) > 0:
+                        q1 = values.quantile(0.25)
+                        median = values.quantile(0.5)
+                        q3 = values.quantile(0.75)
                         iqr = q3 - q1
-                        lower = max(q1 - 1.5 * iqr, cat_data.min())
-                        upper = min(q3 + 1.5 * iqr, cat_data.max())
-                        box_data.append({
-                            'category': cat,
+                        lower = max(q1 - 1.5 * iqr, values.min())
+                        upper = min(q3 + 1.5 * iqr, values.max())
+                        box_data = [{
+                            'category': 'All',
                             'q1': float(q1),
                             'median': float(median),
                             'q3': float(q3),
                             'lower': float(lower),
                             'upper': float(upper),
-                            'min': float(cat_data.min()),
-                            'max': float(cat_data.max())
-                        })
+                            'min': float(values.min()),
+                            'max': float(values.max())
+                        }]
+                    else:
+                        box_data = []
             else:
-                # Boxplot simple
-                values = data_to_use[column].dropna()
-                if len(values) > 0:
-                    q1 = values.quantile(0.25)
-                    median = values.quantile(0.5)
-                    q3 = values.quantile(0.75)
+                # Si no es DataFrame, usar fallback para listas de diccionarios
+                values = [item.get(column, 0) for item in data_to_use if column in item]
+                if values:
+                    sorted_vals = sorted(values)
+                    n = len(sorted_vals)
+                    q1 = sorted_vals[int(n * 0.25)]
+                    median = sorted_vals[int(n * 0.5)]
+                    q3 = sorted_vals[int(n * 0.75)]
                     iqr = q3 - q1
-                    lower = max(q1 - 1.5 * iqr, values.min())
-                    upper = min(q3 + 1.5 * iqr, values.max())
+                    lower = max(q1 - 1.5 * iqr, min(values))
+                    upper = min(q3 + 1.5 * iqr, max(values))
                     box_data = [{
                         'category': 'All',
                         'q1': float(q1),
@@ -2165,35 +2237,11 @@ class ReactiveMatrixLayout:
                         'q3': float(q3),
                         'lower': float(lower),
                         'upper': float(upper),
-                        'min': float(values.min()),
-                        'max': float(values.max())
+                        'min': float(min(values)),
+                        'max': float(max(values))
                     }]
                 else:
                     box_data = []
-        else:
-            # Fallback para listas de diccionarios
-            values = [item.get(column, 0) for item in data_to_use if column in item]
-            if values:
-                sorted_vals = sorted(values)
-                n = len(sorted_vals)
-                q1 = sorted_vals[int(n * 0.25)]
-                median = sorted_vals[int(n * 0.5)]
-                q3 = sorted_vals[int(n * 0.75)]
-                iqr = q3 - q1
-                lower = max(q1 - 1.5 * iqr, min(values))
-                upper = min(q3 + 1.5 * iqr, max(values))
-                box_data = [{
-                    'category': 'All',
-                    'q1': float(q1),
-                    'median': float(median),
-                    'q3': float(q3),
-                    'lower': float(lower),
-                    'upper': float(upper),
-                    'min': float(min(values)),
-                    'max': float(max(values))
-                }]
-            else:
-                box_data = []
         
         if box_data:
             boxplot_spec = {
@@ -2392,6 +2440,13 @@ class ReactiveMatrixLayout:
             if selection_var:
                 self._selection_variables[letter] = selection_var
                 import __main__
+                # Asegurar que pd esté disponible (usar el del módulo global)
+                if HAS_PANDAS and pd is None:
+                    import sys
+                    if 'pandas' in sys.modules:
+                        pd = sys.modules['pandas']
+                    else:
+                        import pandas as pd
                 empty_df = pd.DataFrame() if HAS_PANDAS else []
                 setattr(__main__, selection_var, empty_df)
                 if self._debug or MatrixLayout._debug:
