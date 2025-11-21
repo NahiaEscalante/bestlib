@@ -462,10 +462,25 @@ class ReactiveMatrixLayout:
                         print(f"⚠️ [ReactiveMatrixLayout] items no es lista: {type(items)}")
                     items = []
                 
-                # ✅ CORRECCIÓN: Filtrado más flexible
+                # ✅ CORRECCIÓN CRÍTICA: Filtrado más flexible y robusto
+                # Aceptar tanto __view_letter__ como __scatter_letter__ para compatibilidad
                 event_letter = payload.get('__view_letter__') or payload.get('__scatter_letter__')
-                if event_letter is not None and event_letter != letter:
-                    return
+                
+                # Si el evento tiene una letra específica, verificar que coincida
+                if event_letter is not None:
+                    if event_letter != letter:
+                        if self._debug or MatrixLayout._debug:
+                            print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{letter}', recibido '{event_letter}'")
+                        return
+                else:
+                    # Si no hay letra en el payload, podría ser un evento genérico
+                    # En este caso, solo procesar si el payload tiene items y parece ser para este bar chart
+                    # Verificar por tipo de gráfico
+                    graph_type = payload.get('__graph_type__', '')
+                    if graph_type != 'bar' and graph_type != '':
+                        if self._debug or MatrixLayout._debug:
+                            print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: tipo de gráfico '{graph_type}' no es 'bar'")
+                        return
                 
                 # CRÍTICO: Prevenir procesamiento si estamos actualizando el bar chart
                 # Verificar flag de actualización del bar chart
@@ -596,9 +611,18 @@ class ReactiveMatrixLayout:
             **kwargs
         )
         
-        # Asegurar que __linked_to__ esté en el spec guardado (por si map_barchart no lo copió)
-        if not is_primary and linked_to:
-            if letter in MatrixLayout._map:
+        # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
+        # Esto es necesario para que JavaScript pueda identificar el gráfico correctamente
+        if letter in MatrixLayout._map:
+            if is_primary:
+                # Para vista principal, asegurar que tenga los identificadores
+                MatrixLayout._map[letter]['__view_letter__'] = letter
+                MatrixLayout._map[letter]['__is_primary_view__'] = True
+                MatrixLayout._map[letter]['interactive'] = True
+                if self._debug or MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Bar chart '{letter}' configurado como vista principal con __view_letter__={letter}")
+            elif linked_to:
+                # Para vista enlazada, asegurar que tenga __linked_to__
                 MatrixLayout._map[letter]['__linked_to__'] = linked_to
         
         # Registrar vista para sistema de enlace
@@ -1051,9 +1075,22 @@ class ReactiveMatrixLayout:
                     print(f"📦 Variable '{selection_var}' creada para guardar selecciones de grouped bar chart '{letter}' como {df_type}")
             
             def grouped_handler(payload):
-                event_letter = payload.get('__view_letter__')
-                if event_letter != letter:
-                    return
+                # ✅ CORRECCIÓN CRÍTICA: Filtrado más flexible y robusto
+                event_letter = payload.get('__view_letter__') or payload.get('__scatter_letter__')
+                
+                # Si el evento tiene una letra específica, verificar que coincida
+                if event_letter is not None:
+                    if event_letter != letter:
+                        if self._debug or MatrixLayout._debug:
+                            print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{letter}', recibido '{event_letter}'")
+                        return
+                else:
+                    # Si no hay letra en el payload, verificar por tipo de gráfico
+                    graph_type = payload.get('__graph_type__', '')
+                    if graph_type != 'grouped_bar' and graph_type != '':
+                        if self._debug or MatrixLayout._debug:
+                            print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: tipo de gráfico '{graph_type}' no es 'grouped_bar'")
+                        return
                 
                 items = payload.get('items', [])
                 
@@ -1083,6 +1120,19 @@ class ReactiveMatrixLayout:
         
         # Crear gráfico inicial
         MatrixLayout.map_grouped_barchart(letter, self._data, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
+        
+        # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
+        if letter in MatrixLayout._map:
+            if is_primary:
+                # Para vista principal, asegurar que tenga los identificadores
+                MatrixLayout._map[letter]['__view_letter__'] = letter
+                MatrixLayout._map[letter]['__is_primary_view__'] = True
+                MatrixLayout._map[letter]['interactive'] = True
+                if self._debug or MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Grouped bar chart '{letter}' configurado como vista principal con __view_letter__={letter}")
+            elif linked_to:
+                # Para vista enlazada, asegurar que tenga __linked_to__
+                MatrixLayout._map[letter]['__linked_to__'] = linked_to
         
         # Si es vista enlazada, configurar callback
         if not is_primary:
@@ -1261,9 +1311,22 @@ class ReactiveMatrixLayout:
             # Crear handler para eventos de selección del histogram
             def histogram_handler(payload):
                 """Handler que actualiza el SelectionModel de este histogram"""
-                event_letter = payload.get('__view_letter__')
-                if event_letter != letter:
-                    return
+                # ✅ CORRECCIÓN CRÍTICA: Filtrado más flexible y robusto
+                event_letter = payload.get('__view_letter__') or payload.get('__scatter_letter__')
+                
+                # Si el evento tiene una letra específica, verificar que coincida
+                if event_letter is not None:
+                    if event_letter != letter:
+                        if self._debug or MatrixLayout._debug:
+                            print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{letter}', recibido '{event_letter}'")
+                        return
+                else:
+                    # Si no hay letra en el payload, verificar por tipo de gráfico
+                    graph_type = payload.get('__graph_type__', '')
+                    if graph_type != 'histogram' and graph_type != '':
+                        if self._debug or MatrixLayout._debug:
+                            print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: tipo de gráfico '{graph_type}' no es 'histogram'")
+                        return
                 
                 items = payload.get('items', [])
                 
@@ -1774,22 +1837,33 @@ class ReactiveMatrixLayout:
         # Crear histograma inicial con datos filtrados si hay selección, o todos los datos si no
         MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **kwargs)
         
-        # Asegurar que __linked_to__ esté en el spec guardado (por si map_histogram no lo copió)
-        if not is_primary and linked_to:
-            if letter in MatrixLayout._map:
+        # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
+        if letter in MatrixLayout._map:
+            if is_primary:
+                # Para vista principal, asegurar que tenga los identificadores
+                MatrixLayout._map[letter]['__view_letter__'] = letter
+                MatrixLayout._map[letter]['__is_primary_view__'] = True
+                MatrixLayout._map[letter]['interactive'] = True
+                if self._debug or MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Histogram '{letter}' configurado como vista principal con __view_letter__={letter}")
+            elif linked_to:
+                # Para vista enlazada, asegurar que tenga __linked_to__
                 MatrixLayout._map[letter]['__linked_to__'] = linked_to
         
         return self
     
-    def add_boxplot(self, letter, column=None, category_col=None, linked_to=None, **kwargs):
+    def add_boxplot(self, letter, column=None, category_col=None, linked_to=None, interactive=None, selection_var=None, **kwargs):
         """
-        Agrega un boxplot enlazado que se actualiza automáticamente cuando se selecciona en scatter.
+        Agrega un boxplot que puede ser vista principal o enlazada.
         
         Args:
             letter: Letra del layout ASCII donde irá el boxplot
             column: Nombre de columna numérica para el boxplot
             category_col: Nombre de columna de categorías (opcional, para boxplot por categoría)
-            linked_to: Letra del scatter plot que debe actualizar este boxplot (opcional)
+            linked_to: Letra de la vista principal que debe actualizar este boxplot (opcional)
+                      Si no se especifica y interactive=True, este boxplot será vista principal
+            interactive: Si True, permite seleccionar cajas. Si es None, se infiere de linked_to
+            selection_var: Nombre de variable Python donde guardar selecciones (ej: 'selected_box')
             **kwargs: Argumentos adicionales (color, axes, etc.)
         
         Returns:
@@ -1803,13 +1877,116 @@ class ReactiveMatrixLayout:
         if column is None:
             raise ValueError("Debe especificar 'column' para el boxplot")
         
+        # Determinar si será vista principal o enlazada
+        if linked_to is None:
+            # Si no hay linked_to, NO es vista enlazada
+            # Solo es vista principal si interactive=True se especifica EXPLÍCITAMENTE
+            if interactive is None:
+                # Por defecto, NO interactivo y NO enlazado (gráfico estático)
+                interactive = False
+                is_primary = False
+            else:
+                # Si el usuario especificó interactive explícitamente, respetarlo
+                is_primary = interactive
+        else:
+            # Si hay linked_to, es una vista enlazada
+            is_primary = False
+            if interactive is None:
+                interactive = False  # Por defecto, no interactivo si está enlazado
+        
+        # Si es vista principal, crear su propio SelectionModel
+        if is_primary:
+            boxplot_selection = SelectionModel()
+            self._primary_view_models[letter] = boxplot_selection
+            self._primary_view_types[letter] = 'boxplot'
+            
+            # Guardar variable de selección si se especifica
+            if selection_var:
+                self._selection_variables[letter] = selection_var
+                import __main__
+                if HAS_PANDAS:
+                    pd_module = globals().get('pd')
+                    if pd_module is None:
+                        import sys
+                        if 'pandas' in sys.modules:
+                            pd_module = sys.modules['pandas']
+                        else:
+                            import pandas as pd_module
+                            globals()['pd'] = pd_module
+                    empty_df = pd_module.DataFrame() if pd_module is not None else []
+                else:
+                    empty_df = []
+                setattr(__main__, selection_var, empty_df)
+                if self._debug or MatrixLayout._debug:
+                    df_type = "DataFrame" if HAS_PANDAS else "lista"
+                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de boxplot '{letter}' como {df_type}")
+            
+            # Crear handler para eventos de selección del boxplot
+            def boxplot_handler(payload):
+                """Handler que actualiza el SelectionModel de este boxplot"""
+                # ✅ CORRECCIÓN CRÍTICA: Filtrado más flexible y robusto
+                event_letter = payload.get('__view_letter__') or payload.get('__scatter_letter__')
+                
+                # Si el evento tiene una letra específica, verificar que coincida
+                if event_letter is not None:
+                    if event_letter != letter:
+                        if self._debug or MatrixLayout._debug:
+                            print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{letter}', recibido '{event_letter}'")
+                        return
+                else:
+                    # Si no hay letra en el payload, verificar por tipo de gráfico
+                    graph_type = payload.get('__graph_type__', '')
+                    if graph_type != 'boxplot' and graph_type != '':
+                        if self._debug or MatrixLayout._debug:
+                            print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: tipo de gráfico '{graph_type}' no es 'boxplot'")
+                        return
+                
+                items = payload.get('items', [])
+                
+                if self._debug or MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Evento recibido para boxplot '{letter}': {len(items)} items")
+                
+                # Convertir items a DataFrame antes de guardar
+                items_df = _items_to_dataframe(items)
+                
+                boxplot_selection.update(items)
+                self.selection_model.update(items)
+                self._selected_data = items_df if items_df is not None else items
+                
+                # Guardar en variable Python si se especificó (como DataFrame)
+                if selection_var:
+                    self.set_selection(selection_var, items_df if items_df is not None else items)
+                    if self._debug or MatrixLayout._debug:
+                        count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
+                        print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
+            
+            self._layout.on('select', boxplot_handler)
+            
+            kwargs['__view_letter__'] = letter
+            kwargs['__is_primary_view__'] = True
+            kwargs['interactive'] = True
+        
         # Verificar si ya existe un callback para este boxplot (evitar duplicados)
         if letter in self._boxplot_callbacks:
             if self._debug or MatrixLayout._debug:
                 print(f"⚠️ Boxplot para '{letter}' ya está registrado. Ignorando registro duplicado.")
             return self
         
-        # Determinar a qué vista principal enlazar
+        # Si es vista principal, crear boxplot y retornar
+        if is_primary:
+            MatrixLayout.map_boxplot(letter, self._data, category_col=category_col, value_col=column, **kwargs)
+            
+            # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
+            if letter in MatrixLayout._map:
+                MatrixLayout._map[letter]['__view_letter__'] = letter
+                MatrixLayout._map[letter]['__is_primary_view__'] = True
+                MatrixLayout._map[letter]['interactive'] = True
+                if self._debug or MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Boxplot '{letter}' configurado como vista principal con __view_letter__={letter}")
+            
+            return self
+        
+        # Determinar a qué vista principal enlazar (solo si es vista enlazada)
         primary_letter = None  # Inicializar siempre
         
         if linked_to is not None:
@@ -1859,6 +2036,13 @@ class ReactiveMatrixLayout:
             kwargs['__linked_to__'] = primary_letter
         else:
             kwargs.pop('__linked_to__', None)  # Remover si existe
+        
+        # Crear boxplot inicial
+        MatrixLayout.map_boxplot(letter, self._data, category_col=category_col, value_col=column, **kwargs)
+        
+        # ✅ CORRECCIÓN CRÍTICA: Asegurar que __linked_to__ esté en el spec guardado
+        if letter in MatrixLayout._map and primary_letter is not None:
+            MatrixLayout._map[letter]['__linked_to__'] = primary_letter
         
         # Guardar parámetros
         boxplot_params = {
