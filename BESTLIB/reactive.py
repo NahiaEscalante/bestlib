@@ -318,6 +318,60 @@ class ReactiveMatrixLayout:
         selected_rows = selection.get_items()  # Lista de diccionarios con todas las columnas
     """
     
+    @classmethod
+    def set_debug(cls, enabled: bool):
+        """
+        Activa/desactiva mensajes de debug.
+        
+        Args:
+            enabled (bool): Si True, activa mensajes detallados de debug.
+                           Si False, solo muestra errores críticos.
+        
+        Ejemplo:
+            ReactiveMatrixLayout.set_debug(True)  # Activar debug
+            layout = ReactiveMatrixLayout("SB")
+            # ... código ...
+            ReactiveMatrixLayout.set_debug(False)  # Desactivar debug
+        """
+        MatrixLayout = _get_matrix_layout()
+        MatrixLayout.set_debug(enabled)
+    
+    @classmethod
+    def on_global(cls, event, func):
+        """
+        Registra un callback global para un tipo de evento.
+        
+        Los callbacks globales se ejecutan para TODOS los layouts, no solo uno específico.
+        Útil para logging o procesamiento centralizado de eventos.
+        
+        Args:
+            event (str): Tipo de evento ('select', 'click', 'brush', etc.)
+            func (callable): Función callback que recibe el payload del evento
+        
+        Ejemplo:
+            def log_selection(payload):
+                print(f"Selección global: {payload['count']} elementos")
+            
+            ReactiveMatrixLayout.on_global('select', log_selection)
+        """
+        MatrixLayout = _get_matrix_layout()
+        MatrixLayout.on_global(event, func)
+    
+    @classmethod
+    def register_comm(cls, force=False):
+        """
+        Registra manualmente el comm target de Jupyter.
+        Útil para forzar el registro o verificar que funciona.
+        
+        Args:
+            force (bool): Si True, fuerza el re-registro incluso si ya está registrado
+        
+        Returns:
+            bool: True si el registro fue exitoso, False si falló
+        """
+        MatrixLayout = _get_matrix_layout()
+        return MatrixLayout.register_comm(force=force)
+    
     def __init__(self, ascii_layout=None, selection_model=None, figsize=None, row_heights=None, col_widths=None, gap=None, cell_padding=None, max_width=None):
         """
         Crea un MatrixLayout con soporte reactivo y LinkedViews integrado.
