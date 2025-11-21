@@ -198,7 +198,7 @@ class ReactiveMatrixLayout:
         self._data = data
         return self
     
-    def add_scatter(self, letter, data=None, x_col=None, y_col=None, category_col=None, interactive=True, **kwargs):
+    def add_scatter(self, letter, data=None, x_col=None, y_col=None, category_col=None, interactive=True, selection_var=None, **kwargs):
         """
         Agrega un scatter plot a la matriz con soporte para DataFrames.
         
@@ -209,6 +209,7 @@ class ReactiveMatrixLayout:
             y_col: Nombre de columna para eje Y
             category_col: Nombre de columna para categorías (opcional)
             interactive: Si True, habilita brush selection
+            selection_var: Nombre de variable Python donde guardar selecciones (ej: 'selected_data')
             **kwargs: Argumentos adicionales (colorMap, pointRadius, axes, etc.)
         
         Returns:
@@ -218,6 +219,30 @@ class ReactiveMatrixLayout:
             self._data = data
         elif self._data is None:
             raise ValueError("Debe proporcionar datos con data= o usar set_data() primero")
+        
+        # ✅ CORRECCIÓN CRÍTICA: Guardar selection_var si se especifica
+        if selection_var:
+            if not hasattr(self, '_selection_variables'):
+                self._selection_variables = {}
+            self._selection_variables[letter] = selection_var
+            # Crear variable en el namespace del usuario (inicializar como DataFrame vacío)
+            import __main__
+            if HAS_PANDAS:
+                pd_module = globals().get('pd')
+                if pd_module is None:
+                    import sys
+                    if 'pandas' in sys.modules:
+                        pd_module = sys.modules['pandas']
+                    else:
+                        import pandas as pd_module
+                        globals()['pd'] = pd_module
+                empty_df = pd_module.DataFrame() if pd_module is not None else []
+            else:
+                empty_df = []
+            setattr(__main__, selection_var, empty_df)
+            if self._debug or MatrixLayout._debug:
+                df_type = "DataFrame" if HAS_PANDAS else "lista"
+                print(f"📦 Variable '{selection_var}' creada para guardar selecciones de scatter '{letter}' como {df_type}")
         
         # Crear un SelectionModel específico para este scatter plot
         # Esto permite que cada scatter plot actualice solo sus bar charts asociados

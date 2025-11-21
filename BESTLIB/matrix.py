@@ -314,7 +314,15 @@ class MatrixLayout:
                         inst_ref = cls._instances.get(div_id)
                         inst = inst_ref() if inst_ref else None
                         
-                        # Buscar handlers: primero en instancia (puede haber múltiples), luego global
+                        # ✅ CORRECCIÓN CRÍTICA: Si la instancia tiene _event_manager (sistema modular), usarlo
+                        if inst and hasattr(inst, "_event_manager"):
+                            # Sistema modular: usar EventManager
+                            if cls._debug:
+                                print(f"   ✅ Usando EventManager (sistema modular)")
+                            inst._event_manager.emit(event_type, payload)
+                            return  # ✅ IMPORTANTE: Salir después de emitir al EventManager
+                        
+                        # Sistema legacy: buscar handlers en _handlers
                         handlers = []
                         handler_names = []  # Para debug: nombres de handlers
                         
