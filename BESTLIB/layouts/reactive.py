@@ -1354,16 +1354,21 @@ class ReactiveMatrixLayout:
             kwargs['interactive'] = True
         
         # Si es vista principal, crear histograma y retornar
+        # ✅ DEBUG SIEMPRE: Verificar si es vista principal
+        print(f"🔍 [add_histogram] Verificando si es vista principal para '{letter}'")
+        print(f"   - is_primary: {is_primary}")
+        print(f"   - interactive: {interactive}")
+        print(f"   - linked_to: {linked_to}")
+        
         if is_primary:
             # ✅ DEBUG: Verificar datos antes de crear histograma
-            if self._debug or MatrixLayout._debug:
-                print(f"🔍 [ReactiveMatrixLayout] Creando histogram '{letter}' como vista principal")
-                print(f"   - initial_data type: {type(initial_data)}")
-                if HAS_PANDAS and hasattr(initial_data, 'shape'):
-                    print(f"   - initial_data shape: {initial_data.shape}")
-                    print(f"   - column '{column}' exists: {column in initial_data.columns if hasattr(initial_data, 'columns') else 'N/A'}")
-                elif isinstance(initial_data, list):
-                    print(f"   - initial_data length: {len(initial_data)}")
+            print(f"🔍 [ReactiveMatrixLayout] Creando histogram '{letter}' como vista principal")
+            print(f"   - initial_data type: {type(initial_data)}")
+            if HAS_PANDAS and hasattr(initial_data, 'shape'):
+                print(f"   - initial_data shape: {initial_data.shape}")
+                print(f"   - column '{column}' exists: {column in initial_data.columns if hasattr(initial_data, 'columns') else 'N/A'}")
+            elif isinstance(initial_data, list):
+                print(f"   - initial_data length: {len(initial_data)}")
             
             # ✅ CORRECCIÓN CRÍTICA: Asegurar que xLabel y yLabel se pasen correctamente
             # map_histogram usa value_col, no column, así que asegurar que esté en kwargs si se especificó
@@ -1373,8 +1378,30 @@ class ReactiveMatrixLayout:
             if 'yLabel' in histogram_kwargs:
                 histogram_kwargs['yLabel'] = histogram_kwargs['yLabel']
             
+            # ✅ DEBUG: Verificar antes de llamar a map_histogram
+            print(f"🔍 [add_histogram] ANTES de llamar map_histogram:")
+            print(f"   - letter: {letter}")
+            print(f"   - initial_data type: {type(initial_data)}")
+            print(f"   - initial_data is None: {initial_data is None}")
+            if hasattr(initial_data, 'shape'):
+                print(f"   - initial_data shape: {initial_data.shape}")
+            print(f"   - column: {column}")
+            print(f"   - bins: {bins}")
+            print(f"   - histogram_kwargs keys: {list(histogram_kwargs.keys())}")
+            
             # ✅ CORRECCIÓN CRÍTICA: Llamar a map_histogram y guardar el spec retornado
-            spec = MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **histogram_kwargs)
+            try:
+                spec = MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **histogram_kwargs)
+                print(f"🔍 [add_histogram] DESPUÉS de llamar map_histogram:")
+                print(f"   - spec type: {type(spec)}")
+                print(f"   - spec keys: {list(spec.keys()) if isinstance(spec, dict) else 'N/A'}")
+                if isinstance(spec, dict):
+                    print(f"   - spec['data'] length: {len(spec.get('data', []))}")
+            except Exception as e:
+                print(f"❌ [add_histogram] ERROR al llamar map_histogram: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
             
             # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
             # Usar el spec retornado en lugar de acceder directamente a _map para evitar problemas de sincronización
