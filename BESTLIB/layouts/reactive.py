@@ -1353,6 +1353,20 @@ class ReactiveMatrixLayout:
             kwargs['__is_primary_view__'] = True
             kwargs['interactive'] = True
         
+        # Si es vista principal, crear histograma y retornar
+        if is_primary:
+            MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **kwargs)
+            
+            # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
+            if letter in MatrixLayout._map:
+                MatrixLayout._map[letter]['__view_letter__'] = letter
+                MatrixLayout._map[letter]['__is_primary_view__'] = True
+                MatrixLayout._map[letter]['interactive'] = True
+                if self._debug or MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Histogram '{letter}' configurado como vista principal con __view_letter__={letter}")
+            
+            return self
+        
         # Inicializar primary_letter siempre
         primary_letter = None
         
@@ -1835,20 +1849,12 @@ class ReactiveMatrixLayout:
                         print(f"📊 Histogram '{letter}' inicializado con {len(processed_items) if processed_items else len(self._data)} items (hay selección activa)")
         
         # Crear histograma inicial con datos filtrados si hay selección, o todos los datos si no
+        # (Solo para vistas enlazadas, las vistas principales ya se crearon arriba)
         MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **kwargs)
         
-        # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
-        if letter in MatrixLayout._map:
-            if is_primary:
-                # Para vista principal, asegurar que tenga los identificadores
-                MatrixLayout._map[letter]['__view_letter__'] = letter
-                MatrixLayout._map[letter]['__is_primary_view__'] = True
-                MatrixLayout._map[letter]['interactive'] = True
-                if self._debug or MatrixLayout._debug:
-                    print(f"✅ [ReactiveMatrixLayout] Histogram '{letter}' configurado como vista principal con __view_letter__={letter}")
-            elif linked_to:
-                # Para vista enlazada, asegurar que tenga __linked_to__
-                MatrixLayout._map[letter]['__linked_to__'] = linked_to
+        # ✅ CORRECCIÓN CRÍTICA: Asegurar que __linked_to__ esté en el spec guardado (solo para vistas enlazadas)
+        if letter in MatrixLayout._map and linked_to:
+            MatrixLayout._map[letter]['__linked_to__'] = linked_to
         
         return self
     
