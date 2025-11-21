@@ -7217,6 +7217,14 @@
     const opacity = options.opacity || 0.3;
     const strokeWidth = options.strokeWidth || spec.strokeWidth || 2;
     
+    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels
+    if (options.xLabel && !spec.xLabel) {
+      spec.xLabel = options.xLabel;
+    }
+    if (options.yLabel && !spec.yLabel) {
+      spec.yLabel = options.yLabel;
+    }
+    
     const x = d3.scaleLinear()
       .domain(d3.extent(data, d => d.x) || [0, 100])
       .nice()
@@ -7422,6 +7430,18 @@
       container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para Rug</div>';
       return;
     }
+    
+    // Validar estructura de datos
+    if (!Array.isArray(data) || data.length === 0 || !data[0] || !data[0].hasOwnProperty('x')) {
+      console.error('[BESTLIB] renderRugD3: Estructura de datos inválida', { 
+        dataLength: data.length,
+        firstItem: data[0],
+        dataType: Array.isArray(data) ? 'array' : typeof data
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: Estructura de datos inválida para Rug (esperado: [{x, y}, ...])</div>';
+      return;
+    }
+    
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
@@ -7453,12 +7473,25 @@
     const size = options.size || 2;
     const opacity = options.opacity || 0.6;
     
+    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels
+    if (options.xLabel && !spec.xLabel) {
+      spec.xLabel = options.xLabel;
+    }
+    if (options.yLabel && !spec.yLabel) {
+      spec.yLabel = options.yLabel;
+    }
+    
     if (axis === 'x') {
+      // Calcular dominio correctamente
+      const xValues = data.map(d => d.x).filter(v => v != null && !isNaN(v));
+      const xDomain = xValues.length > 0 ? d3.extent(xValues) : [0, 100];
+      
       const x = d3.scaleLinear()
-        .domain(d3.extent(data, d => d.x) || [0, 100])
+        .domain(xDomain)
         .nice()
         .range([0, chartWidth]);
       
+      // Dibujar ticks del rug
       g.selectAll('.rug')
         .data(data)
         .enter()
@@ -7481,11 +7514,16 @@
         renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
       }
     } else {
+      // Calcular dominio correctamente para eje Y
+      const yValues = data.map(d => d.x).filter(v => v != null && !isNaN(v));
+      const yDomain = yValues.length > 0 ? d3.extent(yValues) : [0, 100];
+      
       const y = d3.scaleLinear()
-        .domain(d3.extent(data, d => d.x) || [0, 100])
+        .domain(yDomain)
         .nice()
         .range([chartHeight, 0]);
       
+      // Dibujar ticks del rug en el eje Y
       g.selectAll('.rug')
         .data(data)
         .enter()
@@ -7553,6 +7591,14 @@
     const color = options.color || spec.color || '#4a90e2';
     const strokeWidth = options.strokeWidth || spec.strokeWidth || 2;
     const showLine = options.showLine !== undefined ? options.showLine : true;
+    
+    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels
+    if (options.xLabel && !spec.xLabel) {
+      spec.xLabel = options.xLabel;
+    }
+    if (options.yLabel && !spec.yLabel) {
+      spec.yLabel = options.yLabel;
+    }
     
     const x = d3.scaleLinear()
       .domain(d3.extent(data, d => d.x) || [0, 100])
@@ -7745,6 +7791,14 @@
     const options = spec.options || {};
     const overlap = options.overlap || 0.5;
     const opacity = options.opacity || 0.7;
+    
+    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels
+    if (options.xLabel && !spec.xLabel) {
+      spec.xLabel = options.xLabel;
+    }
+    if (options.yLabel && !spec.yLabel) {
+      spec.yLabel = options.yLabel;
+    }
     const colorMap = options.colorMap || spec.colorMap || {};
     
     const categories = Object.keys(series);
@@ -7873,6 +7927,14 @@
     const opacity = options.opacity || 0.4;
     const showLines = options.showLines !== undefined ? options.showLines : true;
     const gradient = options.gradient !== undefined ? options.gradient : true;
+    
+    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels
+    if (options.xLabel && !spec.xLabel) {
+      spec.xLabel = options.xLabel;
+    }
+    if (options.yLabel && !spec.yLabel) {
+      spec.yLabel = options.yLabel;
+    }
     
     const x = d3.scaleLinear()
       .domain(data.length > 0 ? d3.extent(data, d => d.x) : [0, 100])
@@ -8029,6 +8091,14 @@
     const options = spec.options || {};
     const colorScale = options.colorScale || 'Blues';
     
+    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels
+    if (options.xLabel && !spec.xLabel) {
+      spec.xLabel = options.xLabel;
+    }
+    if (options.yLabel && !spec.yLabel) {
+      spec.yLabel = options.yLabel;
+    }
+    
     const x = d3.scaleLinear()
       .domain(d3.extent(data, d => d.x) || [0, 100])
       .nice()
@@ -8112,6 +8182,14 @@
     const color = options.color || spec.color || '#4a90e2';
     const showGrid = options.showGrid !== undefined ? options.showGrid : true;
     const showLabels = options.showLabels !== undefined ? options.showLabels : true;
+    
+    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels (Polar usa labels especiales)
+    if (options.xLabel && !spec.xLabel) {
+      spec.xLabel = options.xLabel;
+    }
+    if (options.yLabel && !spec.yLabel) {
+      spec.yLabel = options.yLabel;
+    }
     
     // Calcular coordenadas polares desde angle y radius (no usar x, y pre-calculados)
     const maxRadius = d3.max(data, d => (d.radius !== undefined ? d.radius : Math.sqrt(d.x*d.x + d.y*d.y))) || 1;
@@ -8234,6 +8312,14 @@
     const orientation = options.orientation || 'vertical';
     const color = options.color || spec.color || '#4a90e2';
     const opacity = options.opacity || 0.7;
+    
+    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels
+    if (options.xLabel && !spec.xLabel) {
+      spec.xLabel = options.xLabel;
+    }
+    if (options.yLabel && !spec.yLabel) {
+      spec.yLabel = options.yLabel;
+    }
     
     const maxValue = d3.max(data, d => d.value) || 1;
     const numStages = data.length;
