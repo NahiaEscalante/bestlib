@@ -1,2 +1,6 @@
 BESTLIB
-bestlib
+datasets
+dist
+docs
+scripts
+venv

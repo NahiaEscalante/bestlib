@@ -1,91 +1,156 @@
-# 📊 BESTLIB - Beautiful & Efficient Visualization Library
+# 📊 BESTLIB
 
-**BESTLIB** es una librería de visualización interactiva para Jupyter Notebooks que permite crear dashboards con layouts ASCII y gráficos D3.js.
+> BestLib, the best lib for graphics - Interactive dashboards for Jupyter with D3.js
 
-## ✨ Características
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Jupyter](https://img.shields.io/badge/Jupyter-Notebook-orange.svg)](https://jupyter.org/)
 
-- 🎨 **11+ tipos de gráficos** (scatter, bar, histogram, boxplot, heatmap, line, pie, violin, radviz, etc.)
-- 🔗 **Vistas enlazadas** - Sincronización automática entre gráficos
+**BESTLIB** es una librería de visualización interactiva que te permite crear dashboards profesionales en Jupyter Notebooks usando layouts ASCII y gráficos D3.js. Diseñada para ser simple, poderosa y completamente interactiva.
+
+## ✨ Características Principales
+
+- 🎨 **30+ tipos de gráficos** - Scatter, bar, histogram, boxplot, heatmap, line, pie, violin, radviz, kde, polar y más
+- 🔗 **Vistas enlazadas** - Sincronización automática entre múltiples gráficos
 - ⚡ **Sistema reactivo** - Actualización automática sin re-ejecutar celdas
-- 🖱️ **Interactividad** - Brush selection, click events, tooltips
-- 📐 **Layouts ASCII** - Define la disposición de gráficos con texto
-- 🐼 **Soporte pandas** - Trabaja directamente con DataFrames
-- 🎯 **Comunicación bidireccional** - Python ↔ JavaScript en tiempo real
+- 🖱️ **Interactividad completa** - Brush selection, click events, tooltips personalizables
+- 📐 **Layouts ASCII** - Define la disposición de gráficos con texto simple
+- 🐼 **Soporte pandas nativo** - Trabaja directamente con DataFrames sin conversiones
 
-## 📦 Instalación
-
-### Para Jupyter Notebook/Lab Local
+## 🚀 Instalación
 
 ```bash
-# Instalar desde GitHub
-pip install --upgrade --force-reinstall git+https://github.com/NahiaEscalante/bestlib.git@widget_mod
-
-# O instalar en modo desarrollo
-pip install -e .
+pip install pybestlib
 ```
 
-### Para Google Colab ⚡
-
-**⚠️ Importante:** Google Colab ya tiene las dependencias necesarias. Instala BESTLIB sin dependencias:
+### Para Google Colab
 
 ```python
-# Instalación en Colab (sin dependencias para evitar conflictos)
-!pip install --upgrade --no-deps git+https://github.com/NahiaEscalante/bestlib.git@widget_mod
+!pip install bestlib
 ```
 
-**Nota:** Colab ya tiene `pandas`, `numpy`, `ipython`, `jupyter`, e `ipywidgets` instalados.
+**Nota:** Colab ya incluye las dependencias necesarias (`pandas`, `numpy`, `ipywidgets`).
 
-**📚 Guía completa:** Ver [COLAB_INSTALL.md](COLAB_INSTALL.md) o [examples/COLAB_INSTALLATION.ipynb](examples/COLAB_INSTALLATION.ipynb)
-
-### Dependencias Requeridas
-
-BESTLIB requiere las siguientes dependencias (deben instalarse manualmente si no están presentes):
-
-- `ipython` (cualquier versión >= 7.0)
-- `ipywidgets` (cualquier versión >= 7.0)
-- `pandas` (cualquier versión >= 1.3.0)
-- `numpy` (cualquier versión >= 1.20.0)
-
-**Nota:** El código maneja las importaciones de forma opcional, por lo que BESTLIB funcionará incluso si algunas dependencias no están instaladas (con funcionalidades limitadas).
-
-## 🚀 Inicio Rápido
+## 💡 Inicio Rápido
 
 ```python
 from BESTLIB import MatrixLayout
 import pandas as pd
 
 # Cargar datos
-df = pd.read_csv('examples/iris.csv')
+df = pd.read_csv('iris.csv')
 
-# Crear scatter plot
+# Crear scatter plot interactivo
 MatrixLayout.map_scatter('S', df, 
                          x_col='sepal_length', 
                          y_col='petal_length',
                          category_col='species',
                          interactive=True)
 
+# Mostrar dashboard
 layout = MatrixLayout("S")
 layout.display()
 ```
 
-## 📚 Documentación
+### Ejemplo con Múltiples Gráficos
 
-- **[COLAB_INSTALL.md](COLAB_INSTALL.md)** - Guía de instalación para Google Colab
-- **[CHANGELOG.md](CHANGELOG.md)** - Historial de cambios
-- **[ANALISIS_ERRORES_Y_SOLUCION.md](ANALISIS_ERRORES_Y_SOLUCION.md)** - Análisis técnico
-- **[examples/demo_completo_bestlib.ipynb](examples/demo_completo_bestlib.ipynb)** - Demo completo con Iris
-- **[examples/COLAB_INSTALLATION.ipynb](examples/COLAB_INSTALLATION.ipynb)** - Guía de instalación en Colab
-- **[examples/test_completo_iris.ipynb](examples/test_completo_iris.ipynb)** - Tests completos
+```python
+from BESTLIB import ReactiveMatrixLayout
+import pandas as pd
 
-## ✅ Estado del Proyecto
+df = pd.read_csv('iris.csv')
+layout = ReactiveMatrixLayout("""
+SH
+HB
+""")
 
-- ✅ Sintaxis correcta en todos los módulos
-- ✅ 11+ tipos de gráficos funcionando
-- ✅ Sistema de vistas enlazadas operativo
-- ✅ Sistema reactivo implementado
-- ✅ Dataset de prueba incluido (iris.csv)
-- ✅ Tests completos disponibles
+# Scatter plot con selección
+layout.add_scatter('S', df, x_col='sepal_length', y_col='petal_length', 
+                   category_col='species', interactive=True)
+
+# Histograma enlazado
+layout.add_histogram('H', df, col='petal_length', interactive=True)
+
+# Bar chart
+layout.add_barchart('B', df, x_col='species', y_col='sepal_length')
+
+layout.display()
+```
+
+## 📊 Tipos de Gráficos Disponibles
+
+### Gráficos Básicos
+
+| Gráfico | Método | Descripción |
+|---------|--------|-------------|
+| **Scatter Plot** | `add_scatter()` | Dispersión con brush selection |
+| **Bar Chart** | `add_barchart()` | Barras verticales simples |
+| **Grouped Bar Chart** | `add_grouped_barchart()` | Barras agrupadas por categoría |
+| **Horizontal Bar** | `add_horizontal_bar()` | Barras horizontales |
+| **Histogram** | `add_histogram()` | Distribuciones con bins configurables |
+| **Boxplot** | `add_boxplot()` | Diagramas de caja por categoría |
+| **Line Chart** | `add_line()` | Series temporales y múltiples líneas |
+| **Line Plot** | `add_line_plot()` | Gráfico de líneas alternativo |
+| **Pie Chart** | `add_pie()` | Gráficos circulares |
+| **Violin Plot** | `add_violin()` | Distribuciones de densidad |
+
+### Gráficos Avanzados
+
+| Gráfico | Método | Descripción |
+|---------|--------|-------------|
+| **Heatmap** | `add_heatmap()` | Mapas de calor |
+| **Correlation Heatmap** | `add_correlation_heatmap()` | Matriz de correlación |
+| **Hexbin** | `add_hexbin()` | Dispersión con bins hexagonales |
+| **Hist2D** | `add_hist2d()` | Histograma 2D (densidad bivariada) |
+| **KDE** | `add_kde()` | Estimación de densidad kernel |
+| **Distplot** | `add_distplot()` | Histograma + KDE + rug plot |
+| **Rug Plot** | `add_rug()` | Marcadores marginales |
+| **QQ Plot** | `add_qqplot()` | Gráfico cuantil-cuantil |
+| **ECDF** | `add_ecdf()` | Función de distribución acumulativa empírica |
+| **Ridgeline** | `add_ridgeline()` | Distribuciones apiladas |
+| **Errorbars** | `add_errorbars()` | Barras de error |
+| **Fill Between** | `add_fill_between()` | Área entre dos curvas |
+| **Ribbon** | `add_ribbon()` | Cinta entre series |
+| **Step Plot** | `add_step()` | Gráfico de escalones |
+
+### Gráficos Especializados
+
+| Gráfico | Método | Descripción |
+|---------|--------|-------------|
+| **RadViz** | `add_radviz()` | Visualización radial multidimensional |
+| **Star Coordinates** | `add_star_coordinates()` | Coordenadas estelares |
+| **Parallel Coordinates** | `add_parallel_coordinates()` | Coordenadas paralelas |
+| **Polar** | `add_polar()` | Gráfico polar/radial |
+| **Funnel** | `add_funnel()` | Gráfico de embudo |
+| **Confusion Matrix** | `add_confusion_matrix()` | Matriz de confusión (ML) |
+
+## 🎯 Casos de Uso
+
+- **Análisis exploratorio de datos** - Visualiza rápidamente tus DataFrames
+- **Dashboards interactivos** - Crea interfaces de análisis sin HTML/JavaScript
+- **Presentaciones dinámicas** - Gráficos que responden a interacciones del usuario
+- **Enseñanza de datos** - Visualizaciones interactivas para educación
+
+## 🔧 Dependencias
+
+BESTLIB funciona con dependencias opcionales. Para funcionalidad completa, instala:
+
+```bash
+pip install ipython ipywidgets pandas numpy
+```
+
+**Opcional:** `scikit-learn` (solo para `add_confusion_matrix()`)
 
 ## 🤝 Contribuciones
 
-Desarrollado por: Nahia Escalante, Alejandro, Max
+Desarrollado por **Nahia Escalante, Alejandro Rojas y Max Antúnez**
+
+¿Encontraste un bug o tienes una sugerencia? ¡Abre un issue!
+
+## 📄 Licencia
+
+MIT License - Ver [LICENSE](LICENSE) para más detalles.
+
+---
+
+**¿Listo para crear visualizaciones increíbles?** ⚡ `pip install bestlib` y comienza ahora.

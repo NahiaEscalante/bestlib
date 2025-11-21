@@ -3,14 +3,30 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bestlib"
+name = "pybestlib"
 version = "0.1.0"
-description = "MatrixLayout widget for dashboards with D3.js"
-authors = [
-    { name="Nahia, Alejandro, Max" }
-]
+description = "BestLib, the best lib for graphics - Interactive dashboards for Jupyter with D3.js"
 readme = "README.md"
 requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    { name = "Nahia Escalante, Alejandro Rojas y Max Antúnez" }
+]
+keywords = ["visualization", "dashboard", "d3.js", "jupyter", "interactive", "charts", "data-visualization"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: Jupyter",
+]
 # Dependencias opcionales: el código maneja las importaciones de forma opcional (try/except)
 # Los usuarios deben instalar las dependencias manualmente según su entorno
 # Dependencias recomendadas:
@@ -21,9 +37,15 @@ requires-python = ">=3.8"
 # - scikit-learn>=1.0.0 (opcional, solo para add_confusion_matrix)
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/NahiaEscalante/bestlib"
+Documentation = "https://github.com/NahiaEscalante/bestlib#readme"
+Repository = "https://github.com/NahiaEscalante/bestlib"
+"Bug Reports" = "https://github.com/NahiaEscalante/bestlib/issues"
+
 [tool.setuptools]
 # Usar find_packages para incluir todos los subpaquetes automáticamente
-packages = {find = {}}
+packages = {find = {exclude = ["tests", "tests.*", "examples", "examples.*"]}}
 include-package-data = true
 
 [tool.setuptools.package-data]

@@ -468,6 +468,6 @@ except Exception:
 # ============================================================================
 # Metadata
 # ============================================================================
-__version__ = "0.1.0-modular"
-__author__ = "BESTLIB Team"
-__status__ = "Modularization in Progress"
+__version__ = "0.1.0"
+__author__ = "BESTLIB Team (Nahia Escalante, Alejandro, Max)"
+__status__ = "Alpha"
