@@ -249,7 +249,9 @@ class MatrixLayout:
     def register_comm(cls, force=False):
         """
         Registra manualmente el comm target de Jupyter.
-        Útil para forzar el registro o verificar que funciona.
+        Útil para forzar el re-registro o verificar que funciona.
+        
+        ✅ CORRECCIÓN: Ahora delega a CommManager si está disponible para evitar conflictos.
         
         Args:
             force (bool): Si True, fuerza el re-registro incluso si ya está registrado
@@ -257,6 +259,18 @@ class MatrixLayout:
         Returns:
             bool: True si el registro fue exitoso, False si falló
         """
+        # ✅ CORRECCIÓN CRÍTICA: Si CommManager ya está registrado, no registrar el sistema legacy
+        # Esto evita que el sistema legacy sobrescriba al modular
+        try:
+            from .core.comm import CommManager
+            if CommManager._comm_registered:
+                if cls._debug:
+                    print("ℹ️ [MatrixLayout Legacy] CommManager ya está registrado, usando sistema modular")
+                cls._comm_registered = True  # Marcar como registrado para evitar re-registro
+                return True
+        except (ImportError, AttributeError):
+            pass
+        
         if cls._comm_registered and not force:
             if cls._debug:
                 print("ℹ️ [MatrixLayout] Comm ya estaba registrado")
@@ -314,13 +328,58 @@ class MatrixLayout:
                         inst_ref = cls._instances.get(div_id)
                         inst = inst_ref() if inst_ref else None
                         
+                        if cls._debug:
+                            print(f"   🔍 [Legacy] Buscando instancia para div_id '{div_id}'")
+                            print(f"   🔍 [Legacy] Instancia en _instances: {'encontrada' if inst else 'no encontrada'}")
+                        
+                        # ✅ CORRECCIÓN CRÍTICA: Si no se encuentra en sistema legacy, buscar en CommManager (sistema modular)
+                        if inst is None:
+                            try:
+                                # Intentar múltiples formas de importar CommManager
+                                CommManager = None
+                                try:
+                                    # Desde BESTLIB/matrix.py, core está en el mismo nivel
+                                    from .core.comm import CommManager
+                                except (ImportError, ValueError, AttributeError):
+                                    try:
+                                        from BESTLIB.core.comm import CommManager
+                                    except (ImportError, ValueError, AttributeError):
+                                        try:
+                                            import sys
+                                            if 'BESTLIB.core.comm' in sys.modules:
+                                                CommManager = sys.modules['BESTLIB.core.comm'].CommManager
+                                        except:
+                                            pass
+                                
+                                if CommManager is not None:
+                                    inst = CommManager.get_instance(div_id)
+                                    if inst:
+                                        if cls._debug:
+                                            print(f"   ✅ Instancia encontrada en CommManager (sistema modular)")
+                                    elif cls._debug:
+                                        print(f"   ⚠️ Instancia no encontrada en CommManager")
+                                        print(f"   🔍 CommManager._instances keys: {list(CommManager._instances.keys())[:5]}")
+                            except Exception as e:
+                                if cls._debug:
+                                    print(f"   ⚠️ Error buscando en CommManager: {e}")
+                                    import traceback
+                                    traceback.print_exc()
+                        
                         # ✅ CORRECCIÓN CRÍTICA: Si la instancia tiene _event_manager (sistema modular), usarlo
-                        if inst and hasattr(inst, "_event_manager"):
-                            # Sistema modular: usar EventManager
-                            if cls._debug:
-                                print(f"   ✅ Usando EventManager (sistema modular)")
-                            inst._event_manager.emit(event_type, payload)
-                            return  # ✅ IMPORTANTE: Salir después de emitir al EventManager
+                        if inst:
+                            if hasattr(inst, "_event_manager"):
+                                # Sistema modular: usar EventManager
+                                if cls._debug:
+                                    print(f"   ✅ Usando EventManager (sistema modular)")
+                                    print(f"   🔍 Tipo de instancia: {type(inst).__name__}")
+                                inst._event_manager.emit(event_type, payload)
+                                return  # ✅ IMPORTANTE: Salir después de emitir al EventManager
+                            elif cls._debug:
+                                print(f"   ⚠️ Instancia encontrada pero no tiene _event_manager")
+                                print(f"   🔍 Tipo de instancia: {type(inst).__name__}")
+                                print(f"   🔍 Atributos: {[a for a in dir(inst) if not a.startswith('__')][:10]}")
+                        elif cls._debug:
+                            print(f"   ⚠️ No se encontró instancia en ningún sistema")
                         
                         # Sistema legacy: buscar handlers en _handlers
                         handlers = []
