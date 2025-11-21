@@ -264,6 +264,11 @@ class ReactiveMatrixLayout:
             
             # Actualizar también _selected_data con DataFrame para que el usuario pueda acceder fácilmente
             self._selected_data = items_df if items_df is not None else items
+            
+            # Guardar en variable Python si se especificó selection_var para este scatter
+            if hasattr(self, '_selection_variables') and scatter_letter_capture in self._selection_variables:
+                selection_var_name = self._selection_variables[scatter_letter_capture]
+                self.set_selection(selection_var_name, items_df if items_df is not None else items)
         
         # Registrar handler en el layout principal
         # Nota: Usamos el mismo layout pero cada scatter tiene su propio SelectionModel
@@ -1164,6 +1169,9 @@ class ReactiveMatrixLayout:
             if interactive is None:
                 interactive = False
         
+        # CRÍTICO: Inicializar initial_data SIEMPRE al principio para evitar UnboundLocalError
+        initial_data = self._data
+        
         # Si es vista principal, crear su propio SelectionModel
         if is_primary:
             histogram_selection = SelectionModel()
@@ -1213,9 +1221,7 @@ class ReactiveMatrixLayout:
                 
                 # Guardar en variable Python si se especificó (como DataFrame)
                 if selection_var:
-                    import __main__
-                    # Guardar como DataFrame para facilitar el trabajo del usuario
-                    setattr(__main__, selection_var, items_df if items_df is not None else items)
+                    self.set_selection(selection_var, items_df if items_df is not None else items)
                     if self._debug or MatrixLayout._debug:
                         count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
                         print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
@@ -1234,14 +1240,14 @@ class ReactiveMatrixLayout:
             # CRÍTICO: Si linked_to es None, NO enlazar automáticamente (gráfico estático)
             if linked_to is None:
                 # Crear histograma estático sin enlazar
-                MatrixLayout.map_histogram(letter, self._data, value_col=column, bins=bins, **kwargs)
+                MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **kwargs)
                 return self
             
             # Validar que linked_to no sea el string "None"
             if isinstance(linked_to, str) and linked_to.lower() == 'none':
                 linked_to = None
                 # Crear histograma estático sin enlazar
-                MatrixLayout.map_histogram(letter, self._data, value_col=column, bins=bins, **kwargs)
+                MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **kwargs)
                 return self
             
             # Buscar en scatter plots primero (compatibilidad hacia atrás)
@@ -1274,6 +1280,47 @@ class ReactiveMatrixLayout:
                 kwargs['__linked_to__'] = primary_letter
             else:
                 kwargs.pop('__linked_to__', None)  # Remover si existe
+            
+            # CRÍTICO: Si ya hay una selección activa en la vista principal, usar esos datos desde el inicio
+            if primary_letter is not None:
+                # Verificar si hay una selección activa
+                current_items = primary_selection.get_items()
+                if current_items and len(current_items) > 0:
+                    # Procesar items para obtener DataFrame filtrado
+                    processed_items = []
+                    for item in current_items:
+                        if isinstance(item, dict):
+                            if '_original_rows' in item and isinstance(item['_original_rows'], list):
+                                processed_items.extend(item['_original_rows'])
+                            elif '_original_row' in item:
+                                processed_items.append(item['_original_row'])
+                            else:
+                                processed_items.append(item)
+                        else:
+                            processed_items.append(item)
+                    
+                    if processed_items:
+                        if HAS_PANDAS:
+                            pd_module = globals().get('pd')
+                            if pd_module is None:
+                                import sys
+                                if 'pandas' in sys.modules:
+                                    pd_module = sys.modules['pandas']
+                                else:
+                                    import pandas as pd_module
+                                    globals()['pd'] = pd_module
+                            try:
+                                if isinstance(processed_items[0], dict):
+                                    initial_data = pd_module.DataFrame(processed_items)
+                                else:
+                                    initial_data = pd_module.DataFrame(processed_items)
+                            except Exception:
+                                initial_data = self._data
+                        else:
+                            initial_data = processed_items
+                    
+                    if self._debug or MatrixLayout._debug:
+                        print(f"📊 Histogram '{letter}' inicializado con {len(processed_items) if processed_items else len(self._data)} items (hay selección activa)")
             
             # Guardar parámetros
             hist_params = {
@@ -2181,7 +2228,7 @@ class ReactiveMatrixLayout:
             print(f"   - Boxplot callbacks guardados: {list(self._boxplot_callbacks.keys())}")
         
         # Crear boxplot inicial con datos filtrados si hay selección, o todos los datos si no
-        data_to_use = initial_data if 'initial_data' in locals() else self._data
+        data_to_use = initial_data
         # Asegurar que pd esté disponible si HAS_PANDAS es True
         # Usar globals() para acceder al pd del módulo y evitar UnboundLocalError
         if HAS_PANDAS:
