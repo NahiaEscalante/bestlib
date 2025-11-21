@@ -21,6 +21,7 @@ _cached_js = None
 _cached_css = None
 
 class MatrixLayout:
+    _debug = False 
     _map = {}
     _safe_html = True
     
