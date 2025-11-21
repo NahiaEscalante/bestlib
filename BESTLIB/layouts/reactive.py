@@ -188,9 +188,15 @@ class ReactiveMatrixLayout:
         # Sistema para guardar selecciones en variables Python accesibles
         self._selection_variables = {}  # {view_letter: variable_name} - Variables donde guardar selecciones
         
+        # Sistema de registro de links: {master_letter: [dependent_letters]}
+        self._view_links = {}  # {master_letter: set(dependent_letters)} - Mapeo de vistas principales a dependientes
+        
         # CRÍTICO: Registrar handler genérico centralizado para TODOS los eventos "select" y "brush"
         # Este handler captura eventos que no son manejados por handlers específicos
         self._register_central_select_handler()
+        
+        # CRÍTICO: Marcar que hay handlers personalizados para evitar el mensaje de "No hay handler registrado"
+        self._layout._has_custom_select_handler = True
     
     def _register_central_select_handler(self):
         """
@@ -207,6 +213,9 @@ class ReactiveMatrixLayout:
             Handler centralizado que procesa TODOS los eventos de selección.
             Se ejecuta para eventos que no tienen handlers específicos o como fallback.
             """
+            # CRÍTICO: Marcar que hay handlers personalizados para evitar el mensaje de "No hay handler registrado"
+            self._layout._has_custom_select_handler = True
+            
             # Extraer información del evento
             event_type = payload.get('type', 'select')
             items = payload.get('items', [])
@@ -215,11 +224,20 @@ class ReactiveMatrixLayout:
             if self._debug or MatrixLayout._debug:
                 print(f"🔄 [ReactiveMatrixLayout] Handler central recibió evento '{event_type}' para vista '{view_letter}': {len(items)} items")
             
-            # Si no hay view_letter, no podemos procesar el evento
+            # Si no hay view_letter, intentar inferirlo del payload o usar el primero disponible
             if view_letter is None:
-                if self._debug or MatrixLayout._debug:
-                    print(f"   ⚠️ Evento sin __view_letter__ o __scatter_letter__, ignorando")
-                return
+                # Intentar inferir de otras claves del payload
+                if '__is_primary_view__' in payload:
+                    # Si es vista principal, buscar en las vistas principales
+                    if self._primary_view_models:
+                        view_letter = list(self._primary_view_models.keys())[0]
+                    elif self._scatter_selection_models:
+                        view_letter = list(self._scatter_selection_models.keys())[0]
+                
+                if view_letter is None:
+                    if self._debug or MatrixLayout._debug:
+                        print(f"   ⚠️ Evento sin __view_letter__ o __scatter_letter__, no se puede procesar")
+                    return
             
             # Convertir items a DataFrame
             items_df = _items_to_dataframe(items)
@@ -229,17 +247,20 @@ class ReactiveMatrixLayout:
                 scatter_selection = self._scatter_selection_models[view_letter]
                 scatter_selection.update(items)
                 if self._debug or MatrixLayout._debug:
-                    print(f"   ✅ SelectionModel de scatter '{view_letter}' actualizado")
+                    print(f"   ✅ SelectionModel de scatter '{view_letter}' actualizado con {len(items)} items")
             
             if view_letter in self._primary_view_models:
                 primary_selection = self._primary_view_models[view_letter]
                 primary_selection.update(items)
                 if self._debug or MatrixLayout._debug:
-                    print(f"   ✅ SelectionModel de vista principal '{view_letter}' actualizado")
+                    print(f"   ✅ SelectionModel de vista principal '{view_letter}' actualizado con {len(items)} items")
             
             # 2. Actualizar SelectionModel principal
             self.selection_model.update(items)
             self._selected_data = items_df if items_df is not None else items
+            
+            if self._debug or MatrixLayout._debug:
+                print(f"   ✅ SelectionModel principal actualizado con {len(items)} items")
             
             # 3. Guardar en variable Python si existe selection_var para esta vista
             if view_letter in self._selection_variables:
@@ -259,6 +280,40 @@ class ReactiveMatrixLayout:
         if self._debug or MatrixLayout._debug:
             print(f"✅ [ReactiveMatrixLayout] Handler central registrado para eventos 'select' y 'brush'")
     
+    def _register_link(self, master_letter, dependent_letter):
+        """
+        Registra un link entre una vista principal y una vista dependiente.
+        
+        Args:
+            master_letter: Letra de la vista principal (ej: 'A')
+            dependent_letter: Letra de la vista dependiente (ej: 'H')
+        """
+        if master_letter not in self._view_links:
+            self._view_links[master_letter] = set()
+        self._view_links[master_letter].add(dependent_letter)
+        
+        if self._debug:
+            from .matrix import MatrixLayout
+            if MatrixLayout._debug:
+                print(f"🔗 [ReactiveMatrixLayout] Link registrado: '{dependent_letter}' → '{master_letter}'")
+    
+    def _update_view(self, letter):
+        """
+        Actualiza una vista específica re-renderizándola con datos filtrados.
+        
+        Args:
+            letter: Letra de la vista a actualizar
+        """
+        from .matrix import MatrixLayout
+        
+        if self._debug or MatrixLayout._debug:
+            print(f"🔄 [ReactiveMatrixLayout] Actualizando vista '{letter}'")
+        
+        # Buscar la configuración de la vista
+        # Esto se implementará en cada método add_* específico
+        # Por ahora, los callbacks ya están registrados en los SelectionModels
+        pass
+    
     def _trigger_linked_updates(self, source_letter, items):
         """
         Dispara actualizaciones de todos los gráficos vinculados a una vista principal.
@@ -272,21 +327,25 @@ class ReactiveMatrixLayout:
         if self._debug or MatrixLayout._debug:
             print(f"🔄 [ReactiveMatrixLayout] Disparando actualizaciones para gráficos vinculados a '{source_letter}'")
         
-        # Buscar todos los gráficos vinculados a source_letter
-        linked_charts = []
+        # Buscar todos los gráficos vinculados a source_letter usando _view_links
+        if source_letter in self._view_links:
+            dependent_letters = self._view_links[source_letter]
+            if self._debug or MatrixLayout._debug:
+                print(f"   📊 Encontrados {len(dependent_letters)} gráficos vinculados a '{source_letter}': {dependent_letters}")
+            
+            # Actualizar cada vista dependiente
+            for dependent_letter in dependent_letters:
+                self._update_view(dependent_letter)
         
-        # Buscar en _linked_charts
+        # También buscar en _linked_charts (compatibilidad hacia atrás)
+        linked_charts = []
         for chart_letter, chart_config in self._linked_charts.items():
             if chart_config.get('linked_to') == source_letter:
                 linked_charts.append((chart_letter, chart_config))
         
-        # Buscar en histogramas, boxplots, barcharts vinculados
-        # (estos ya tienen sus propios callbacks registrados en los SelectionModels,
-        # pero podemos verificar que estén activos)
-        
         if linked_charts:
             if self._debug or MatrixLayout._debug:
-                print(f"   📊 Encontrados {len(linked_charts)} gráficos vinculados a '{source_letter}'")
+                print(f"   📊 Encontrados {len(linked_charts)} gráficos en _linked_charts vinculados a '{source_letter}'")
     
     def set_data(self, data):
         """
@@ -625,6 +684,8 @@ class ReactiveMatrixLayout:
             self._barchart_to_scatter[letter] = primary_letter
             # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
             kwargs['__linked_to__'] = primary_letter
+            # CRÍTICO: Registrar el link para actualizaciones automáticas
+            self._register_link(primary_letter, letter)
         else:
             # Si es vista principal o no hay enlace, remover __linked_to__
             kwargs.pop('__linked_to__', None)  # Remover si existe
@@ -686,15 +747,27 @@ class ReactiveMatrixLayout:
                     from IPython.display import Javascript
                     import time
                     
-                    # Usar datos seleccionados o todos los datos
+                    # CRÍTICO: Usar datos seleccionados del selection_model o todos los datos
+                    # Primero intentar obtener del selection_model principal
+                    selected_items = self.selection_model.get_items()
+                    if not selected_items and primary_letter:
+                        # Si no hay en el principal, intentar del específico de la vista principal
+                        if primary_letter in self._scatter_selection_models:
+                            selected_items = self._scatter_selection_models[primary_letter].get_items()
+                        elif primary_letter in self._primary_view_models:
+                            selected_items = self._primary_view_models[primary_letter].get_items()
+                    
+                    # Usar items del parámetro si están disponibles, sino usar selected_items del selection_model
+                    items_to_process = items if items and len(items) > 0 else selected_items
                     data_to_use = self._data
-                    if items and len(items) > 0:
+                    
+                    if items_to_process and len(items_to_process) > 0:
                         # Convertir lista de dicts a DataFrame si es necesario
-                        if HAS_PANDAS and isinstance(items[0], dict):
+                        if HAS_PANDAS and isinstance(items_to_process[0], dict):
                             import pandas as pd
-                            data_to_use = pd.DataFrame(items)
+                            data_to_use = pd.DataFrame(items_to_process)
                         else:
-                            data_to_use = items
+                            data_to_use = items_to_process
                     else:
                         data_to_use = self._data
                     
@@ -1378,6 +1451,8 @@ class ReactiveMatrixLayout:
             # Agregar __linked_to__ al spec para indicadores visuales en JavaScript (solo si hay enlace)
             if primary_letter is not None:
                 kwargs['__linked_to__'] = primary_letter
+                # CRÍTICO: Registrar el link para actualizaciones automáticas
+                self._register_link(primary_letter, letter)
             else:
                 kwargs.pop('__linked_to__', None)  # Remover si existe
             
@@ -1452,12 +1527,24 @@ class ReactiveMatrixLayout:
                     if self._debug or MatrixLayout._debug:
                         print(f"   🔄 Histogram '{letter}' callback ejecutándose con {count} items")
                     
-                    # Usar datos seleccionados o todos los datos
+                    # CRÍTICO: Usar datos seleccionados del selection_model o todos los datos
+                    # Primero intentar obtener del selection_model principal
+                    selected_items = self.selection_model.get_items()
+                    if not selected_items and primary_letter:
+                        # Si no hay en el principal, intentar del específico de la vista principal
+                        if primary_letter in self._scatter_selection_models:
+                            selected_items = self._scatter_selection_models[primary_letter].get_items()
+                        elif primary_letter in self._primary_view_models:
+                            selected_items = self._primary_view_models[primary_letter].get_items()
+                    
+                    # Usar items del parámetro si están disponibles, sino usar selected_items del selection_model
+                    items_to_process = items if items and len(items) > 0 else selected_items
                     data_to_use = self._data
-                    if items and len(items) > 0:
+                    
+                    if items_to_process and len(items_to_process) > 0:
                         # Procesar items: extraer filas originales si están disponibles
                         processed_items = []
-                        for item in items:
+                        for item in items_to_process:
                             if isinstance(item, dict):
                                 # Verificar si tiene _original_rows (viene de otro gráfico con múltiples filas)
                                 if '_original_rows' in item and isinstance(item['_original_rows'], list):
@@ -1511,10 +1598,10 @@ class ReactiveMatrixLayout:
                         values = [v for v, _ in values_with_rows]
                         rows_by_value = {v: r for v, r in values_with_rows}
                     else:
-                        items = data_to_use if isinstance(data_to_use, list) else []
+                        items_list = data_to_use if isinstance(data_to_use, list) else []
                         values = []
                         rows_by_value = {}
-                        for item in items:
+                        for item in items_list:
                             val = item.get(column)
                             if val is not None:
                                 try:
@@ -1899,6 +1986,8 @@ class ReactiveMatrixLayout:
         # Agregar __linked_to__ al spec para indicadores visuales en JavaScript (solo si hay enlace)
         if primary_letter is not None:
             kwargs['__linked_to__'] = primary_letter
+            # CRÍTICO: Registrar el link para actualizaciones automáticas
+            self._register_link(primary_letter, letter)
         else:
             kwargs.pop('__linked_to__', None)  # Remover si existe
         
@@ -1931,13 +2020,24 @@ class ReactiveMatrixLayout:
                 if self._debug or MatrixLayout._debug:
                     print(f"   🔄 Boxplot '{letter}' callback ejecutándose con {count} items")
                 
-                # Usar datos seleccionados o todos los datos
-                # Si los items tienen _original_row, usar esos datos
+                # CRÍTICO: Usar datos seleccionados del selection_model o todos los datos
+                # Primero intentar obtener del selection_model principal
+                selected_items = self.selection_model.get_items()
+                if not selected_items and primary_letter:
+                    # Si no hay en el principal, intentar del específico de la vista principal
+                    if primary_letter in self._scatter_selection_models:
+                        selected_items = self._scatter_selection_models[primary_letter].get_items()
+                    elif primary_letter in self._primary_view_models:
+                        selected_items = self._primary_view_models[primary_letter].get_items()
+                
+                # Usar items del parámetro si están disponibles, sino usar selected_items del selection_model
+                items_to_process = items if items and len(items) > 0 else selected_items
                 data_to_use = self._data
-                if items and len(items) > 0:
+                
+                if items_to_process and len(items_to_process) > 0:
                     # Extraer datos originales si están disponibles
                     processed_items = []
-                    for item in items:
+                    for item in items_to_process:
                         if isinstance(item, dict):
                             # Si tiene _original_row, usar esos datos
                             if '_original_row' in item:
@@ -2701,6 +2801,8 @@ class ReactiveMatrixLayout:
             
             # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
             kwargs['__linked_to__'] = primary_letter
+            # CRÍTICO: Registrar el link para actualizaciones automáticas
+            self._register_link(primary_letter, letter)
             
             # Flag para evitar actualizaciones recursivas del pie chart
             pie_update_flag = f'_pie_updating_{letter}'
