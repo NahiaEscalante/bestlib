@@ -25,6 +25,7 @@ print("\n" + "=" * 60)
 print("DIAGNÓSTICO: Probar prepare_data directamente")
 print("=" * 60)
 
+# Importar correctamente desde el módulo charts
 from BESTLIB.charts.kde import KdeChart
 
 chart = KdeChart()

@@ -1836,7 +1836,11 @@ class MatrixLayout:
             from .charts import ChartRegistry
             chart = ChartRegistry.get('kde')
             spec = chart.get_spec(data, column=column, bandwidth=bandwidth, **kwargs)
-        except Exception:
+        except Exception as e:
+            if cls._debug:
+                print(f"⚠️  [MatrixLayout] Error en map_kde: {e}")
+                import traceback
+                traceback.print_exc()
             spec = {'type': 'kde', 'data': [], **kwargs}
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -1850,7 +1854,11 @@ class MatrixLayout:
             from .charts import ChartRegistry
             chart = ChartRegistry.get('distplot')
             spec = chart.get_spec(data, column=column, bins=bins, kde=kde, rug=rug, **kwargs)
-        except Exception:
+        except Exception as e:
+            if cls._debug:
+                print(f"⚠️  [MatrixLayout] Error en map_distplot: {e}")
+                import traceback
+                traceback.print_exc()
             spec = {'type': 'distplot', 'data': {}, **kwargs}
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -1864,7 +1872,11 @@ class MatrixLayout:
             from .charts import ChartRegistry
             chart = ChartRegistry.get('rug')
             spec = chart.get_spec(data, column=column, axis=axis, **kwargs)
-        except Exception:
+        except Exception as e:
+            if cls._debug:
+                print(f"⚠️  [MatrixLayout] Error en map_rug: {e}")
+                import traceback
+                traceback.print_exc()
             spec = {'type': 'rug', 'data': [], **kwargs}
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -1878,7 +1890,11 @@ class MatrixLayout:
             from .charts import ChartRegistry
             chart = ChartRegistry.get('qqplot')
             spec = chart.get_spec(data, column=column, dist=dist, **kwargs)
-        except Exception:
+        except Exception as e:
+            if cls._debug:
+                print(f"⚠️  [MatrixLayout] Error en map_qqplot: {e}")
+                import traceback
+                traceback.print_exc()
             spec = {'type': 'qqplot', 'data': [], **kwargs}
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -1892,7 +1908,11 @@ class MatrixLayout:
             from .charts import ChartRegistry
             chart = ChartRegistry.get('ecdf')
             spec = chart.get_spec(data, column=column, **kwargs)
-        except Exception:
+        except Exception as e:
+            if cls._debug:
+                print(f"⚠️  [MatrixLayout] Error en map_ecdf: {e}")
+                import traceback
+                traceback.print_exc()
             spec = {'type': 'ecdf', 'data': [], **kwargs}
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
