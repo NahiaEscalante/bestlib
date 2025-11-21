@@ -10,11 +10,11 @@ except ImportError:
     widgets = None
 
 # Import de pandas de forma defensiva para evitar errores de importación circular
+import sys  # sys siempre está disponible, importarlo fuera del try
 HAS_PANDAS = False
 pd = None
 try:
     # Verificar que pandas no esté parcialmente inicializado
-    import sys
     if 'pandas' in sys.modules:
         # Si pandas ya está en sys.modules pero corrupto, intentar limpiarlo
         try:
@@ -25,7 +25,7 @@ try:
             # Pandas está corrupto, limpiarlo
             del sys.modules['pandas']
             # También limpiar submódulos relacionados
-            modules_to_remove = [k for k in sys.modules.keys() if k.startswith('pandas.')]
+            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
             for mod in modules_to_remove:
                 try:
                     del sys.modules[mod]
@@ -107,7 +107,8 @@ class ReactiveMatrixLayout:
             cell_padding: Padding de celdas en píxeles (default: 15px)
             max_width: Ancho máximo del layout en píxeles (default: 1200px)
         """
-        from .matrix import MatrixLayout
+        # MatrixLayout ya está importado al nivel del módulo (línea 46)
+        # No re-importar aquí para evitar problemas de caché
         
         # Crear instancia base de MatrixLayout con parámetros de layout
         self._layout = MatrixLayout(
