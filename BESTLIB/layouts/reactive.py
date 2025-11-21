@@ -236,14 +236,15 @@ class ReactiveMatrixLayout:
         def scatter_handler(payload):
             """Handler que actualiza el SelectionModel de este scatter plot Y el modelo principal"""
             # Filtrar eventos: solo procesar si viene de este scatter plot
-            event_scatter_letter = payload.get('__scatter_letter__')
+            # Aceptar tanto __scatter_letter__ como __view_letter__ para compatibilidad
+            event_scatter_letter = payload.get('__scatter_letter__') or payload.get('__view_letter__')
             if event_scatter_letter != scatter_letter_capture:
                 # Este evento no es para este scatter plot, ignorar
                 if self._debug or MatrixLayout._debug:
                     print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{scatter_letter_capture}', recibido '{event_scatter_letter}'")
                 return
             
-            # El payload ya viene con __scatter_letter__ del JavaScript
+            # El payload ya viene con __scatter_letter__ o __view_letter__ del JavaScript
             items = payload.get('items', [])
             
             if self._debug or MatrixLayout._debug:
@@ -253,7 +254,7 @@ class ReactiveMatrixLayout:
             items_df = _items_to_dataframe(items)
             
             # Actualizar el SelectionModel específico de este scatter plot
-            # Esto disparará los callbacks registrados (como update_barchart)
+            # Esto disparará los callbacks registrados (como update_histogram, update_boxplot)
             # Nota: Los callbacks internos trabajan con listas, así que pasamos items
             scatter_selection_capture.update(items)
             
@@ -1281,20 +1282,32 @@ class ReactiveMatrixLayout:
                                 elif '_original_row' in item:
                                     processed_items.append(item['_original_row'])
                                 # Si no tiene _original_row/_original_rows, el item ya es una fila original
+                                # (esto es común cuando viene de scatter plot)
                                 else:
                                     processed_items.append(item)
                             else:
                                 processed_items.append(item)
                         
                         if processed_items:
-                            if HAS_PANDAS and isinstance(processed_items[0], dict):
+                            if HAS_PANDAS:
                                 import pandas as pd
-                                data_to_use = pd.DataFrame(processed_items)
+                                # Intentar crear DataFrame desde los items procesados
+                                try:
+                                    if isinstance(processed_items[0], dict):
+                                        data_to_use = pd.DataFrame(processed_items)
+                                    else:
+                                        # Si no son diccionarios, intentar convertir
+                                        data_to_use = pd.DataFrame(processed_items)
+                                except Exception as e:
+                                    if self._debug or MatrixLayout._debug:
+                                        print(f"⚠️ Error creando DataFrame desde items: {e}")
+                                    data_to_use = self._data
                             else:
                                 data_to_use = processed_items
                         else:
                             data_to_use = self._data
                     else:
+                        # Si no hay items, usar todos los datos (selección desactivada)
                         data_to_use = self._data
                     
                     # Preparar datos para histograma
@@ -1570,9 +1583,44 @@ class ReactiveMatrixLayout:
             
             # Registrar callback en el modelo de selección de la vista principal
             primary_selection.on_change(update_histogram)
+            
+            # CRÍTICO: Si ya hay una selección activa en la vista principal, usar esos datos desde el inicio
+            initial_data = self._data
+            if not is_primary and primary_letter is not None:
+                # Verificar si hay una selección activa
+                current_items = primary_selection.get_items()
+                if current_items and len(current_items) > 0:
+                    # Procesar items para obtener DataFrame filtrado
+                    processed_items = []
+                    for item in current_items:
+                        if isinstance(item, dict):
+                            if '_original_rows' in item and isinstance(item['_original_rows'], list):
+                                processed_items.extend(item['_original_rows'])
+                            elif '_original_row' in item:
+                                processed_items.append(item['_original_row'])
+                            else:
+                                processed_items.append(item)
+                        else:
+                            processed_items.append(item)
+                    
+                    if processed_items:
+                        if HAS_PANDAS:
+                            import pandas as pd
+                            try:
+                                if isinstance(processed_items[0], dict):
+                                    initial_data = pd.DataFrame(processed_items)
+                                else:
+                                    initial_data = pd.DataFrame(processed_items)
+                            except Exception:
+                                initial_data = self._data
+                        else:
+                            initial_data = processed_items
+                    
+                    if self._debug or MatrixLayout._debug:
+                        print(f"📊 Histogram '{letter}' inicializado con {len(processed_items) if processed_items else len(self._data)} items (hay selección activa)")
         
-        # Crear histograma inicial con todos los datos
-        MatrixLayout.map_histogram(letter, self._data, value_col=column, bins=bins, **kwargs)
+        # Crear histograma inicial con datos filtrados si hay selección, o todos los datos si no
+        MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **kwargs)
         
         # Asegurar que __linked_to__ esté en el spec guardado (por si map_histogram no lo copió)
         if not is_primary and linked_to:
@@ -1704,17 +1752,34 @@ class ReactiveMatrixLayout:
                                 # Si hay múltiples filas originales
                                 processed_items.extend(item['_original_rows'])
                             else:
+                                # Si no tiene _original_row/_original_rows, el item ya es una fila original
+                                # (esto es común cuando viene de scatter plot)
                                 processed_items.append(item)
+                        else:
+                            processed_items.append(item)
                     
                     if processed_items:
-                        if HAS_PANDAS and isinstance(processed_items[0], dict):
+                        if HAS_PANDAS:
                             import pandas as pd
-                            data_to_use = pd.DataFrame(processed_items)
+                            # Intentar crear DataFrame desde los items procesados
+                            try:
+                                if isinstance(processed_items[0], dict):
+                                    data_to_use = pd.DataFrame(processed_items)
+                                else:
+                                    # Si no son diccionarios, intentar convertir
+                                    data_to_use = pd.DataFrame(processed_items)
+                            except Exception as e:
+                                if self._debug or MatrixLayout._debug:
+                                    print(f"⚠️ Error creando DataFrame desde items: {e}")
+                                data_to_use = self._data
                         else:
                             data_to_use = processed_items
                     else:
                         # Si no hay items procesados, usar todos los datos
                         data_to_use = self._data
+                else:
+                    # Si no hay items, usar todos los datos (selección desactivada)
+                    data_to_use = self._data
                 
                 # Preparar datos para boxplot
                 if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
@@ -2016,6 +2081,41 @@ class ReactiveMatrixLayout:
         # Guardar referencia al callback para evitar duplicados
         self._boxplot_callbacks[letter] = update_boxplot
         
+        # CRÍTICO: Si ya hay una selección activa en la vista principal, usar esos datos desde el inicio
+        initial_data = self._data
+        if primary_letter is not None:
+            # Verificar si hay una selección activa
+            current_items = primary_selection.get_items()
+            if current_items and len(current_items) > 0:
+                # Procesar items para obtener DataFrame filtrado
+                processed_items = []
+                for item in current_items:
+                    if isinstance(item, dict):
+                        if '_original_rows' in item and isinstance(item['_original_rows'], list):
+                            processed_items.extend(item['_original_rows'])
+                        elif '_original_row' in item:
+                            processed_items.append(item['_original_row'])
+                        else:
+                            processed_items.append(item)
+                    else:
+                        processed_items.append(item)
+                
+                if processed_items:
+                    if HAS_PANDAS:
+                        import pandas as pd
+                        try:
+                            if isinstance(processed_items[0], dict):
+                                initial_data = pd.DataFrame(processed_items)
+                            else:
+                                initial_data = pd.DataFrame(processed_items)
+                        except Exception:
+                            initial_data = self._data
+                    else:
+                        initial_data = processed_items
+                
+                if self._debug or MatrixLayout._debug:
+                    print(f"📊 Boxplot '{letter}' inicializado con {len(processed_items) if processed_items else len(self._data)} items (hay selección activa)")
+        
         # Debug: verificar que el callback se registró
         if self._debug or MatrixLayout._debug:
             print(f"🔗 [ReactiveMatrixLayout] Callback registrado para boxplot '{letter}' enlazado a vista principal '{primary_letter}'")
@@ -2023,12 +2123,13 @@ class ReactiveMatrixLayout:
             print(f"   - Callbacks registrados: {len(primary_selection._callbacks)}")
             print(f"   - Boxplot callbacks guardados: {list(self._boxplot_callbacks.keys())}")
         
-        # Crear boxplot inicial con todos los datos
-        if HAS_PANDAS and isinstance(self._data, pd.DataFrame):
-            if category_col and category_col in self._data.columns:
-                box_data = []
-                for cat in self._data[category_col].unique():
-                    cat_data = self._data[self._data[category_col] == cat][column].dropna()
+        # Crear boxplot inicial con datos filtrados si hay selección, o todos los datos si no
+        data_to_use = initial_data if 'initial_data' in locals() else self._data
+        if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
+                if category_col and category_col in data_to_use.columns:
+                    box_data = []
+                    for cat in data_to_use[category_col].unique():
+                        cat_data = data_to_use[data_to_use[category_col] == cat][column].dropna()
                     if len(cat_data) > 0:
                         q1 = cat_data.quantile(0.25)
                         median = cat_data.quantile(0.5)
@@ -2047,7 +2148,8 @@ class ReactiveMatrixLayout:
                             'max': float(cat_data.max())
                         })
             else:
-                values = self._data[column].dropna()
+                # Boxplot simple
+                values = data_to_use[column].dropna()
                 if len(values) > 0:
                     q1 = values.quantile(0.25)
                     median = values.quantile(0.5)
@@ -2068,7 +2170,8 @@ class ReactiveMatrixLayout:
                 else:
                     box_data = []
         else:
-            values = [item.get(column, 0) for item in self._data if column in item]
+            # Fallback para listas de diccionarios
+            values = [item.get(column, 0) for item in data_to_use if column in item]
             if values:
                 sorted_vals = sorted(values)
                 n = len(sorted_vals)
