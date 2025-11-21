@@ -511,6 +511,10 @@ class ReactiveMatrixLayout:
         kwargs_with_identifier['__scatter_letter__'] = letter
         kwargs_with_identifier['__selection_model_id__'] = id(scatter_selection)
         
+        # ✅ CORRECCIÓN: Remover interactive de kwargs si existe para evitar duplicados
+        kwargs_with_identifier.pop('interactive', None)  # Remover si existe
+        kwargs_with_identifier['interactive'] = interactive  # Agregar el valor correcto
+        
         # Crear scatter plot spec con identificadores incluidos
         scatter_spec = MatrixLayout.map_scatter(
             letter, 
@@ -518,8 +522,7 @@ class ReactiveMatrixLayout:
             x_col=x_col, 
             y_col=y_col, 
             category_col=category_col,
-            interactive=interactive,
-            **kwargs_with_identifier
+            **kwargs_with_identifier  # ✅ interactive ya está aquí
         )
         
         # Asegurar que los identificadores estén en el spec guardado
