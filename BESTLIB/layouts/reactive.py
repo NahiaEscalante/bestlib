@@ -2046,30 +2046,30 @@ class ReactiveMatrixLayout:
                                 }]
                             else:
                                 box_data = []
+                else:
+                    # Fallback para listas de diccionarios
+                    values = [item.get(column, 0) for item in data_to_use if column in item]
+                    if values:
+                        sorted_vals = sorted(values)
+                        n = len(sorted_vals)
+                        q1 = sorted_vals[int(n * 0.25)]
+                        median = sorted_vals[int(n * 0.5)]
+                        q3 = sorted_vals[int(n * 0.75)]
+                        iqr = q3 - q1
+                        lower = max(q1 - 1.5 * iqr, min(values))
+                        upper = min(q3 + 1.5 * iqr, max(values))
+                        box_data = [{
+                            'category': 'All',
+                            'q1': float(q1),
+                            'median': float(median),
+                            'q3': float(q3),
+                            'lower': float(lower),
+                            'upper': float(upper),
+                            'min': float(min(values)),
+                            'max': float(max(values))
+                        }]
                     else:
-                        # Fallback para listas de diccionarios
-                        values = [item.get(column, 0) for item in data_to_use if column in item]
-                        if values:
-                            sorted_vals = sorted(values)
-                            n = len(sorted_vals)
-                            q1 = sorted_vals[int(n * 0.25)]
-                            median = sorted_vals[int(n * 0.5)]
-                            q3 = sorted_vals[int(n * 0.75)]
-                            iqr = q3 - q1
-                            lower = max(q1 - 1.5 * iqr, min(values))
-                            upper = min(q3 + 1.5 * iqr, max(values))
-                            box_data = [{
-                                'category': 'All',
-                                'q1': float(q1),
-                                'median': float(median),
-                                'q3': float(q3),
-                                'lower': float(lower),
-                                'upper': float(upper),
-                                'min': float(min(values)),
-                                'max': float(max(values))
-                            }]
-                        else:
-                            box_data = []
+                        box_data = []
                 
                 if not box_data:
                     return
