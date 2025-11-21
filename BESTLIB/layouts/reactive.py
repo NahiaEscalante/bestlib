@@ -535,6 +535,9 @@ class ReactiveMatrixLayout:
         }
         self._view_letters[view_id] = letter
         
+        # Inicializar update_barchart para evitar UnboundLocalError
+        update_barchart = None
+        
         # Si es vista enlazada, configurar callback de actualización
         if not is_primary:
             # Guardar parámetros para el callback (closure)
@@ -552,7 +555,7 @@ class ReactiveMatrixLayout:
                 print(f"   - SelectionModel ID: {id(primary_selection)}")
                 print(f"   - Callbacks actuales: {len(primary_selection._callbacks)}")
             
-        # Configurar callback para actualizar bar chart cuando cambia selección
+            # Configurar callback para actualizar bar chart cuando cambia selección
             def update_barchart(items, count):
                 """Actualiza el bar chart cuando cambia la selección usando JavaScript"""
                 try:
@@ -894,10 +897,12 @@ class ReactiveMatrixLayout:
                         pass
             
             # Registrar callback en el modelo de selección de la vista principal
-            primary_selection.on_change(update_barchart)
-            
-            # Marcar como callback registrado
-        self._barchart_callbacks[letter] = update_barchart
+            # Solo si update_barchart fue definido (es decir, si es vista enlazada)
+            if update_barchart is not None:
+                primary_selection.on_change(update_barchart)
+                
+                # Marcar como callback registrado
+                self._barchart_callbacks[letter] = update_barchart
         
         return self
 
