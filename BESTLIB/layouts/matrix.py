@@ -26,6 +26,7 @@ class MatrixLayout:
     """
     _map = {}
     _safe_html = True
+    _debug = False  # Modo debug para ver mensajes detallados
     
     def __init__(self, ascii_layout=None, figsize=None, row_heights=None, 
                  col_widths=None, gap=None, cell_padding=None, max_width=None):
@@ -81,7 +82,14 @@ class MatrixLayout:
     
     @classmethod
     def set_debug(cls, enabled: bool):
-        """Activa/desactiva mensajes de debug"""
+        """
+        Activa/desactiva mensajes de debug.
+        
+        Args:
+            enabled (bool): Si True, activa mensajes detallados de debug.
+                           Si False, solo muestra errores críticos.
+        """
+        cls._debug = enabled
         EventManager.set_debug(enabled)
         CommManager.set_debug(enabled)
     

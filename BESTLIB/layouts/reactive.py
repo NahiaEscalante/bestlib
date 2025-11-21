@@ -141,6 +141,17 @@ class ReactiveMatrixLayout:
         # Sistema para guardar selecciones en variables Python accesibles
         self._selection_variables = {}  # {view_letter: variable_name} - Variables donde guardar selecciones
     
+    @classmethod
+    def set_debug(cls, enabled: bool):
+        """
+        Activa/desactiva mensajes de debug.
+        
+        Args:
+            enabled (bool): Si True, activa mensajes detallados de debug.
+                           Si False, solo muestra errores críticos.
+        """
+        MatrixLayout.set_debug(enabled)
+    
     def set_data(self, data):
         """
         Establece los datos originales para todas las vistas enlazadas.
