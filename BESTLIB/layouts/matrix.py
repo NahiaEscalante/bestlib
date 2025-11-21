@@ -202,6 +202,128 @@ class MatrixLayout:
         return spec
     
     @classmethod
+    def map_histogram(cls, letter, data, **kwargs):
+        """Método helper para crear histogram"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('histogram')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_boxplot(cls, letter, data, **kwargs):
+        """Método helper para crear boxplot"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('boxplot')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_heatmap(cls, letter, data, **kwargs):
+        """Método helper para crear heatmap"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('heatmap')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_line(cls, letter, data, **kwargs):
+        """Método helper para crear line chart"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('line')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_pie(cls, letter, data, **kwargs):
+        """Método helper para crear pie chart"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('pie')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_violin(cls, letter, data, **kwargs):
+        """Método helper para crear violin chart"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('violin')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_radviz(cls, letter, data, **kwargs):
+        """Método helper para crear radviz chart"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('radviz')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_star_coordinates(cls, letter, data, **kwargs):
+        """Método helper para crear star coordinates chart"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('star_coordinates')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_parallel_coordinates(cls, letter, data, **kwargs):
+        """Método helper para crear parallel coordinates chart"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('parallel_coordinates')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_grouped_barchart(cls, letter, data, **kwargs):
+        """Método helper para crear grouped bar chart"""
+        from ..charts.registry import ChartRegistry
+        chart = ChartRegistry.get('grouped_bar')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
+    def map_correlation_heatmap(cls, letter, data, **kwargs):
+        """Método helper para crear correlation heatmap"""
+        from ..charts.registry import ChartRegistry
+        # Usar heatmap para correlation heatmap
+        chart = ChartRegistry.get('heatmap')
+        spec = chart.get_spec(data, **kwargs)
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        return spec
+    
+    @classmethod
     def map_barchart(cls, letter, data, **kwargs):
         """Método helper para crear bar chart"""
         from ..charts.registry import ChartRegistry
