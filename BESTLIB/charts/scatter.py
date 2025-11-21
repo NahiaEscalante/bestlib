@@ -8,18 +8,18 @@ from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
 
 # Import de pandas de forma defensiva para evitar errores de importación circular
+import sys  # sys siempre está disponible, importarlo fuera del try
 HAS_PANDAS = False
 pd = None
 try:
     # Verificar que pandas no esté parcialmente inicializado
-    import sys
     if 'pandas' in sys.modules:
         try:
             pd_test = sys.modules['pandas']
             _ = pd_test.__version__
         except (AttributeError, ImportError):
             del sys.modules['pandas']
-            modules_to_remove = [k for k in sys.modules.keys() if k.startswith('pandas.')]
+            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
             for mod in modules_to_remove:
                 try:
                     del sys.modules[mod]
