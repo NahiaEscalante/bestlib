@@ -36,7 +36,7 @@ class RugChart(ChartBase):
             if not pd.api.types.is_numeric_dtype(data[column]):
                 raise ChartError(f"Columna '{column}' debe ser numérica")
     
-    def prepare_data(self, data, column=None, **kwargs):
+    def prepare_data(self, data, column=None, axis='x', **kwargs):
         """Prepara datos para rug plot."""
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
             values = data[column].dropna().values
@@ -48,8 +48,9 @@ class RugChart(ChartBase):
         if len(values) == 0:
             raise ChartError("No hay datos válidos para rug plot")
         
-        # Crear datos: cada valor es un marcador en el eje
-        rug_data = [{'value': float(val)} for val in values]
+        # Crear datos con el campo correcto según el eje
+        field = 'x' if axis == 'x' else 'y'
+        rug_data = [{field: float(val)} for val in values]
         
         return rug_data
     
@@ -66,8 +67,8 @@ class RugChart(ChartBase):
         # Validar datos
         self.validate_data(data, column=column, **kwargs)
         
-        # Preparar datos
-        rug_data = self.prepare_data(data, column=column, **kwargs)
+        # Preparar datos (ahora necesita saber el eje)
+        rug_data = self.prepare_data(data, column=column, axis=axis, **kwargs)
         
         # Procesar figsize
         process_figsize_in_kwargs(kwargs)
@@ -85,7 +86,7 @@ class RugChart(ChartBase):
             'type': 'rug',
             'data': rug_data,
             'encoding': {
-                'value': {'field': 'value'}
+                axis: {'field': axis}  # Ahora coincide con el campo en data
             },
             'options': {
                 'axis': axis,
