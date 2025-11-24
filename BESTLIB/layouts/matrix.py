@@ -287,13 +287,25 @@ class MatrixLayout:
     @classmethod
     def map_kde(cls, letter, data, **kwargs):
         """Método helper para crear KDE"""
-        from ..charts.registry import ChartRegistry
-        chart = ChartRegistry.get('kde')
-        spec = chart.get_spec(data, **kwargs)
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        print(f"[DEBUG map_kde] Iniciando con letter={letter}, kwargs={list(kwargs.keys())}")
+        try:
+            from ..charts.registry import ChartRegistry
+            print(f"[DEBUG map_kde] ChartRegistry importado")
+            print(f"[DEBUG map_kde] Tipos disponibles: {ChartRegistry.list_types()}")
+            chart = ChartRegistry.get('kde')
+            print(f"[DEBUG map_kde] Chart obtenido: {chart}")
+            spec = chart.get_spec(data, **kwargs)
+            print(f"[DEBUG map_kde] Spec generado: type={spec.get('type')}, data_len={len(spec.get('data', []))}")
+            if not hasattr(cls, '_map') or cls._map is None:
+                cls._map = {}
+            cls._map[letter] = spec
+            print(f"[DEBUG map_kde] Spec asignado a letra {letter}")
+            return spec
+        except Exception as e:
+            print(f"[ERROR map_kde] {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     
     @classmethod
     def map_distplot(cls, letter, data, **kwargs):
