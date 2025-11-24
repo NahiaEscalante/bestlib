@@ -467,6 +467,16 @@ class MatrixLayout:
         if self._merge_opt is not None:
             mapping_merged["__merge__"] = self._merge_opt
         
+        # DEBUG: Ver contenido del mapping
+        print(f"[DEBUG _prepare_repr_data] _map keys: {list(self._map.keys()) if self._map else 'None'}")
+        if self._map and 'K' in self._map:
+            kde_spec = self._map['K']
+            print(f"[DEBUG _prepare_repr_data] KDE spec keys: {list(kde_spec.keys())}")
+            print(f"[DEBUG _prepare_repr_data] KDE data type: {type(kde_spec.get('data'))}")
+            print(f"[DEBUG _prepare_repr_data] KDE data length: {len(kde_spec.get('data', []))}")
+            if kde_spec.get('data'):
+                print(f"[DEBUG _prepare_repr_data] KDE first 2 points: {kde_spec['data'][:2]}")
+        
         # Generar estilo inline
         inline_style = ""
         if self._max_width is not None:
