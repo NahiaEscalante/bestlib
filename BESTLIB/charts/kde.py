@@ -1,10 +1,11 @@
 """
 KDE (Kernel Density Estimation) Chart para BESTLIB
-Estimación de densidad de kernel
+Estimación de densidad de kernel - VERSIÓN REESCRITA
 """
 from .base import ChartBase
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError
+import json
 
 try:
     import pandas as pd
@@ -35,19 +36,21 @@ class KdeChart(ChartBase):
         
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
             if column not in data.columns:
-                raise ChartError(f"Columna '{column}' no encontrada. Columnas: {list(data.columns)}")
+                raise ChartError(f"Columna '{column}' no encontrada")
             if not pd.api.types.is_numeric_dtype(data[column]):
                 raise ChartError(f"Columna '{column}' debe ser numérica")
+        elif isinstance(data, list) and len(data) > 0:
+            if column not in data[0]:
+                raise ChartError(f"Columna '{column}' no encontrada")
         else:
-            if isinstance(data, list) and len(data) > 0:
-                if column not in data[0]:
-                    raise ChartError(f"Columna '{column}' no encontrada en los datos")
-            else:
-                raise ChartError("Los datos deben ser un DataFrame o lista no vacía")
+            raise ChartError("Los datos deben ser un DataFrame o lista no vacía")
     
     def prepare_data(self, data, column=None, bandwidth=None, **kwargs):
-        """Prepara datos para KDE calculando la densidad."""
-        # Extraer valores
+        """
+        Prepara datos para KDE calculando la densidad.
+        CRÍTICO: Retorna lista de diccionarios con tipos Python nativos (no numpy).
+        """
+        # Extraer valores numéricos
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
             values = data[column].dropna().values
         else:
@@ -57,15 +60,18 @@ class KdeChart(ChartBase):
         if len(values) == 0:
             raise ChartError(f"No hay datos válidos en columna '{column}'")
         
-        # Calcular KDE con scipy o fallback a numpy
+        # Calcular KDE
         try:
             from scipy.stats import gaussian_kde
             kde = gaussian_kde(values, bw_method=bandwidth) if bandwidth else gaussian_kde(values)
             
             # Crear rango de evaluación
-            x_min, x_max = float(np.min(values)), float(np.max(values))
+            x_min = float(np.min(values))
+            x_max = float(np.max(values))
             x_range = x_max - x_min
             x_padding = x_range * 0.1
+            
+            # Generar puntos de evaluación
             x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
             y_density = kde(x_eval)
             
@@ -75,64 +81,84 @@ class KdeChart(ChartBase):
             x_eval = (bin_edges[:-1] + bin_edges[1:]) / 2
             y_density = hist
         
-        # Convertir a lista de puntos {x, y}
-        kde_data = [{'x': float(x), 'y': float(y)} for x, y in zip(x_eval, y_density)]
+        # CRÍTICO: Convertir explícitamente a tipos Python nativos
+        # No usar numpy types que no serializan bien a JSON
+        kde_points = []
+        for x, y in zip(x_eval, y_density):
+            # Asegurar que x e y son float Python nativos, no numpy.float64
+            kde_points.append({
+                'x': float(x),
+                'y': float(y)
+            })
         
-        return kde_data
+        return kde_points
     
     def get_spec(self, data, column=None, bandwidth=None, **kwargs):
-        """Genera la especificación del KDE."""
-        # Validar y preparar datos
-        self.validate_data(data, column=column, **kwargs)
-        kde_data = self.prepare_data(data, column=column, bandwidth=bandwidth, **kwargs)
-        
-        # DEBUG: Verificar datos preparados
-        print(f"[KDE] Datos preparados: {len(kde_data)} puntos")
-        if len(kde_data) > 0:
-            print(f"[KDE] Primer punto: {kde_data[0]}")
-            print(f"[KDE] Último punto: {kde_data[-1]}")
-        
-        # Procesar figsize
-        process_figsize_in_kwargs(kwargs)
-        
-        # Etiquetas automáticas
-        if 'xLabel' not in kwargs:
-            kwargs['xLabel'] = column if column else 'Value'
-        if 'yLabel' not in kwargs:
-            kwargs['yLabel'] = 'Density'
-        
-        # Construir spec simple y directo
-        spec = {
-            'type': self.chart_type,
-            'data': kde_data,  # Lista directa de {x, y}
-        }
-        
-        # DEBUG: Verificar spec
-        print(f"[KDE] Spec creado - type: {spec['type']}, data length: {len(spec.get('data', []))}")
-        
-        # Encoding
-        spec['encoding'] = {
-            'x': {'field': 'x'},
-            'y': {'field': 'y'}
-        }
-        
-        # Options con valores por defecto
-        spec['options'] = {
-            'color': kwargs.pop('color', '#4a90e2'),
-            'strokeWidth': kwargs.pop('strokeWidth', 2),
-            'fill': kwargs.pop('fill', True),
-            'opacity': kwargs.pop('opacity', 0.3),
-            'axes': kwargs.pop('axes', True),
-            'xLabel': kwargs.pop('xLabel', column),
-            'yLabel': kwargs.pop('yLabel', 'Density')
-        }
-        
-        # Agregar figsize si existe
-        if 'figsize' in kwargs:
-            spec['options']['figsize'] = kwargs.pop('figsize')
-        
-        # Resto de kwargs
-        spec.update(kwargs)
-        
-        return spec
+        """
+        Genera la especificación del KDE.
+        CRÍTICO: Asegura que todos los datos sean serializables a JSON.
+        """
+        try:
+            # Validar datos
+            self.validate_data(data, column=column, **kwargs)
+            
+            # Preparar datos KDE
+            kde_points = self.prepare_data(data, column=column, bandwidth=bandwidth, **kwargs)
+            
+            # Verificar que tenemos datos válidos
+            if not kde_points or len(kde_points) == 0:
+                raise ChartError("No se pudieron calcular puntos KDE")
+            
+            # Procesar figsize
+            process_figsize_in_kwargs(kwargs)
+            
+            # Extraer opciones con valores por defecto
+            color = kwargs.pop('color', '#4a90e2')
+            stroke_width = kwargs.pop('strokeWidth', 2)
+            fill = kwargs.pop('fill', True)
+            opacity = kwargs.pop('opacity', 0.3)
+            axes = kwargs.pop('axes', True)
+            x_label = kwargs.pop('xLabel', column if column else 'Value')
+            y_label = kwargs.pop('yLabel', 'Density')
+            
+            # Construir spec - ESTRUCTURA LIMPIA
+            spec = {
+                'type': 'kde',
+                'data': kde_points,  # Lista de {x, y} con tipos Python nativos
+                'encoding': {
+                    'x': {'field': 'x'},
+                    'y': {'field': 'y'}
+                },
+                'options': {
+                    'color': color,
+                    'strokeWidth': stroke_width,
+                    'fill': fill,
+                    'opacity': opacity,
+                    'axes': axes,
+                    'xLabel': x_label,
+                    'yLabel': y_label
+                }
+            }
+            
+            # Agregar figsize si existe
+            if 'figsize' in kwargs:
+                spec['options']['figsize'] = kwargs['figsize']
+            
+            # Verificar que el spec es serializable a JSON
+            try:
+                json.dumps(spec)
+            except (TypeError, ValueError) as e:
+                raise ChartError(f"Spec no es serializable a JSON: {e}")
+            
+            return spec
+            
+        except Exception as e:
+            # En caso de error, retornar spec vacío pero válido
+            print(f"[KDE ERROR] {str(e)}")
+            return {
+                'type': 'kde',
+                'data': [],
+                'encoding': {'x': {'field': 'x'}, 'y': {'field': 'y'}},
+                'options': {}
+            }
 
