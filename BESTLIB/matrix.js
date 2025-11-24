@@ -2518,6 +2518,27 @@
       .style('overflow', 'visible')
       .style('display', 'block'); // Evitar espacios en blanco
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    // Crear tooltip para violin
+    const tooltipId = `violin-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'violin-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
 
     const categories = validViolins.map(v => String(v.category || 'Unknown'));
     const yAll = validViolins.flatMap(v => v.profile.map(p => p.y)).filter(y => y != null && !isNaN(y));
@@ -6813,6 +6834,27 @@
       .nice()
       .range([0, chartWidth]);
     
+    // Crear tooltip para horizontal bar
+    const tooltipId = `horizontalbar-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'horizontalbar-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
     // Barras
     g.selectAll('.bar')
       .data(data)
@@ -6824,6 +6866,28 @@
       .attr('width', 0)
       .attr('height', y.bandwidth())
       .attr('fill', color)
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(event, d) {
+        d3.select(this)
+          .transition()
+          .duration(200)
+          .attr('opacity', 0.7);
+        
+        const formatters = {
+          custom: (data) => {
+            return `<div><strong>${data.category}</strong></div>
+                    <div><strong>Valor:</strong> ${data.value}</div>`;
+          }
+        };
+        showTooltip(tooltip, event, container, d, formatters);
+      })
+      .on('mouseleave', function() {
+        d3.select(this)
+          .transition()
+          .duration(200)
+          .attr('opacity', 1);
+        hideTooltip(tooltip);
+      })
       .transition()
       .duration(500)
       .attr('width', d => x(d.value));
@@ -7672,6 +7736,27 @@
       .nice()
       .range([chartHeight, 0]);
     
+    // Crear tooltip para distplot
+    const tooltipId = `distplot-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'distplot-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
     // Histograma
     if (histogram.length > 0) {
       g.selectAll('.bar')
@@ -7684,7 +7769,29 @@
         .attr('y', d => y(d.y))
         .attr('height', d => chartHeight - y(d.y))
         .attr('fill', color)
-        .attr('opacity', 0.6);
+        .attr('opacity', 0.6)
+        .style('cursor', 'pointer')
+        .on('mouseenter', function(event, d) {
+          d3.select(this)
+            .transition()
+            .duration(200)
+            .attr('opacity', 0.8);
+          
+          const formatters = {
+            custom: (data) => {
+              return `<div><strong>Rango:</strong> ${data.bin_start.toFixed(2)} - ${data.bin_end.toFixed(2)}</div>
+                      <div><strong>Frecuencia:</strong> ${data.y.toFixed(4)}</div>`;
+            }
+          };
+          showTooltip(tooltip, event, container, d, formatters);
+        })
+        .on('mouseleave', function() {
+          d3.select(this)
+            .transition()
+            .duration(200)
+            .attr('opacity', 0.6);
+          hideTooltip(tooltip);
+        });
     }
     
     // KDE
@@ -7701,6 +7808,30 @@
         .attr('stroke-width', 2)
         .attr('d', kdeLine)
         .attr('class', 'bestlib-line');
+      
+      // Agregar círculos invisibles para tooltips en KDE
+      g.selectAll('.kde-point')
+        .data(kde.filter((d, i) => i % 3 === 0)) // Solo cada 3 puntos
+        .enter()
+        .append('circle')
+        .attr('class', 'kde-point')
+        .attr('cx', d => x(d.x))
+        .attr('cy', d => y(d.y))
+        .attr('r', 8)
+        .attr('fill', 'transparent')
+        .style('cursor', 'crosshair')
+        .on('mouseenter', function(event, d) {
+          const formatters = {
+            custom: (data) => {
+              return `<div><strong>Valor:</strong> ${data.x.toFixed(2)}</div>
+                      <div><strong>Densidad:</strong> ${data.y.toFixed(4)}</div>`;
+            }
+          };
+          showTooltip(tooltip, event, container, d, formatters);
+        })
+        .on('mouseleave', function() {
+          hideTooltip(tooltip);
+        });
     }
     
     // Rug
