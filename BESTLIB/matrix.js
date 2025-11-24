@@ -7163,6 +7163,17 @@
    * KDE (Kernel Density Estimation) con D3.js
    */
   function renderKdeD3(container, spec, d3, divId) {
+    console.log('[BESTLIB] renderKdeD3 called', {
+      hasSpec: !!spec,
+      specKeys: spec ? Object.keys(spec) : [],
+      specType: spec ? spec.type : 'none',
+      hasData: spec && 'data' in spec,
+      dataValue: spec ? spec.data : 'no spec',
+      dataType: spec && spec.data ? typeof spec.data : 'unknown',
+      dataIsArray: spec && spec.data ? Array.isArray(spec.data) : false,
+      dataLength: spec && spec.data && Array.isArray(spec.data) ? spec.data.length : 0
+    });
+    
     const data = spec.data || [];
     if (!data || data.length === 0) {
       console.error('[BESTLIB] renderKdeD3: No hay datos', { 
@@ -7172,7 +7183,7 @@
         dataValue: spec.data,
         specKeys: Object.keys(spec)
       });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para KDE</div>';
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para KDE<br>Revisa la consola del navegador para más detalles</div>';
       return;
     }
     
