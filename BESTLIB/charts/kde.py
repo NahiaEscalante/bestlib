@@ -120,6 +120,19 @@ class KdeChart(ChartBase):
             axes = kwargs.pop('axes', True)
             x_label = kwargs.pop('xLabel', column if column else 'Value')
             y_label = kwargs.pop('yLabel', 'Density')
+            rug = kwargs.pop('rug', False)  # Nueva opción para incluir rug plot
+            
+            # Preparar datos del rug plot si está activado
+            rug_data = None
+            if rug:
+                # Extraer valores originales para el rug plot
+                if HAS_PANDAS and isinstance(data, pd.DataFrame):
+                    values = data[column].dropna().values
+                else:
+                    values = [d[column] for d in data if column in d and d[column] is not None]
+                
+                # Convertir a lista de diccionarios con tipo Python nativo
+                rug_data = [{'x': float(val)} for val in values]
             
             # Construir spec final
             spec = {
@@ -136,7 +149,9 @@ class KdeChart(ChartBase):
                     'opacity': opacity,
                     'axes': axes,
                     'xLabel': x_label,
-                    'yLabel': y_label
+                    'yLabel': y_label,
+                    'rug': rug,
+                    'rugData': rug_data if rug else None
                 }
             }
             

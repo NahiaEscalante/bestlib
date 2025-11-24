@@ -7267,6 +7267,26 @@
       .attr('d', line)
       .attr('class', 'bestlib-line');
     
+    // Rug plot (marcas de datos individuales)
+    if (options.rug && options.rugData && Array.isArray(options.rugData) && options.rugData.length > 0) {
+      const rugData = options.rugData;
+      const rugSize = 8; // Tamaño de las marcas
+      const rugOpacity = 0.5;
+      
+      g.selectAll('.rug-line')
+        .data(rugData)
+        .enter()
+        .append('line')
+        .attr('class', 'rug-line')
+        .attr('x1', d => x(d.x))
+        .attr('x2', d => x(d.x))
+        .attr('y1', chartHeight)
+        .attr('y2', chartHeight - rugSize)
+        .attr('stroke', color)
+        .attr('stroke-width', 1.5)
+        .attr('opacity', rugOpacity);
+    }
+    
     // Ejes
     if (spec.axes !== false) {
       const xAxis = g.append('g')
