@@ -3,9 +3,8 @@ Rug Plot Chart para BESTLIB
 Marcadores en el eje para mostrar distribución de datos
 """
 from .base import ChartBase
-from ..data.validators import validate_scatter_data
 from ..utils.figsize import process_figsize_in_kwargs
-from ..core.exceptions import ChartError, DataError
+from ..core.exceptions import ChartError
 
 try:
     import pandas as pd
@@ -27,44 +26,18 @@ class RugChart(ChartBase):
         return 'rug'
     
     def validate_data(self, data, column=None, **kwargs):
-        """
-        Valida que los datos sean adecuados para rug plot.
-        
-        Args:
-            data: DataFrame o lista de diccionarios
-            column: Nombre de columna numérica
-            **kwargs: Otros parámetros
-        
-        Raises:
-            ChartError: Si los datos no son válidos
-        """
+        """Valida que los datos sean adecuados para rug plot."""
         if not column:
             raise ChartError("column es requerido para rug plot")
         
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
             if column not in data.columns:
-                raise ChartError(f"Columna '{column}' no encontrada en los datos")
+                raise ChartError(f"Columna '{column}' no encontrada")
             if not pd.api.types.is_numeric_dtype(data[column]):
                 raise ChartError(f"Columna '{column}' debe ser numérica")
-        else:
-            if isinstance(data, list) and len(data) > 0:
-                if column not in data[0]:
-                    raise ChartError(f"Columna '{column}' no encontrada en los datos")
-            else:
-                raise ChartError("Los datos deben ser un DataFrame o lista no vacía")
     
     def prepare_data(self, data, column=None, **kwargs):
-        """
-        Prepara datos para rug plot.
-        
-        Args:
-            data: DataFrame o lista de diccionarios
-            column: Nombre de columna numérica
-            **kwargs: Otros parámetros
-        
-        Returns:
-            dict: Datos preparados con 'x' y 'y' (posiciones en el eje)
-        """
+        """Prepara datos para rug plot."""
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
             values = data[column].dropna().values
         else:
@@ -75,15 +48,10 @@ class RugChart(ChartBase):
         if len(values) == 0:
             raise ChartError("No hay datos válidos para rug plot")
         
-        # Crear datos para rug plot: cada valor se marca en el eje
-        rug_data = []
-        for val in values:
-            rug_data.append({
-                'x': float(val),
-                'y': 0  # Posición en el eje (se ajustará en JS)
-            })
+        # Crear datos: cada valor es un marcador en el eje
+        rug_data = [{'value': float(val)} for val in values]
         
-        return {'data': rug_data}
+        return rug_data
     
     def get_spec(self, data, column=None, axis='x', **kwargs):
         """
@@ -93,65 +61,51 @@ class RugChart(ChartBase):
             data: DataFrame o lista de diccionarios
             column: Nombre de columna numérica
             axis: Eje donde mostrar rug ('x' o 'y')
-            **kwargs: Opciones adicionales (color, size, opacity, etc.)
-        
-        Returns:
-            dict: Spec conforme a BESTLIB Visualization Spec
+            **kwargs: Opciones adicionales
         """
         # Validar datos
         self.validate_data(data, column=column, **kwargs)
         
         # Preparar datos
-        rug_data = self.prepare_data(
-            data,
-            column=column,
-            **kwargs
-        )
+        rug_data = self.prepare_data(data, column=column, **kwargs)
         
-        # Procesar figsize si está en kwargs
+        # Procesar figsize
         process_figsize_in_kwargs(kwargs)
         
-        # Agregar etiquetas de ejes automáticamente
-        if 'xLabel' not in kwargs and column and axis == 'x':
-            kwargs['xLabel'] = column
-        if 'yLabel' not in kwargs and column and axis == 'y':
-            kwargs['yLabel'] = column
+        # Extraer opciones
+        color = kwargs.pop('color', '#4a90e2')
+        size = kwargs.pop('size', 2)
+        opacity = kwargs.pop('opacity', 0.6)
+        axes = kwargs.pop('axes', True)
+        x_label = kwargs.pop('xLabel', column if axis == 'x' else '')
+        y_label = kwargs.pop('yLabel', column if axis == 'y' else '')
         
         # Construir spec
         spec = {
-            'type': self.chart_type,
-            'data': rug_data['data'],
+            'type': 'rug',
+            'data': rug_data,
+            'encoding': {
+                'value': {'field': 'value'}
+            },
+            'options': {
+                'axis': axis,
+                'color': color,
+                'size': size,
+                'opacity': opacity,
+                'axes': axes,
+                'xLabel': x_label,
+                'yLabel': y_label
+            }
         }
         
-        # Agregar encoding
-        encoding = {}
-        if column:
-            encoding['x' if axis == 'x' else 'y'] = {'field': column}
+        # Agregar figsize si existe
+        if 'figsize' in kwargs:
+            spec['options']['figsize'] = kwargs['figsize']
         
-        if encoding:
-            spec['encoding'] = encoding
-        
-        # Agregar options
-        options = {}
-        for key in ['color', 'size', 'opacity', 'axes', 'xLabel', 'yLabel', 'figsize', 'interactive', 'axis']:
-            if key in kwargs:
-                options[key] = kwargs.pop(key)
-        
-        # Valores por defecto
-        if 'color' not in options:
-            options['color'] = '#4a90e2'
-        if 'size' not in options:
-            options['size'] = 2
-        if 'opacity' not in options:
-            options['opacity'] = 0.6
-        if 'axis' not in options:
-            options['axis'] = axis
-        
-        if options:
-            spec['options'] = options
-        
-        # Agregar cualquier otro kwargs restante
-        spec.update(kwargs)
+        # Agregar kwargs restantes
+        for key, value in kwargs.items():
+            if key not in spec:
+                spec[key] = value
         
         return spec
 
