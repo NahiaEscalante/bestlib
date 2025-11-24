@@ -1836,11 +1836,23 @@ class MatrixLayout:
             from .charts import ChartRegistry
             chart = ChartRegistry.get('kde')
             spec = chart.get_spec(data, column=column, bandwidth=bandwidth, **kwargs)
-        except Exception:
+            
+            # DEBUG: Verificar spec recibido
+            print(f"[MATRIX] map_kde recibió spec con {len(spec.get('data', []))} puntos")
+            
+        except Exception as e:
+            print(f"[MATRIX ERROR] Error en map_kde: {e}")
+            import traceback
+            traceback.print_exc()
             spec = {'type': 'kde', 'data': [], **kwargs}
+        
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
         cls._map[letter] = spec
+        
+        # DEBUG: Verificar spec antes de guardarlo
+        print(f"[MATRIX] Guardando spec en _map['{letter}'] con {len(spec.get('data', []))} puntos")
+        
         return spec
     
     @classmethod
