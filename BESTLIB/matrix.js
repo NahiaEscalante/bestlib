@@ -5995,42 +5995,52 @@
         
         // ✨ TOOLTIP: Mostrar datos del punto
         if (!isBrushing) {
-          // Preparar datos para el tooltip (usar _original_row si existe, sino el dato procesado)
-          const tooltipData = d._original_row || d;
-          
-          // Definir formateadores para campos específicos
+          // Preparar datos para el tooltip
           const formatters = {
-            fields: [], // Se llenará automáticamente con todos los campos
-            labels: {}, // Etiquetas personalizadas
             custom: (data) => {
-              // Formato personalizado para scatter plot
               let html = '';
               
-              // Mostrar campos básicos primero
-              if (data.x !== undefined) html += `<div><strong>X:</strong> ${data.x.toFixed(2)}</div>`;
-              if (data.y !== undefined) html += `<div><strong>Y:</strong> ${data.y.toFixed(2)}</div>`;
-              if (data.category) html += `<div><strong>Category:</strong> ${data.category}</div>`;
-              if (data.size !== undefined && data.size !== null) html += `<div><strong>Size:</strong> ${data.size.toFixed(2)}</div>`;
+              // Primero intentar con _original_row (datos completos del DataFrame)
+              const sourceData = data._original_row || data;
               
-              // Mostrar todos los demás campos del _original_row
-              if (data._original_row) {
-                const origData = data._original_row;
-                Object.keys(origData).forEach(key => {
-                  if (!key.startsWith('_') && !['x', 'y', 'category', 'size', 'color'].includes(key)) {
-                    const value = origData[key];
-                    if (value !== null && value !== undefined) {
-                      const displayValue = typeof value === 'number' ? value.toFixed(2) : value;
-                      html += `<div><strong>${key}:</strong> ${displayValue}</div>`;
-                    }
-                  }
-                });
+              // Obtener todas las claves del objeto
+              const allKeys = Object.keys(sourceData);
+              
+              // Mostrar campos principales primero (x, y, category)
+              if (data.x !== undefined) {
+                html += `<div><strong>X:</strong> ${typeof data.x === 'number' ? data.x.toFixed(2) : data.x}</div>`;
+              }
+              if (data.y !== undefined) {
+                html += `<div><strong>Y:</strong> ${typeof data.y === 'number' ? data.y.toFixed(2) : data.y}</div>`;
+              }
+              if (data.category) {
+                html += `<div><strong>Category:</strong> ${data.category}</div>`;
               }
               
-              return html || '<div>No data</div>';
+              // Separador visual
+              if (allKeys.length > 3) {
+                html += `<div style="border-top: 1px solid rgba(255,255,255,0.3); margin: 6px 0 4px 0;"></div>`;
+              }
+              
+              // Mostrar TODOS los demás campos
+              allKeys.forEach(key => {
+                // Skip campos internos y ya mostrados
+                if (key.startsWith('_') || ['x', 'y', 'category', 'color', 'size'].includes(key)) {
+                  return;
+                }
+                
+                const value = sourceData[key];
+                if (value !== null && value !== undefined) {
+                  const displayValue = typeof value === 'number' ? value.toFixed(2) : value;
+                  html += `<div style="font-size: 11px;"><strong>${key}:</strong> ${displayValue}</div>`;
+                }
+              });
+              
+              return html || '<div>Hover data</div>';
             }
           };
           
-          showTooltip(tooltip, event, container, tooltipData, formatters);
+          showTooltip(tooltip, event, container, d, formatters);
         }
         
         // Agrandar punto en hover (solo si no está seleccionado)
