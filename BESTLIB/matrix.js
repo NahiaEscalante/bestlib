@@ -2659,6 +2659,37 @@
           .attr('stroke-linejoin', 'round')
           .attr('stroke-linecap', 'round');
         
+        // Agregar área invisible para tooltips
+        const yMin = d3.min(safeProfile.map(p => p.y));
+        const yMax = d3.max(safeProfile.map(p => p.y));
+        const median = d3.median(safeProfile.map(p => p.y));
+        const q1 = d3.quantile(safeProfile.map(p => p.y).sort(d3.ascending), 0.25);
+        const q3 = d3.quantile(safeProfile.map(p => p.y).sort(d3.ascending), 0.75);
+        
+        g.append('rect')
+          .attr('x', centerX - maxViolinWidth)
+          .attr('y', y(yMax))
+          .attr('width', maxViolinWidth * 2)
+          .attr('height', y(yMin) - y(yMax))
+          .attr('fill', 'transparent')
+          .style('cursor', 'pointer')
+          .on('mouseenter', function(event) {
+            const formatters = {
+              custom: (data) => {
+                return `<div><strong>${category}</strong></div>
+                        <div><strong>Mínimo:</strong> ${yMin.toFixed(2)}</div>
+                        <div><strong>Q1:</strong> ${q1.toFixed(2)}</div>
+                        <div><strong>Mediana:</strong> ${median.toFixed(2)}</div>
+                        <div><strong>Q3:</strong> ${q3.toFixed(2)}</div>
+                        <div><strong>Máximo:</strong> ${yMax.toFixed(2)}</div>`;
+              }
+            };
+            showTooltip(tooltip, event, container, {category, yMin, median, q1, q3, yMax}, formatters);
+          })
+          .on('mouseleave', function() {
+            hideTooltip(tooltip);
+          });
+        
         renderedViolins++;
       } catch (e) {
         violinErrors.push(`Categoría "${category}": Error al generar path (${e.message})`);
@@ -4971,43 +5002,26 @@
       .style('cursor', 'pointer')
       .on('mouseenter', function(event, d) {
         // Mostrar tooltip con información detallada
-        const mouseX = event.pageX || event.clientX || 0;
-        const mouseY = event.pageY || event.clientY || 0;
-        
         const iqr = d.q3 - d.q1;
         const minVal = d.min !== undefined ? d.min : d.lower;
         const maxVal = d.max !== undefined ? d.max : d.upper;
         
-        tooltip
-          .style('left', (mouseX + 10) + 'px')
-          .style('top', (mouseY - 10) + 'px')
-          .style('display', 'block')
-          .html(`
-            <strong>${d.category}</strong><br/>
-            <strong>${yLabel}:</strong><br/>
-            &nbsp;&nbsp;Mínimo: ${minVal.toFixed(2)}<br/>
-            &nbsp;&nbsp;Q1 (25%): ${d.q1.toFixed(2)}<br/>
-            &nbsp;&nbsp;Mediana: ${d.median.toFixed(2)}<br/>
-            &nbsp;&nbsp;Q3 (75%): ${d.q3.toFixed(2)}<br/>
-            &nbsp;&nbsp;Máximo: ${maxVal.toFixed(2)}<br/>
-            &nbsp;&nbsp;IQR: ${iqr.toFixed(2)}
-          `)
-          .transition()
-          .duration(200)
-          .style('opacity', 1);
-        
-        // Resaltar boxplot
-        d3.select(this).selectAll('rect, line')
-          .attr('opacity', 0.7);
+        const formatters = {
+          custom: (data) => {
+            return `<div><strong>${data.category}</strong></div>
+                    <div><strong>${yLabel}:</strong></div>
+                    <div>&nbsp;&nbsp;Mínimo: ${minVal.toFixed(2)}</div>
+                    <div>&nbsp;&nbsp;Q1 (25%): ${data.q1.toFixed(2)}</div>
+                    <div>&nbsp;&nbsp;Mediana: ${data.median.toFixed(2)}</div>
+                    <div>&nbsp;&nbsp;Q3 (75%): ${data.q3.toFixed(2)}</div>
+                    <div>&nbsp;&nbsp;Máximo: ${maxVal.toFixed(2)}</div>
+                    <div>&nbsp;&nbsp;IQR: ${iqr.toFixed(2)}</div>`;
+          }
+        };
+        showTooltip(tooltip, event, container, d, formatters);
       })
-      .on('mouseleave', function(event, d) {
-        // Ocultar tooltip
-        tooltip.transition()
-          .duration(200)
-          .style('opacity', 0)
-          .on('end', function() {
-            tooltip.style('display', 'none');
-          });
+      .on('mouseleave', function() {
+        hideTooltip(tooltip);
         
         // Restaurar opacidad
         d3.select(this).selectAll('rect, line')
@@ -5430,6 +5444,70 @@
       .nice()
       .range([chartHeight, 0]);
     
+    // Crear tooltip para bar chart
+    const tooltipId = `barchart-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'barchart-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
+  // Barras simples (no agrupadas)
+  if (!spec.grouped) {
+    g.selectAll('.bar')
+      .data(data)
+      .enter()
+      .append('rect')
+      .attr('class', 'bar')
+      .attr('x', d => x(d.category))
+      .attr('y', chartHeight)
+      .attr('width', x.bandwidth())
+      .attr('height', 0)
+      .attr('fill', d => {
+        const colorMap = spec.colorMap || {};
+        return colorMap[d.category] || spec.color || '#4a90e2';
+      })
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(event, d) {
+        d3.select(this)
+          .transition()
+          .duration(200)
+          .attr('opacity', 0.7);
+        
+        const formatters = {
+          custom: (data) => {
+            return `<div><strong>${data.category}</strong></div>
+                    <div><strong>Valor:</strong> ${data.value}</div>`;
+          }
+        };
+        showTooltip(tooltip, event, container, d, formatters);
+      })
+      .on('mouseleave', function() {
+        d3.select(this)
+          .transition()
+          .duration(200)
+          .attr('opacity', 1);
+        hideTooltip(tooltip);
+      })
+      .transition()
+      .duration(800)
+      .attr('y', d => y(d.value))
+      .attr('height', d => chartHeight - y(d.value));
+  }
+  
   if (spec.grouped) {
     // Grouped/nested bars
     const groups = spec.groups || [];
@@ -7450,6 +7528,27 @@
         .attr('fill', color)
         .attr('fill-opacity', opacity)
         .attr('d', area);
+    }
+    
+    // Crear tooltip para KDE
+    const tooltipId = `kde-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'kde-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
     }
     
     // Línea
