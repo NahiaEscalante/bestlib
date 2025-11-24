@@ -95,8 +95,8 @@ class KdeChart(ChartBase):
     
     def get_spec(self, data, column=None, bandwidth=None, **kwargs):
         """
-        Genera la especificación del KDE.
-        CRÍTICO: Asegura que todos los datos sean serializables a JSON.
+        Genera la especificación del KDE para matrix.js.
+        Retorna un dict serializable a JSON.
         """
         try:
             # Validar datos
@@ -105,14 +105,14 @@ class KdeChart(ChartBase):
             # Preparar datos KDE
             kde_points = self.prepare_data(data, column=column, bandwidth=bandwidth, **kwargs)
             
-            # Verificar que tenemos datos válidos
+            # Verificar que tenemos datos
             if not kde_points or len(kde_points) == 0:
                 raise ChartError("No se pudieron calcular puntos KDE")
             
             # Procesar figsize
             process_figsize_in_kwargs(kwargs)
             
-            # Extraer opciones con valores por defecto
+            # Extraer opciones (con pop para no duplicar en spec)
             color = kwargs.pop('color', '#4a90e2')
             stroke_width = kwargs.pop('strokeWidth', 2)
             fill = kwargs.pop('fill', True)
@@ -121,10 +121,10 @@ class KdeChart(ChartBase):
             x_label = kwargs.pop('xLabel', column if column else 'Value')
             y_label = kwargs.pop('yLabel', 'Density')
             
-            # Construir spec - ESTRUCTURA LIMPIA
+            # Construir spec final
             spec = {
                 'type': 'kde',
-                'data': kde_points,  # Lista de {x, y} con tipos Python nativos
+                'data': kde_points,
                 'encoding': {
                     'x': {'field': 'x'},
                     'y': {'field': 'y'}
@@ -144,17 +144,19 @@ class KdeChart(ChartBase):
             if 'figsize' in kwargs:
                 spec['options']['figsize'] = kwargs['figsize']
             
-            # Verificar que el spec es serializable a JSON
-            try:
-                json.dumps(spec)
-            except (TypeError, ValueError) as e:
-                raise ChartError(f"Spec no es serializable a JSON: {e}")
+            # Agregar cualquier otro kwarg restante
+            for key, value in kwargs.items():
+                if key not in spec:
+                    spec[key] = value
             
             return spec
             
         except Exception as e:
             # En caso de error, retornar spec vacío pero válido
             print(f"[KDE ERROR] {str(e)}")
+            import traceback
+            traceback.print_exc()
+            
             return {
                 'type': 'kde',
                 'data': [],
