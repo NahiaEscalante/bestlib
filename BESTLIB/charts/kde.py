@@ -86,6 +86,12 @@ class KdeChart(ChartBase):
         self.validate_data(data, column=column, **kwargs)
         kde_data = self.prepare_data(data, column=column, bandwidth=bandwidth, **kwargs)
         
+        # DEBUG: Verificar datos preparados
+        print(f"[KDE] Datos preparados: {len(kde_data)} puntos")
+        if len(kde_data) > 0:
+            print(f"[KDE] Primer punto: {kde_data[0]}")
+            print(f"[KDE] Último punto: {kde_data[-1]}")
+        
         # Procesar figsize
         process_figsize_in_kwargs(kwargs)
         
@@ -100,6 +106,9 @@ class KdeChart(ChartBase):
             'type': self.chart_type,
             'data': kde_data,  # Lista directa de {x, y}
         }
+        
+        # DEBUG: Verificar spec
+        print(f"[KDE] Spec creado - type: {spec['type']}, data length: {len(spec.get('data', []))}")
         
         # Encoding
         spec['encoding'] = {
