@@ -389,7 +389,19 @@ class MatrixLayout:
         """Registra un handler por defecto para eventos 'select' que muestre los datos seleccionados"""
         def default_select_handler(payload):
             """Handler por defecto que muestra los datos seleccionados (solo si no hay handlers personalizados)"""
-            # Solo ejecutar si no hay handlers personalizados
+            # 🎯 ACTUALIZAR: Siempre guardar datos en self.selected_data
+            items = payload.get('items', [])
+            count = payload.get('count', len(items))
+            
+            # Guardar datos seleccionados automáticamente en el atributo público
+            if HAS_PANDAS and items:
+                self.selected_data = pd.DataFrame(items)
+            elif items:
+                self.selected_data = items  # Lista de diccionarios si pandas no está disponible
+            else:
+                self.selected_data = None
+            
+            # Solo mostrar mensajes si no hay handlers personalizados
             if hasattr(self, '_has_custom_select_handler') and self._has_custom_select_handler:
                 return
             
@@ -397,9 +409,6 @@ class MatrixLayout:
             # Esto evita que se muestre información duplicada o incorrecta
             if payload.get('__view_letter__') is not None:
                 return
-            
-            items = payload.get('items', [])
-            count = payload.get('count', len(items))
             
             if count == 0:
                 print("📊 No hay elementos seleccionados")
@@ -432,7 +441,7 @@ class MatrixLayout:
             if count > display_count:
                 print(f"\n... y {count - display_count} elemento(s) más")
             print("=" * 60)
-            print(f"\n💡 Tip: Usa layout.on('select', tu_funcion) para personalizar el manejo de selecciones")
+            print(f"\n💡 Tip: Accede a los datos con layout.selected_data o usa layout.on('select', tu_funcion) para personalizar")
         
         # Registrar el handler por defecto (pero no marcar como personalizado)
         if not hasattr(self, "_handlers"):
@@ -2026,6 +2035,9 @@ class MatrixLayout:
         self._has_custom_select_handler = False  # Flag para rastrear handlers personalizados
         self._reactive_model = None  # Para modelo reactivo
         self._merge_opt = None  # Merge explícito por instancia (True | False | [letras])
+        
+        # 🎯 NUEVO: Atributo público para almacenar datos seleccionados automáticamente
+        self.selected_data = None  # DataFrame con los datos seleccionados
         
         # Inicializar self._map vacío (no se usa, todos los map_* guardan en MatrixLayout._map)
         # Se mantiene por compatibilidad pero _prepare_repr_data usa MatrixLayout._map directamente
