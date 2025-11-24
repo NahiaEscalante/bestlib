@@ -66,15 +66,25 @@ class KdeChart(ChartBase):
         Returns:
             dict: Datos preparados con 'x' y 'y' (densidad)
         """
+        # Debug: verificar datos de entrada
+        if not HAS_PANDAS or not HAS_NUMPY:
+            raise ChartError("KDE requiere pandas y numpy instalados")
+        
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if column not in data.columns:
+                raise ChartError(f"Columna '{column}' no encontrada. Columnas disponibles: {list(data.columns)}")
             values = data[column].dropna().values
         else:
-            values = [d[column] for d in data if column in d and d[column] is not None]
-            if HAS_NUMPY:
-                values = np.array(values)
+            # Si data es lista de dicts
+            if isinstance(data, list) and len(data) > 0:
+                values = [d[column] for d in data if column in d and d[column] is not None]
+                if HAS_NUMPY:
+                    values = np.array(values)
+            else:
+                raise ChartError(f"Datos inválidos para KDE: tipo={type(data)}")
         
         if len(values) == 0:
-            raise ChartError("No hay datos válidos para calcular KDE")
+            raise ChartError(f"No hay datos válidos para calcular KDE en columna '{column}'")
         
         # Calcular KDE usando scipy si está disponible, sino usar numpy
         try:
@@ -149,14 +159,12 @@ class KdeChart(ChartBase):
             'data': kde_data['data'],
         }
         
-        # Agregar encoding
-        encoding = {}
-        if column:
-            encoding['x'] = {'field': column}
-        encoding['y'] = {'field': 'density'}
-        
-        if encoding:
-            spec['encoding'] = encoding
+        # Agregar encoding - los datos tienen campos 'x' e 'y'
+        encoding = {
+            'x': {'field': 'x'},
+            'y': {'field': 'y'}
+        }
+        spec['encoding'] = encoding
         
         # Agregar options
         options = {}
