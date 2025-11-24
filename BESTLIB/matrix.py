@@ -386,12 +386,11 @@ class MatrixLayout:
         return self
     
     def _register_default_select_handler(self):
-        """Registra un handler por defecto para eventos 'select' que muestre los datos seleccionados"""
+        """Registra un handler por defecto que guarda automáticamente los datos seleccionados"""
         def default_select_handler(payload):
-            """Handler por defecto que muestra los datos seleccionados (solo si no hay handlers personalizados)"""
-            # 🎯 ACTUALIZAR: Siempre guardar datos en self.selected_data
+            """Handler por defecto que guarda los datos en self.selected_data (silencioso)"""
+            # 🎯 Guardar datos en self.selected_data automáticamente
             items = payload.get('items', [])
-            count = payload.get('count', len(items))
             
             # Guardar datos seleccionados automáticamente en el atributo público
             if HAS_PANDAS and items:
@@ -400,48 +399,6 @@ class MatrixLayout:
                 self.selected_data = items  # Lista de diccionarios si pandas no está disponible
             else:
                 self.selected_data = None
-            
-            # Solo mostrar mensajes si no hay handlers personalizados
-            if hasattr(self, '_has_custom_select_handler') and self._has_custom_select_handler:
-                return
-            
-            # 🔒 CORRECCIÓN: No ejecutar si el evento tiene __view_letter__ (probablemente hay handler específico)
-            # Esto evita que se muestre información duplicada o incorrecta
-            if payload.get('__view_letter__') is not None:
-                return
-            
-            if count == 0:
-                print("📊 No hay elementos seleccionados")
-                return
-            
-            print(f"\n📊 Elementos seleccionados: {count}")
-            print("=" * 60)
-            
-            # Mostrar los primeros elementos (máximo 10 para no saturar)
-            display_count = min(count, 10)
-            for i, item in enumerate(items[:display_count]):
-                print(f"\n[{i+1}]")
-                # 🔒 CORRECCIÓN: Filtrar campos para mostrar solo datos relevantes
-                # Excluir campos internos, índices, y valores que parecen escalas/rangos
-                excluded_keys = {'index', '_original_row', '_original_rows', '__scatter_letter__', 
-                                 '__is_primary_view__', '__view_letter__', 'type'}
-                for key, value in item.items():
-                    # Excluir campos internos
-                    if key in excluded_keys:
-                        continue
-                    # Excluir valores que son listas/arrays (probablemente escalas o rangos)
-                    if isinstance(value, (list, tuple, set)):
-                        continue
-                    # Excluir valores que son diccionarios (datos anidados)
-                    if isinstance(value, dict):
-                        continue
-                    # Mostrar solo valores simples (números, strings, booleanos)
-                    print(f"   {key}: {value}")
-            
-            if count > display_count:
-                print(f"\n... y {count - display_count} elemento(s) más")
-            print("=" * 60)
-            print(f"\n💡 Tip: Accede a los datos con layout.selected_data o usa layout.on('select', tu_funcion) para personalizar")
         
         # Registrar el handler por defecto (pero no marcar como personalizado)
         if not hasattr(self, "_handlers"):
