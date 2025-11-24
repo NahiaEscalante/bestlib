@@ -5,7 +5,15 @@ setup(
     version="0.1.0",
     description="MatrixLayout widget for dashboards",
     author="Nahia, Alejandro, Max",
-    packages=find_packages(),  # Encuentra automáticamente todos los paquetes incluyendo BESTLIB.charts
+    packages=[
+        'BESTLIB',
+        'BESTLIB.charts',
+        'BESTLIB.core',
+        'BESTLIB.utils',
+        'BESTLIB.layouts',
+        'BESTLIB.compat',
+        'BESTLIB.data'
+    ],
     include_package_data=True,
     package_data={
         "BESTLIB": ["*.js", "*.css"],
