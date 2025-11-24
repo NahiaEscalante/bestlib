@@ -1,8 +1,12 @@
+README.md
 pyproject.toml
 setup.py
 BESTLIB/__init__.py
+BESTLIB/d3.min.js
+BESTLIB/linked.py
 BESTLIB/matrix.js
 BESTLIB/matrix.py
+BESTLIB/reactive.py
 BESTLIB/style.css
 bestlib/__init__.py
 bestlib/matrix.js

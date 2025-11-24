@@ -66,6 +66,8 @@ class KdeChart(ChartBase):
         Returns:
             dict: Datos preparados con 'x' y 'y' (densidad)
         """
+        print(f"[DEBUG KDE prepare_data] Iniciando con column={column}")
+        
         # Debug: verificar datos de entrada
         if not HAS_PANDAS or not HAS_NUMPY:
             raise ChartError("KDE requiere pandas y numpy instalados")
@@ -74,12 +76,14 @@ class KdeChart(ChartBase):
             if column not in data.columns:
                 raise ChartError(f"Columna '{column}' no encontrada. Columnas disponibles: {list(data.columns)}")
             values = data[column].dropna().values
+            print(f"[DEBUG KDE] Valores extraídos: {len(values)} puntos")
         else:
             # Si data es lista de dicts
             if isinstance(data, list) and len(data) > 0:
                 values = [d[column] for d in data if column in d and d[column] is not None]
                 if HAS_NUMPY:
                     values = np.array(values)
+                print(f"[DEBUG KDE] Valores desde lista: {len(values)} puntos")
             else:
                 raise ChartError(f"Datos inválidos para KDE: tipo={type(data)}")
         
@@ -87,12 +91,15 @@ class KdeChart(ChartBase):
             raise ChartError(f"No hay datos válidos para calcular KDE en columna '{column}'")
         
         # Calcular KDE usando scipy si está disponible, sino usar numpy
+        print(f"[DEBUG KDE] Intentando calcular KDE con scipy...")
         try:
             from scipy.stats import gaussian_kde
             if bandwidth:
                 kde = gaussian_kde(values, bw_method=bandwidth)
             else:
                 kde = gaussian_kde(values)
+            
+            print(f"[DEBUG KDE] KDE creado exitosamente con scipy")
             
             # Crear rango de valores para evaluar
             x_min, x_max = float(np.min(values)), float(np.max(values))
@@ -101,12 +108,16 @@ class KdeChart(ChartBase):
             x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
             y_density = kde(x_eval)
             
+            print(f"[DEBUG KDE] Densidad calculada: {len(x_eval)} puntos, rango x=[{x_min:.2f}, {x_max:.2f}]")
+            
             # Convertir a lista de puntos
             kde_data = [
                 {'x': float(x), 'y': float(y)} 
                 for x, y in zip(x_eval, y_density)
             ]
-        except ImportError:
+            print(f"[DEBUG KDE] Lista de puntos creada: {len(kde_data)} elementos")
+        except ImportError as e:
+            print(f"[DEBUG KDE] Scipy no disponible: {e}, usando fallback numpy")
             # Fallback: usar histograma normalizado como aproximación
             if HAS_NUMPY:
                 hist, bin_edges = np.histogram(values, bins=50, density=True)
@@ -115,9 +126,11 @@ class KdeChart(ChartBase):
                     {'x': float(x), 'y': float(y)} 
                     for x, y in zip(bin_centers, hist)
                 ]
+                print(f"[DEBUG KDE] Fallback completado: {len(kde_data)} elementos")
             else:
                 raise ChartError("Se requiere scipy o numpy para calcular KDE")
         
+        print(f"[DEBUG KDE] prepare_data retornando {len(kde_data)} puntos")
         return {'data': kde_data}
     
     def get_spec(self, data, column=None, bandwidth=None, **kwargs):

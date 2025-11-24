@@ -1,72 +1,99 @@
 Metadata-Version: 2.4
 Name: bestlib
 Version: 0.1.0
-Summary: MatrixLayout widget for dashboards
+Summary: MatrixLayout widget for dashboards with D3.js
 Author: Nahia, Alejandro, Max
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
 
-# bestlib: MatrixLayout para dashboards en Jupyter con soporte D3 básico
+# 📊 BESTLIB - Beautiful & Efficient Visualization Library
 
-bestlib permite crear grillas de celdas a partir de un layout ASCII y rellenarlas con contenido HTML o gráficos sencillos con D3 directamente en notebooks.
+**BESTLIB** es una librería de visualización interactiva para Jupyter Notebooks que permite crear dashboards con layouts ASCII y gráficos D3.js.
 
-## Instalación (editable)
+## ✨ Características
+
+- 🎨 **11+ tipos de gráficos** (scatter, bar, histogram, boxplot, heatmap, line, pie, violin, radviz, etc.)
+- 🔗 **Vistas enlazadas** - Sincronización automática entre gráficos
+- ⚡ **Sistema reactivo** - Actualización automática sin re-ejecutar celdas
+- 🖱️ **Interactividad** - Brush selection, click events, tooltips
+- 📐 **Layouts ASCII** - Define la disposición de gráficos con texto
+- 🐼 **Soporte pandas** - Trabaja directamente con DataFrames
+- 🎯 **Comunicación bidireccional** - Python ↔ JavaScript en tiempo real
+
+## 📦 Instalación
+
+### Para Jupyter Notebook/Lab Local
 
 ```bash
+# Instalar desde GitHub
+pip install --upgrade --force-reinstall git+https://github.com/NahiaEscalante/bestlib.git@widget_mod
+
+# O instalar en modo desarrollo
 pip install -e .
 ```
 
-## Uso rápido
+### Para Google Colab ⚡
+
+**⚠️ Importante:** Google Colab ya tiene las dependencias necesarias. Instala BESTLIB sin dependencias:
 
 ```python
-from bestlib import MatrixLayout
-
-# Mapeo de celdas a HTML
-MatrixLayout.map({
-    "A": "<b>Plot 1</b>",
-    "B": "<i>Control</i>"
-})
-
-layout = MatrixLayout("""
-AA
-BB
-""")
-
-layout
+# Instalación en Colab (sin dependencias para evitar conflictos)
+!pip install --upgrade --no-deps git+https://github.com/NahiaEscalante/bestlib.git@widget_mod
 ```
 
-## Modo seguro vs HTML crudo
+**Nota:** Colab ya tiene `pandas`, `numpy`, `ipython`, `jupyter`, e `ipywidgets` instalados.
 
-Por defecto se permite HTML en celdas. Para forzar texto plano (evitar XSS):
+**📚 Guía completa:** Ver [COLAB_INSTALL.md](COLAB_INSTALL.md) o [examples/COLAB_INSTALLATION.ipynb](examples/COLAB_INSTALLATION.ipynb)
+
+### Dependencias Requeridas
+
+BESTLIB requiere las siguientes dependencias (deben instalarse manualmente si no están presentes):
+
+- `ipython` (cualquier versión >= 7.0)
+- `ipywidgets` (cualquier versión >= 7.0)
+- `pandas` (cualquier versión >= 1.3.0)
+- `numpy` (cualquier versión >= 1.20.0)
+
+**Nota:** El código maneja las importaciones de forma opcional, por lo que BESTLIB funcionará incluso si algunas dependencias no están instaladas (con funcionalidades limitadas).
+
+## 🚀 Inicio Rápido
 
 ```python
-MatrixLayout.set_safe_html(False)
+from BESTLIB import MatrixLayout
+import pandas as pd
+
+# Cargar datos
+df = pd.read_csv('examples/iris.csv')
+
+# Crear scatter plot
+MatrixLayout.map_scatter('S', df, 
+                         x_col='sepal_length', 
+                         y_col='petal_length',
+                         category_col='species',
+                         interactive=True)
+
+layout = MatrixLayout("S")
+layout.display()
 ```
 
-## Soporte D3 básico (barras)
+## 📚 Documentación
 
-Puedes mapear letras a especificaciones D3 sencillas:
+- **[COLAB_INSTALL.md](COLAB_INSTALL.md)** - Guía de instalación para Google Colab
+- **[CHANGELOG.md](CHANGELOG.md)** - Historial de cambios
+- **[ANALISIS_ERRORES_Y_SOLUCION.md](ANALISIS_ERRORES_Y_SOLUCION.md)** - Análisis técnico
+- **[examples/demo_completo_bestlib.ipynb](examples/demo_completo_bestlib.ipynb)** - Demo completo con Iris
+- **[examples/COLAB_INSTALLATION.ipynb](examples/COLAB_INSTALLATION.ipynb)** - Guía de instalación en Colab
+- **[examples/test_completo_iris.ipynb](examples/test_completo_iris.ipynb)** - Tests completos
 
-```python
-MatrixLayout.map({
-    "A": {
-        "type": "bar",
-        "data": [
-            {"category": "X", "value": 10},
-            {"category": "Y", "value": 7}
-        ],
-        "color": "#2ca02c",
-        "axes": True
-    }
-})
-```
+## ✅ Estado del Proyecto
 
-## Limitaciones actuales
-- Se valida que todas las filas del layout tengan el mismo ancho.
-- D3 soporta por ahora un gráfico de barras básico.
-- Los assets `matrix.js` y `style.css` se sirven embebidos desde el paquete.
+- ✅ Sintaxis correcta en todos los módulos
+- ✅ 11+ tipos de gráficos funcionando
+- ✅ Sistema de vistas enlazadas operativo
+- ✅ Sistema reactivo implementado
+- ✅ Dataset de prueba incluido (iris.csv)
+- ✅ Tests completos disponibles
 
-## Licencia
-MIT
+## 🤝 Contribuciones
 
-
+Desarrollado por: Nahia Escalante, Alejandro, Max
