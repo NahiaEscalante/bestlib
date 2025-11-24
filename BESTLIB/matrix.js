@@ -7477,8 +7477,8 @@
         .attr('class', 'bestlib-point')
         .attr('x1', d => x(d.x))
         .attr('x2', d => x(d.x))
-        .attr('y1', chartHeight)
-        .attr('y2', chartHeight + size * 3)
+        .attr('y1', chartHeight - size * 5)  // Dentro del área visible
+        .attr('y2', chartHeight)
         .attr('stroke', color)
         .attr('stroke-width', size)
         .attr('opacity', opacity);
@@ -7493,7 +7493,7 @@
       }
     } else {
       const y = d3.scaleLinear()
-        .domain(d3.extent(data, d => d.x) || [0, 100])
+        .domain(d3.extent(data, d => d.y) || [0, 100])
         .nice()
         .range([chartHeight, 0]);
       
@@ -7503,9 +7503,9 @@
         .append('line')
         .attr('class', 'bestlib-point')
         .attr('x1', 0)
-        .attr('x2', -size * 3)
-        .attr('y1', d => y(d.x))
-        .attr('y2', d => y(d.x))
+        .attr('x2', size * 5)  // Dentro del área visible
+        .attr('y1', d => y(d.y))
+        .attr('y2', d => y(d.y))
         .attr('stroke', color)
         .attr('stroke-width', size)
         .attr('opacity', opacity);
