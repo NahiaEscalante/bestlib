@@ -144,6 +144,12 @@ class KdeChart(ChartBase):
             **kwargs
         )
         
+        # DEBUG: Verificar datos preparados
+        print(f"[DEBUG KDE] Datos preparados: {len(kde_data['data'])} puntos")
+        if len(kde_data['data']) > 0:
+            print(f"[DEBUG KDE] Primer punto: {kde_data['data'][0]}")
+            print(f"[DEBUG KDE] Último punto: {kde_data['data'][-1]}")
+        
         # Procesar figsize si está en kwargs
         process_figsize_in_kwargs(kwargs)
         
@@ -158,6 +164,10 @@ class KdeChart(ChartBase):
             'type': self.chart_type,
             'data': kde_data['data'],
         }
+        
+        # DEBUG: Verificar spec
+        print(f"[DEBUG KDE] Spec type: {spec['type']}")
+        print(f"[DEBUG KDE] Spec data length: {len(spec.get('data', []))}")
         
         # Agregar encoding - los datos tienen campos 'x' e 'y'
         encoding = {
