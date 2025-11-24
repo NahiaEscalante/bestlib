@@ -7031,6 +7031,27 @@
         .domain([0, maxCount]);
     }
     
+    // Crear tooltip para hexbin
+    const tooltipId = `hexbin-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'hexbin-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
     // Dibujar hexágonos
     g.selectAll('.hexagon')
       .data(bins_data)
@@ -7041,7 +7062,29 @@
       .attr('transform', d => `translate(${d.x},${d.y})`)
       .attr('fill', d => color(d.count))
       .attr('stroke', '#fff')
-      .attr('stroke-width', 0.5);
+      .attr('stroke-width', 0.5)
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(event, d) {
+        d3.select(this)
+          .transition()
+          .duration(200)
+          .attr('opacity', 0.7);
+        
+        const formatters = {
+          custom: (data) => {
+            return `<div><strong>Puntos:</strong> ${data.count}</div>
+                    <div><strong>Densidad:</strong> ${(data.count / bins_data.length * 100).toFixed(1)}%</div>`;
+          }
+        };
+        showTooltip(tooltip, event, container, d, formatters);
+      })
+      .on('mouseleave', function() {
+        d3.select(this)
+          .transition()
+          .duration(200)
+          .attr('opacity', 1);
+        hideTooltip(tooltip);
+      });
     
     // Ejes
     if (axes !== false) {
@@ -7457,6 +7500,27 @@
         .curve(d3.curveStep);
     }
     
+    // Crear tooltip para step plot
+    const tooltipId = `step-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'step-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
     // Dibujar línea
     g.append('path')
       .datum(sortedData)
@@ -7464,6 +7528,30 @@
       .attr('stroke', color)
       .attr('stroke-width', strokeWidth)
       .attr('d', line);
+    
+    // Agregar círculos para tooltips
+    g.selectAll('.step-point')
+      .data(sortedData)
+      .enter()
+      .append('circle')
+      .attr('class', 'step-point')
+      .attr('cx', d => x(d.x))
+      .attr('cy', d => y(d.y))
+      .attr('r', 8)
+      .attr('fill', 'transparent')
+      .style('cursor', 'crosshair')
+      .on('mouseenter', function(event, d) {
+        const formatters = {
+          custom: (data) => {
+            return `<div><strong>X:</strong> ${data.x.toFixed(2)}</div>
+                    <div><strong>Y:</strong> ${data.y.toFixed(2)}</div>`;
+          }
+        };
+        showTooltip(tooltip, event, container, d, formatters);
+      })
+      .on('mouseleave', function() {
+        hideTooltip(tooltip);
+      });
     
     // Ejes
     if (axes !== false) {
@@ -8039,6 +8127,27 @@
         .attr('opacity', 0.5);
     }
     
+    // Crear tooltip para qqplot
+    const tooltipId = `qqplot-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'qqplot-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
     // Puntos
     g.selectAll('.point')
       .data(data)
@@ -8049,7 +8158,31 @@
       .attr('cy', d => y(d.y))
       .attr('r', 3)
       .attr('fill', color)
-      .attr('opacity', 0.6);
+      .attr('opacity', 0.6)
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(event, d) {
+        d3.select(this)
+          .transition()
+          .duration(200)
+          .attr('r', 5)
+          .attr('opacity', 1);
+        
+        const formatters = {
+          custom: (data) => {
+            return `<div><strong>Teórico:</strong> ${data.x.toFixed(3)}</div>
+                    <div><strong>Observado:</strong> ${data.y.toFixed(3)}</div>`;
+          }
+        };
+        showTooltip(tooltip, event, container, d, formatters);
+      })
+      .on('mouseleave', function() {
+        d3.select(this)
+          .transition()
+          .duration(200)
+          .attr('r', 3)
+          .attr('opacity', 0.6);
+        hideTooltip(tooltip);
+      });
     
     // Ejes
     if (spec.axes !== false) {
@@ -8122,6 +8255,27 @@
       .domain([0, 1])
       .range([chartHeight, 0]);
     
+    // Crear tooltip para ECDF
+    const tooltipId = `ecdf-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'ecdf-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
     // Línea ECDF
     let line;
     if (step) {
@@ -8143,6 +8297,30 @@
       .attr('stroke-width', strokeWidth)
       .attr('d', line)
       .attr('class', 'bestlib-line');
+    
+    // Agregar puntos para tooltips
+    g.selectAll('.ecdf-point')
+      .data(data.filter((d, i) => i % Math.max(1, Math.floor(data.length / 20)) === 0))
+      .enter()
+      .append('circle')
+      .attr('class', 'ecdf-point')
+      .attr('cx', d => x(d.x))
+      .attr('cy', d => y(d.y))
+      .attr('r', 8)
+      .attr('fill', 'transparent')
+      .style('cursor', 'crosshair')
+      .on('mouseenter', function(event, d) {
+        const formatters = {
+          custom: (data) => {
+            return `<div><strong>Valor:</strong> ${data.x.toFixed(3)}</div>
+                    <div><strong>Probabilidad:</strong> ${(data.y * 100).toFixed(1)}%</div>`;
+          }
+        };
+        showTooltip(tooltip, event, container, d, formatters);
+      })
+      .on('mouseleave', function() {
+        hideTooltip(tooltip);
+      });
     
     // Ejes
     if (spec.axes !== false) {
@@ -8230,6 +8408,27 @@
       .domain(categories)
       .range(d3.schemeCategory10);
     
+    // Crear tooltip para ridgeline
+    const tooltipId = `ridgeline-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'ridgeline-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
     // Dibujar cada serie
     categories.forEach((cat, idx) => {
       const serie = series[cat];
@@ -8269,6 +8468,32 @@
         .attr('stroke-width', 2)
         .attr('d', line)
         .attr('class', 'bestlib-line');
+      
+      // Área invisible para tooltips
+      const minX = d3.min(serie, d => d.x);
+      const maxX = d3.max(serie, d => d.x);
+      const maxY = d3.max(serie, d => d.y);
+      
+      gSeries.append('rect')
+        .attr('x', x(minX))
+        .attr('y', 0)
+        .attr('width', x(maxX) - x(minX))
+        .attr('height', spacing)
+        .attr('fill', 'transparent')
+        .style('cursor', 'pointer')
+        .on('mouseenter', function(event) {
+          const formatters = {
+            custom: (data) => {
+              return `<div><strong>Categoría:</strong> ${cat}</div>
+                      <div><strong>Rango X:</strong> ${minX.toFixed(2)} - ${maxX.toFixed(2)}</div>
+                      <div><strong>Densidad máx:</strong> ${maxY.toFixed(4)}</div>`;
+            }
+          };
+          showTooltip(tooltip, event, container, {cat, minX, maxX, maxY}, formatters);
+        })
+        .on('mouseleave', function() {
+          hideTooltip(tooltip);
+        });
       
       // Etiqueta de categoría
       gSeries.append('text')
@@ -8352,6 +8577,27 @@
       .nice()
       .range([chartHeight, 0]);
     
+    // Crear tooltip para ribbon
+    const tooltipId = `ribbon-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'ribbon-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
     // Gradiente si está habilitado
     if (gradient) {
       const gradientId = `ribbon-gradient-${divId}`;
@@ -8428,6 +8674,32 @@
         .attr('d', line2)
         .attr('class', 'bestlib-line');
     }
+    
+    // Puntos invisibles para tooltips
+    g.selectAll('.ribbon-point')
+      .data(data.filter((d, i) => i % Math.max(1, Math.floor(data.length / 20)) === 0))
+      .enter()
+      .append('circle')
+      .attr('class', 'ribbon-point')
+      .attr('cx', d => x(d.x))
+      .attr('cy', d => y((d.y1 + d.y2) / 2))
+      .attr('r', 10)
+      .attr('fill', 'transparent')
+      .style('cursor', 'crosshair')
+      .on('mouseenter', function(event, d) {
+        const formatters = {
+          custom: (data) => {
+            return `<div><strong>X:</strong> ${data.x.toFixed(2)}</div>
+                    <div><strong>Y1:</strong> ${data.y1.toFixed(2)}</div>
+                    <div><strong>Y2:</strong> ${data.y2.toFixed(2)}</div>
+                    <div><strong>Diferencia:</strong> ${(data.y2 - data.y1).toFixed(2)}</div>`;
+          }
+        };
+        showTooltip(tooltip, event, container, d, formatters);
+      })
+      .on('mouseleave', function() {
+        hideTooltip(tooltip);
+      });
     
     // Ejes
     if (spec.axes !== false) {
