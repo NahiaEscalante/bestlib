@@ -866,6 +866,149 @@
   }
   
   /**
+   * ==========================================
+   * SISTEMA DE TOOLTIPS MODULAR Y REUTILIZABLE
+   * ==========================================
+   * 
+   * Sistema unificado de tooltips para todos los charts de BESTLIB.
+   * Compatible con Jupyter Notebook y Google Colab.
+   * 
+   * Uso:
+   *   const tooltip = createTooltip(divId, 'scatter');
+   *   showTooltip(tooltip, event, container, data, formatters);
+   *   hideTooltip(tooltip);
+   */
+  
+  /**
+   * Crea o recupera un tooltip para un chart específico
+   * @param {string} divId - ID único del contenedor
+   * @param {string} chartType - Tipo de chart ('scatter', 'bar', 'kde', etc.)
+   * @returns {object} Selección D3 del tooltip
+   */
+  function createTooltip(divId, chartType) {
+    const tooltipId = `bestlib-tooltip-${chartType}-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'bestlib-tooltip')
+        .style('position', 'absolute')
+        .style('display', 'none')
+        .style('background-color', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#ffffff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
+        .style('font-size', '12px')
+        .style('line-height', '1.5')
+        .style('pointer-events', 'none')
+        .style('z-index', '10000')
+        .style('box-shadow', '0 4px 12px rgba(0,0,0,0.3)')
+        .style('opacity', '0')
+        .style('transition', 'opacity 0.2s ease');
+    }
+    
+    return tooltip;
+  }
+  
+  /**
+   * Muestra el tooltip con datos formateados
+   * @param {object} tooltip - Selección D3 del tooltip
+   * @param {object} event - Evento del mouse
+   * @param {object} container - Contenedor del chart
+   * @param {object} data - Datos a mostrar
+   * @param {object} formatters - Objeto con funciones de formato (opcional)
+   */
+  function showTooltip(tooltip, event, container, data, formatters = {}) {
+    // Obtener coordenadas del mouse (compatible con Colab y Jupyter)
+    let mouseX = 0;
+    let mouseY = 0;
+    
+    try {
+      if (event.clientX !== undefined && event.clientX !== null) {
+        mouseX = event.clientX;
+        mouseY = event.clientY;
+      } else if (event.pageX !== undefined && event.pageX !== null) {
+        mouseX = event.pageX;
+        mouseY = event.pageY;
+      } else {
+        const rect = container.getBoundingClientRect();
+        mouseX = rect.left + (rect.width / 2);
+        mouseY = rect.top + (rect.height / 2);
+      }
+    } catch (e) {
+      // Fallback: centro del contenedor
+      try {
+        const rect = container.getBoundingClientRect();
+        mouseX = rect.left + (rect.width / 2);
+        mouseY = rect.top + (rect.height / 2);
+      } catch (e2) {
+        mouseX = 100;
+        mouseY = 100;
+      }
+    }
+    
+    // Generar contenido HTML del tooltip
+    let html = '';
+    
+    // Si hay un formateador personalizado, usarlo
+    if (formatters.custom && typeof formatters.custom === 'function') {
+      html = formatters.custom(data);
+    } else {
+      // Formato por defecto: mostrar todos los campos relevantes
+      const fields = formatters.fields || Object.keys(data);
+      const labels = formatters.labels || {};
+      
+      html = fields
+        .filter(field => {
+          const value = data[field];
+          // Filtrar campos internos (que empiezan con _) y valores null/undefined
+          return !field.startsWith('_') && value !== null && value !== undefined;
+        })
+        .map(field => {
+          const label = labels[field] || field;
+          let value = data[field];
+          
+          // Aplicar formato si existe
+          if (formatters[field] && typeof formatters[field] === 'function') {
+            value = formatters[field](value);
+          } else if (typeof value === 'number') {
+            // Formato numérico por defecto (2 decimales)
+            value = value.toFixed(2);
+          }
+          
+          return `<div><strong>${label}:</strong> ${value}</div>`;
+        })
+        .join('');
+    }
+    
+    // Mostrar tooltip
+    tooltip
+      .html(html)
+      .style('display', 'block')
+      .style('left', (mouseX + 15) + 'px')
+      .style('top', (mouseY - 10) + 'px')
+      .transition()
+      .duration(150)
+      .style('opacity', '1');
+  }
+  
+  /**
+   * Oculta el tooltip
+   * @param {object} tooltip - Selección D3 del tooltip
+   */
+  function hideTooltip(tooltip) {
+    tooltip
+      .transition()
+      .duration(150)
+      .style('opacity', '0')
+      .on('end', function() {
+        tooltip.style('display', 'none');
+      });
+  }
+  
+  /**
    * Renderiza etiquetas de ejes con soporte para personalización
    */
   function renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg) {
@@ -5800,6 +5943,9 @@
       }
     };
     
+    // ✨ TOOLTIPS: Crear tooltip para scatter plot
+    const tooltip = createTooltip(divId, 'scatter');
+    
     // Puntos con D3 (renderizar PRIMERO)
     const dots = g.selectAll('.dot')
       .data(data)
@@ -5843,12 +5989,52 @@
         sendSelectionEvent(selectedIndices);
       })
       .on('mouseenter', function(event, d) {
-        if (!spec.interactive || isBrushing) return;
         const dot = d3.select(this);
         const index = data.indexOf(d);
         const isSelected = selectedIndices.has(index);
         
-        if (!isSelected) {
+        // ✨ TOOLTIP: Mostrar datos del punto
+        if (!isBrushing) {
+          // Preparar datos para el tooltip (usar _original_row si existe, sino el dato procesado)
+          const tooltipData = d._original_row || d;
+          
+          // Definir formateadores para campos específicos
+          const formatters = {
+            fields: [], // Se llenará automáticamente con todos los campos
+            labels: {}, // Etiquetas personalizadas
+            custom: (data) => {
+              // Formato personalizado para scatter plot
+              let html = '';
+              
+              // Mostrar campos básicos primero
+              if (data.x !== undefined) html += `<div><strong>X:</strong> ${data.x.toFixed(2)}</div>`;
+              if (data.y !== undefined) html += `<div><strong>Y:</strong> ${data.y.toFixed(2)}</div>`;
+              if (data.category) html += `<div><strong>Category:</strong> ${data.category}</div>`;
+              if (data.size !== undefined && data.size !== null) html += `<div><strong>Size:</strong> ${data.size.toFixed(2)}</div>`;
+              
+              // Mostrar todos los demás campos del _original_row
+              if (data._original_row) {
+                const origData = data._original_row;
+                Object.keys(origData).forEach(key => {
+                  if (!key.startsWith('_') && !['x', 'y', 'category', 'size', 'color'].includes(key)) {
+                    const value = origData[key];
+                    if (value !== null && value !== undefined) {
+                      const displayValue = typeof value === 'number' ? value.toFixed(2) : value;
+                      html += `<div><strong>${key}:</strong> ${displayValue}</div>`;
+                    }
+                  }
+                });
+              }
+              
+              return html || '<div>No data</div>';
+            }
+          };
+          
+          showTooltip(tooltip, event, container, tooltipData, formatters);
+        }
+        
+        // Agrandar punto en hover (solo si no está seleccionado)
+        if (!isSelected && !isBrushing) {
           dot
             .transition()
             .duration(150)
@@ -5857,12 +6043,15 @@
         }
       })
       .on('mouseleave', function(event, d) {
-        if (!spec.interactive || isBrushing) return;
         const dot = d3.select(this);
         const index = data.indexOf(d);
         const isSelected = selectedIndices.has(index);
         
-        if (!isSelected) {
+        // ✨ TOOLTIP: Ocultar
+        hideTooltip(tooltip);
+        
+        // Restaurar tamaño del punto (solo si no está seleccionado)
+        if (!isSelected && !isBrushing) {
           dot
             .transition()
             .duration(150)
