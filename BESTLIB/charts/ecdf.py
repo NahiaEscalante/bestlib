@@ -43,10 +43,10 @@ class EcdfChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-                if column not in data.columns:
-                    raise ChartError(f"Columna '{column}' no encontrada en los datos")
-                if not pd.api.types.is_numeric_dtype(data[column]):
-                    raise ChartError(f"Columna '{column}' debe ser numérica")
+            if column not in data.columns:
+                raise ChartError(f"Columna '{column}' no encontrada en los datos")
+            if not pd.api.types.is_numeric_dtype(data[column]):
+                raise ChartError(f"Columna '{column}' debe ser numérica")
         else:
             if isinstance(data, list) and len(data) > 0:
                 if column not in data[0]:
@@ -70,7 +70,7 @@ class EcdfChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-                values = data[column].dropna().values
+            values = data[column].dropna().values
             else:
                 values = [d[column] for d in data if column in d and d[column] is not None]
                 if np is not None:

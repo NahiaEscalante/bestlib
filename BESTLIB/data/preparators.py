@@ -53,43 +53,43 @@ def prepare_scatter_data(data: Any, x_col: Optional[str] = None, y_col: Optional
                 if isinstance(data, pd.DataFrame):
                     validate_dataframe(data, allow_empty=True)
                     
-                    original_data = data.to_dict('records')
-                    df_work = pd.DataFrame(index=data.index)
-                
-                    # Mapear columnas según especificación (vectorizado)
-                    if x_col and x_col in data.columns:
-                        df_work['x'] = data[x_col]
-                    elif 'x' in data.columns:
-                        df_work['x'] = data['x']
-                    
-                    if y_col and y_col in data.columns:
-                        df_work['y'] = data[y_col]
-                    elif 'y' in data.columns:
-                        df_work['y'] = data['y']
-                    
-                    if category_col and category_col in data.columns:
-                        df_work['category'] = data[category_col]
-                    elif 'category' in data.columns:
-                        df_work['category'] = data['category']
-                    
-                    if size_col and size_col in data.columns:
-                        df_work['size'] = data[size_col]
-                    if color_col and color_col in data.columns:
-                        df_work['color'] = data[color_col]
-                    
-                    processed_data = df_work.to_dict('records')
-                    
-                    # Agregar referencias a filas originales e índices
-                    for idx, item in enumerate(processed_data):
+            original_data = data.to_dict('records')
+            df_work = pd.DataFrame(index=data.index)
+        
+            # Mapear columnas según especificación (vectorizado)
+            if x_col and x_col in data.columns:
+                df_work['x'] = data[x_col]
+            elif 'x' in data.columns:
+                df_work['x'] = data['x']
+            
+            if y_col and y_col in data.columns:
+                df_work['y'] = data[y_col]
+            elif 'y' in data.columns:
+                df_work['y'] = data['y']
+            
+            if category_col and category_col in data.columns:
+                df_work['category'] = data[category_col]
+            elif 'category' in data.columns:
+                df_work['category'] = data['category']
+            
+            if size_col and size_col in data.columns:
+                df_work['size'] = data[size_col]
+            if color_col and color_col in data.columns:
+                df_work['color'] = data[color_col]
+            
+            processed_data = df_work.to_dict('records')
+            
+            # Agregar referencias a filas originales e índices
+            for idx, item in enumerate(processed_data):
                         if idx < len(original_data) and idx < len(data.index):
-                            item['_original_row'] = original_data[idx]
-                            item['_original_index'] = int(data.index[idx])
+                item['_original_row'] = original_data[idx]
+                item['_original_index'] = int(data.index[idx])
                         else:
                             # Fallback si hay desajuste
                             item['_original_row'] = item.copy()
                             item['_original_index'] = idx
-                    
-                    return processed_data, original_data
+            
+            return processed_data, original_data
             except (AttributeError, TypeError) as e:
                 # Fallback si hay problema accediendo DataFrame
                 raise DataError(f"Error accediendo DataFrame: {e}")
@@ -147,26 +147,26 @@ def prepare_bar_data(data: Any, category_col: Optional[str] = None, value_col: O
                         required_cols.append(value_col)
                     validate_dataframe(data, required_cols=required_cols if required_cols else None, allow_empty=False)
                     
-                    if value_col and value_col in data.columns:
-                        bar_data = data.groupby(category_col)[value_col].sum().reset_index()
-                        bar_data = bar_data.rename(columns={category_col: 'category', value_col: 'value'})
-                        bar_data = bar_data.to_dict('records')
-                    elif category_col and category_col in data.columns:
-                        counts = data[category_col].value_counts()
-                        bar_data = [{'category': cat, 'value': count} for cat, count in counts.items()]
-                    else:
-                        raise DataError("Debe especificar category_col")
-                    
-                    # Agregar datos originales para referencia
-                    original_data = data.to_dict('records')
-                    for i, bar_item in enumerate(bar_data):
+            if value_col and value_col in data.columns:
+                bar_data = data.groupby(category_col)[value_col].sum().reset_index()
+                bar_data = bar_data.rename(columns={category_col: 'category', value_col: 'value'})
+                bar_data = bar_data.to_dict('records')
+            elif category_col and category_col in data.columns:
+                counts = data[category_col].value_counts()
+                bar_data = [{'category': cat, 'value': count} for cat, count in counts.items()]
+            else:
+                raise DataError("Debe especificar category_col")
+            
+            # Agregar datos originales para referencia
+            original_data = data.to_dict('records')
+            for i, bar_item in enumerate(bar_data):
                         matching_rows = [
                             row for row in original_data 
                             if row.get(category_col, None) == bar_item['category']
                         ]
-                        bar_item['_original_rows'] = matching_rows
-                    
-                    return bar_data
+                bar_item['_original_rows'] = matching_rows
+            
+            return bar_data
             except (AttributeError, TypeError) as e:
                 # Fallback si hay problema accediendo DataFrame
                 raise DataError(f"Error accediendo DataFrame: {e}")
@@ -249,11 +249,11 @@ def prepare_histogram_data(data: Any, value_col: Optional[str] = None, bins: int
                             f"Columnas disponibles: {list(data.columns)}"
                         )
                     
-                    series = data[value_col].dropna()
-                    try:
-                        values = series.astype(float).tolist()
+            series = data[value_col].dropna()
+            try:
+                values = series.astype(float).tolist()
                     except (ValueError, TypeError):
-                        values = [float(v) for v in series.tolist()]
+                values = [float(v) for v in series.tolist()]
             except (AttributeError, TypeError) as e:
                 raise DataError(f"Error accediendo DataFrame: {e}")
     else:
@@ -425,14 +425,14 @@ def prepare_boxplot_data(data: Any, category_col: Optional[str] = None, value_co
                         required_cols.append(value_col)
                     validate_dataframe(data, required_cols=required_cols if required_cols else None, allow_empty=False)
                     
-                    if value_col is None or value_col not in data.columns:
-                        raise DataError("Debe especificar value_col para boxplot con DataFrame")
-                    if category_col and category_col in data.columns:
-                        grouped = data.groupby(category_col)
-                        for cat, subdf in grouped:
-                            summary = five_num_summary(subdf[value_col].dropna().tolist())
-                            if summary:
-                                box_data.append({'category': cat, **summary})
+            if value_col is None or value_col not in data.columns:
+                raise DataError("Debe especificar value_col para boxplot con DataFrame")
+            if category_col and category_col in data.columns:
+                grouped = data.groupby(category_col)
+                for cat, subdf in grouped:
+                    summary = five_num_summary(subdf[value_col].dropna().tolist())
+                    if summary:
+                        box_data.append({'category': cat, **summary})
             else:
                 summary = five_num_summary(data[value_col].dropna().tolist())
                 if summary:
@@ -504,18 +504,18 @@ def prepare_heatmap_data(data: Any, x_col: Optional[str] = None, y_col: Optional
                         required_cols = [x_col, y_col, value_col]
                     validate_dataframe(data, required_cols=required_cols if required_cols else None, allow_empty=False)
                     
-                    if value_col and x_col and y_col:
-                        df = data[[x_col, y_col, value_col]].dropna()
-                        x_labels = df[x_col].astype(str).unique().tolist()
-                        y_labels = df[y_col].astype(str).unique().tolist()
-                        cells = [
-                            {'x': str(r[x_col]), 'y': str(r[y_col]), 'value': float(r[value_col])}
-                            for _, r in df.iterrows()
-                        ]
-                    elif x_col is None and y_col is None and value_col is None:
-                        # Matriz: usar índices y columnas automáticamente
-                        index_list = data.index.tolist()
-                        cols_list = data.columns.tolist()
+            if value_col and x_col and y_col:
+                df = data[[x_col, y_col, value_col]].dropna()
+                x_labels = df[x_col].astype(str).unique().tolist()
+                y_labels = df[y_col].astype(str).unique().tolist()
+                cells = [
+                    {'x': str(r[x_col]), 'y': str(r[y_col]), 'value': float(r[value_col])}
+                    for _, r in df.iterrows()
+                ]
+            elif x_col is None and y_col is None and value_col is None:
+                # Matriz: usar índices y columnas automáticamente
+                index_list = data.index.tolist()
+                cols_list = data.columns.tolist()
                 
                 if len(index_list) == len(cols_list) and set(index_list) == set(cols_list):
                     cols = sorted(cols_list)
@@ -586,19 +586,19 @@ def prepare_line_data(data: Any, x_col: Optional[str] = None, y_col: Optional[st
                     required_cols = [x_col, y_col] + ([series_col] if series_col else [])
                     validate_dataframe(data, required_cols=required_cols, allow_empty=False)
                     
-                    if x_col is None or y_col is None:
-                        raise DataError("x_col e y_col son requeridos para line plot")
-                    df = data[[x_col, y_col] + ([series_col] if series_col else [])].dropna()
-                    if series_col:
-                        series_names = df[series_col].unique().tolist()
-                        series = {}
-                        for name in series_names:
-                            sdf = df[df[series_col] == name].sort_values(by=x_col)
-                            series[name] = [{'x': float(x), 'y': float(y), 'series': str(name)} for x, y in zip(sdf[x_col], sdf[y_col])]
-                        return {'series': series}
-                    else:
-                        sdf = df.sort_values(by=x_col)
-                        return {'series': {'default': [{'x': float(x), 'y': float(y)} for x, y in zip(sdf[x_col], sdf[y_col])]}}
+            if x_col is None or y_col is None:
+                raise DataError("x_col e y_col son requeridos para line plot")
+            df = data[[x_col, y_col] + ([series_col] if series_col else [])].dropna()
+            if series_col:
+                series_names = df[series_col].unique().tolist()
+                series = {}
+                for name in series_names:
+                    sdf = df[df[series_col] == name].sort_values(by=x_col)
+                    series[name] = [{'x': float(x), 'y': float(y), 'series': str(name)} for x, y in zip(sdf[x_col], sdf[y_col])]
+                return {'series': series}
+            else:
+                sdf = df.sort_values(by=x_col)
+                return {'series': {'default': [{'x': float(x), 'y': float(y)} for x, y in zip(sdf[x_col], sdf[y_col])]}}
             except (AttributeError, TypeError) as e:
                 raise DataError(f"Error accediendo DataFrame: {e}")
     else:
@@ -649,18 +649,18 @@ def prepare_pie_data(data: Any, category_col: Optional[str] = None, value_col: O
                     required_cols = [category_col] + ([value_col] if value_col else [])
                     validate_dataframe(data, required_cols=required_cols, allow_empty=False)
                     
-                    if category_col is None:
-                        raise DataError("category_col requerido para pie")
-                    
-                    original_data = data.to_dict('records')
-                    category_rows = defaultdict(list)
-                    
-                    for row in original_data:
-                        cat = row.get(category_col)
-                        if cat is not None:
-                            category_rows[str(cat)].append(row)
-                    
-                    if value_col and value_col in data.columns:
+            if category_col is None:
+                raise DataError("category_col requerido para pie")
+            
+            original_data = data.to_dict('records')
+            category_rows = defaultdict(list)
+            
+            for row in original_data:
+                cat = row.get(category_col)
+                if cat is not None:
+                    category_rows[str(cat)].append(row)
+            
+            if value_col and value_col in data.columns:
                 agg = data.groupby(category_col)[value_col].sum().reset_index()
                 slices = [
                     {
@@ -757,18 +757,18 @@ def prepare_grouped_bar_data(data: Any, main_col: Optional[str] = None, sub_col:
                     required_cols = [main_col, sub_col] + ([value_col] if value_col else [])
                     validate_dataframe(data, required_cols=required_cols, allow_empty=False)
                     
-                    if value_col and value_col in data.columns:
-                        agg = data.groupby([main_col, sub_col])[value_col].sum().reset_index()
-                        for _, r in agg.iterrows():
-                            rows.append({'group': r[main_col], 'series': r[sub_col], 'value': float(r[value_col])})
-                        groups = agg[main_col].unique().tolist()
-                        series = agg[sub_col].unique().tolist()
-                    else:
-                        counts = data.groupby([main_col, sub_col]).size().reset_index(name='value')
-                        for _, r in counts.iterrows():
-                            rows.append({'group': r[main_col], 'series': r[sub_col], 'value': float(r['value'])})
-                        groups = counts[main_col].unique().tolist()
-                        series = counts[sub_col].unique().tolist()
+            if value_col and value_col in data.columns:
+                agg = data.groupby([main_col, sub_col])[value_col].sum().reset_index()
+                for _, r in agg.iterrows():
+                    rows.append({'group': r[main_col], 'series': r[sub_col], 'value': float(r[value_col])})
+                groups = agg[main_col].unique().tolist()
+                series = agg[sub_col].unique().tolist()
+            else:
+                counts = data.groupby([main_col, sub_col]).size().reset_index(name='value')
+                for _, r in counts.iterrows():
+                    rows.append({'group': r[main_col], 'series': r[sub_col], 'value': float(r['value'])})
+                groups = counts[main_col].unique().tolist()
+                series = counts[sub_col].unique().tolist()
             except (AttributeError, TypeError) as e:
                 raise DataError(f"Error accediendo DataFrame: {e}")
     else:

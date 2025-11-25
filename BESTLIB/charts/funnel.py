@@ -38,12 +38,12 @@ class FunnelChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-                if stage_col not in data.columns:
-                    raise ChartError(f"Columna '{stage_col}' no encontrada")
-                if value_col not in data.columns:
-                    raise ChartError(f"Columna '{value_col}' no encontrada")
-                if not pd.api.types.is_numeric_dtype(data[value_col]):
-                    raise ChartError(f"Columna '{value_col}' debe ser numérica")
+            if stage_col not in data.columns:
+                raise ChartError(f"Columna '{stage_col}' no encontrada")
+            if value_col not in data.columns:
+                raise ChartError(f"Columna '{value_col}' no encontrada")
+            if not pd.api.types.is_numeric_dtype(data[value_col]):
+                raise ChartError(f"Columna '{value_col}' debe ser numérica")
         else:
             if isinstance(data, list) and len(data) > 0:
                 if stage_col not in data[0] or value_col not in data[0]:
@@ -68,25 +68,25 @@ class FunnelChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-                # Ordenar por valor descendente (típico en funnel)
-                data_sorted = data.sort_values(by=value_col, ascending=False).copy()
-                funnel_data = []
-                for idx, row in data_sorted.iterrows():
-                    funnel_data.append({
-                        'stage': str(row[stage_col]),
-                        'value': float(row[value_col]),
-                        'index': idx
-                    })
-            else:
-                # Para listas
-                data_sorted = sorted(data, key=lambda d: d.get(value_col, 0), reverse=True)
-                funnel_data = []
-                for idx, d in enumerate(data_sorted):
-                    funnel_data.append({
-                        'stage': str(d[stage_col]),
-                        'value': float(d[value_col]),
-                        'index': idx
-                    })
+            # Ordenar por valor descendente (típico en funnel)
+            data_sorted = data.sort_values(by=value_col, ascending=False).copy()
+            funnel_data = []
+            for idx, row in data_sorted.iterrows():
+                funnel_data.append({
+                    'stage': str(row[stage_col]),
+                    'value': float(row[value_col]),
+                    'index': idx
+                })
+        else:
+            # Para listas
+            data_sorted = sorted(data, key=lambda d: d.get(value_col, 0), reverse=True)
+            funnel_data = []
+            for idx, d in enumerate(data_sorted):
+                funnel_data.append({
+                    'stage': str(d[stage_col]),
+                    'value': float(d[value_col]),
+                    'index': idx
+                })
         else:
         
         return {'data': funnel_data}

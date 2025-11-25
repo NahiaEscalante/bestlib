@@ -48,10 +48,10 @@ class ErrorbarsChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-                if yerr and yerr not in data.columns:
-                    raise ChartError(f"Columna '{yerr}' no encontrada para yerr")
-                if xerr and xerr not in data.columns:
-                    raise ChartError(f"Columna '{xerr}' no encontrada para xerr")
+            if yerr and yerr not in data.columns:
+                raise ChartError(f"Columna '{yerr}' no encontrada para yerr")
+            if xerr and xerr not in data.columns:
+                raise ChartError(f"Columna '{xerr}' no encontrada para xerr")
         elif isinstance(data, list) and len(data) > 0:
             if yerr and yerr not in data[0]:
                 raise ChartError(f"Key '{yerr}' no encontrada para yerr")
@@ -84,27 +84,27 @@ class ErrorbarsChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-                if yerr and yerr in data.columns:
-                    yerr_values = data[yerr].astype(float, errors='ignore')
-                    for idx in range(min(len(processed_data), len(yerr_values))):
-                        try:
-                            processed_data[idx]['yerr'] = float(yerr_values.iloc[idx])
-                        except (ValueError, TypeError):
-                            processed_data[idx]['yerr'] = 0
-                if xerr and xerr in data.columns:
-                    xerr_values = data[xerr].astype(float, errors='ignore')
-                    for idx in range(min(len(processed_data), len(xerr_values))):
-                        try:
-                            processed_data[idx]['xerr'] = float(xerr_values.iloc[idx])
-                        except (ValueError, TypeError):
-                            processed_data[idx]['xerr'] = 0
-            else:
-                if isinstance(data, list):
-                    for idx, item in enumerate(data):
-                        if idx < len(processed_data):
-                            if yerr and yerr in item:
-                                try:
-                                    processed_data[idx]['yerr'] = float(item.get(yerr, 0))
+            if yerr and yerr in data.columns:
+                yerr_values = data[yerr].astype(float, errors='ignore')
+                for idx in range(min(len(processed_data), len(yerr_values))):
+                    try:
+                        processed_data[idx]['yerr'] = float(yerr_values.iloc[idx])
+                    except (ValueError, TypeError):
+                        processed_data[idx]['yerr'] = 0
+            if xerr and xerr in data.columns:
+                xerr_values = data[xerr].astype(float, errors='ignore')
+                for idx in range(min(len(processed_data), len(xerr_values))):
+                    try:
+                        processed_data[idx]['xerr'] = float(xerr_values.iloc[idx])
+                    except (ValueError, TypeError):
+                        processed_data[idx]['xerr'] = 0
+        else:
+            if isinstance(data, list):
+                for idx, item in enumerate(data):
+                    if idx < len(processed_data):
+                        if yerr and yerr in item:
+                            try:
+                                processed_data[idx]['yerr'] = float(item.get(yerr, 0))
                                 except (ValueError, TypeError):
                                     processed_data[idx]['yerr'] = 0
                             if xerr and xerr in item:

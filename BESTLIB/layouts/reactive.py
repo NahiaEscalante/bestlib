@@ -1375,10 +1375,10 @@ class ReactiveMatrixLayout:
                             try:
                                 # ✅ CORRECCIÓN: Validar que processed_items tenga elementos antes de acceder a [0]
                                 if isinstance(processed_items, list) and len(processed_items) > 0:
-                                    if isinstance(processed_items[0], dict):
-                                        initial_data = pd_module.DataFrame(processed_items)
-                                    else:
-                                        initial_data = pd_module.DataFrame(processed_items)
+                                if isinstance(processed_items[0], dict):
+                                    initial_data = pd_module.DataFrame(processed_items)
+                                else:
+                                    initial_data = pd_module.DataFrame(processed_items)
                                 else:
                                     initial_data = self._data
                             except Exception:
@@ -1977,10 +1977,10 @@ class ReactiveMatrixLayout:
                                 if has_pandas() and pd_module is not None:
                                     # ✅ CORRECCIÓN: Validar que processed_items tenga elementos antes de acceder a [0]
                                     if isinstance(processed_items, list) and len(processed_items) > 0:
-                                        if isinstance(processed_items[0], dict):
-                                            data_from_items = pd_module.DataFrame(processed_items)
-                                        else:
-                                            data_from_items = pd_module.DataFrame(processed_items)
+                                    if isinstance(processed_items[0], dict):
+                                        data_from_items = pd_module.DataFrame(processed_items)
+                                    else:
+                                        data_from_items = pd_module.DataFrame(processed_items)
                                     else:
                                         data_from_items = processed_items
                                     
@@ -2359,10 +2359,10 @@ class ReactiveMatrixLayout:
                         try:
                             # ✅ CORRECCIÓN: Validar que processed_items tenga elementos antes de acceder a [0]
                             if isinstance(processed_items, list) and len(processed_items) > 0:
-                                if isinstance(processed_items[0], dict):
-                                    initial_data = pd.DataFrame(processed_items)
-                                else:
-                                    initial_data = pd.DataFrame(processed_items)
+                            if isinstance(processed_items[0], dict):
+                                initial_data = pd.DataFrame(processed_items)
+                            else:
+                                initial_data = pd.DataFrame(processed_items)
                             else:
                                 initial_data = self._data
                         except Exception:
@@ -2859,8 +2859,8 @@ class ReactiveMatrixLayout:
                                 if isinstance(processed_items[0], dict):
                                     pd = get_pandas()
                                     if pd is not None:
-                                        data_to_use = pd.DataFrame(processed_items)
-                                    else:
+                                data_to_use = pd.DataFrame(processed_items)
+                            else:
                                         data_to_use = processed_items
                                 else:
                                     data_to_use = processed_items

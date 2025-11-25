@@ -93,8 +93,8 @@ class CommManager:
             ValueError: Si div_id no es str no vacío
         """
         with cls._instances_lock:
-            if div_id in cls._instances:
-                del cls._instances[div_id]
+        if div_id in cls._instances:
+            del cls._instances[div_id]
     
     @classmethod
     def _cleanup_dead_instances(cls) -> int:
@@ -113,9 +113,9 @@ class CommManager:
             # Crear copia para iterar de forma segura (evita race condition)
             instances_copy = dict(cls._instances)
             dead = [k for k, ref in instances_copy.items() if ref() is None]
-            for k in dead:
+        for k in dead:
                 if k in cls._instances:  # Verificar que aún existe
-                    del cls._instances[k]
+            del cls._instances[k]
         return len(dead)
     
     @classmethod
@@ -140,7 +140,7 @@ class CommManager:
             cls._cleanup_dead_instances()
         
         with cls._instances_lock:
-            inst_ref = cls._instances.get(div_id)
+        inst_ref = cls._instances.get(div_id)
             if inst_ref is None:
                 return None
             

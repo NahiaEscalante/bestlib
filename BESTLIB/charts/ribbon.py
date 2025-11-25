@@ -60,25 +60,25 @@ class RibbonChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-                # Ordenar por x_col
-                data_sorted = data.sort_values(by=x_col).copy()
-                ribbon_data = []
-                for _, row in data_sorted.iterrows():
-                    ribbon_data.append({
-                        'x': float(row[x_col]),
-                        'y1': float(row[y1_col]),
-                        'y2': float(row[y2_col])
-                    })
-            else:
-                # Para listas
-                data_sorted = sorted(data, key=lambda d: d.get(x_col, 0))
-                ribbon_data = []
-                for d in data_sorted:
-                    ribbon_data.append({
-                        'x': float(d[x_col]),
-                        'y1': float(d[y1_col]),
-                        'y2': float(d[y2_col])
-                    })
+            # Ordenar por x_col
+            data_sorted = data.sort_values(by=x_col).copy()
+            ribbon_data = []
+            for _, row in data_sorted.iterrows():
+                ribbon_data.append({
+                    'x': float(row[x_col]),
+                    'y1': float(row[y1_col]),
+                    'y2': float(row[y2_col])
+                })
+        else:
+            # Para listas
+            data_sorted = sorted(data, key=lambda d: d.get(x_col, 0))
+            ribbon_data = []
+            for d in data_sorted:
+                ribbon_data.append({
+                    'x': float(d[x_col]),
+                    'y1': float(d[y1_col]),
+                    'y2': float(d[y2_col])
+                })
         else:
         
         return {'data': ribbon_data}

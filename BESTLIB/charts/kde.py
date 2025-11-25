@@ -43,10 +43,10 @@ class KdeChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-                if column not in data.columns:
-                    raise ChartError(f"Columna '{column}' no encontrada en los datos")
-                if not pd.api.types.is_numeric_dtype(data[column]):
-                    raise ChartError(f"Columna '{column}' debe ser numérica")
+            if column not in data.columns:
+                raise ChartError(f"Columna '{column}' no encontrada en los datos")
+            if not pd.api.types.is_numeric_dtype(data[column]):
+                raise ChartError(f"Columna '{column}' debe ser numérica")
         else:
             if isinstance(data, list) and len(data) > 0:
                 if column not in data[0]:
@@ -71,7 +71,7 @@ class KdeChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-                values = data[column].dropna().values
+            values = data[column].dropna().values
             else:
                 values = [d[column] for d in data if column in d and d[column] is not None]
                 if np is not None:
@@ -98,28 +98,28 @@ class KdeChart(ChartBase):
             
             # Crear rango de valores para evaluar
             if np is not None:
-                x_min, x_max = float(np.min(values)), float(np.max(values))
-                x_range = x_max - x_min
-                if x_range == 0:
-                    # Si todos los valores son iguales, crear un rango pequeño alrededor del valor
-                    x_min = x_min - 0.1
-                    x_max = x_max + 0.1
-                    x_range = 0.2
-                x_padding = x_range * 0.1  # 10% padding
-                x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
-                y_density = kde(x_eval)
-                
-                # Convertir a lista de puntos - asegurar que sean tipos Python nativos
-                kde_data = []
-                for x, y in zip(x_eval, y_density):
-                    try:
-                        kde_data.append({
-                            'x': float(x) if not np.isnan(x) else 0.0,
-                            'y': float(y) if not np.isnan(y) else 0.0
-                        })
-                    except (ValueError, TypeError, OverflowError):
-                        # Si hay un error de conversión, usar 0.0
-                        kde_data.append({'x': 0.0, 'y': 0.0})
+            x_min, x_max = float(np.min(values)), float(np.max(values))
+            x_range = x_max - x_min
+            if x_range == 0:
+                # Si todos los valores son iguales, crear un rango pequeño alrededor del valor
+                x_min = x_min - 0.1
+                x_max = x_max + 0.1
+                x_range = 0.2
+            x_padding = x_range * 0.1  # 10% padding
+            x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
+            y_density = kde(x_eval)
+            
+            # Convertir a lista de puntos - asegurar que sean tipos Python nativos
+            kde_data = []
+            for x, y in zip(x_eval, y_density):
+                try:
+                    kde_data.append({
+                        'x': float(x) if not np.isnan(x) else 0.0,
+                        'y': float(y) if not np.isnan(y) else 0.0
+                    })
+                except (ValueError, TypeError, OverflowError):
+                    # Si hay un error de conversión, usar 0.0
+                    kde_data.append({'x': 0.0, 'y': 0.0})
             else:
                 raise ChartError("numpy es requerido para calcular KDE")
         except ImportError:

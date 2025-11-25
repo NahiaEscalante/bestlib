@@ -43,10 +43,10 @@ class DistplotChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-                if column not in data.columns:
-                    raise ChartError(f"Columna '{column}' no encontrada en los datos")
-                if not pd.api.types.is_numeric_dtype(data[column]):
-                    raise ChartError(f"Columna '{column}' debe ser numérica")
+            if column not in data.columns:
+                raise ChartError(f"Columna '{column}' no encontrada en los datos")
+            if not pd.api.types.is_numeric_dtype(data[column]):
+                raise ChartError(f"Columna '{column}' debe ser numérica")
         else:
             if isinstance(data, list) and len(data) > 0:
                 if column not in data[0]:
@@ -73,7 +73,7 @@ class DistplotChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-                values = data[column].dropna().values
+            values = data[column].dropna().values
             else:
                 values = [d[column] for d in data if column in d and d[column] is not None]
                 if np is not None:
@@ -132,28 +132,28 @@ class DistplotChart(ChartBase):
                 # No se puede calcular KDE sin numpy
                 pass
             else:
-                try:
-                    from scipy.stats import gaussian_kde
-                    kde_obj = gaussian_kde(values)
-                    x_min, x_max = float(np.min(values)), float(np.max(values))
-                    x_range = x_max - x_min
-                    x_padding = x_range * 0.1
-                    x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
-                    y_density = kde_obj(x_eval)
-                    
-                    kde_data = []
-                    for x, y in zip(x_eval, y_density):
-                        try:
-                            kde_data.append({
-                                'x': float(x) if not np.isnan(x) else 0.0,
-                                'y': float(y) if not np.isnan(y) else 0.0
-                            })
-                        except (ValueError, TypeError, OverflowError):
-                            kde_data.append({'x': 0.0, 'y': 0.0})
-                    result['kde'] = kde_data
-                except ImportError:
-                    # Si no hay scipy, no incluir KDE
-                    pass
+            try:
+                from scipy.stats import gaussian_kde
+                kde_obj = gaussian_kde(values)
+                x_min, x_max = float(np.min(values)), float(np.max(values))
+                x_range = x_max - x_min
+                x_padding = x_range * 0.1
+                x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
+                y_density = kde_obj(x_eval)
+                
+                kde_data = []
+                for x, y in zip(x_eval, y_density):
+                    try:
+                        kde_data.append({
+                            'x': float(x) if not np.isnan(x) else 0.0,
+                            'y': float(y) if not np.isnan(y) else 0.0
+                        })
+                    except (ValueError, TypeError, OverflowError):
+                        kde_data.append({'x': 0.0, 'y': 0.0})
+                result['kde'] = kde_data
+            except ImportError:
+                # Si no hay scipy, no incluir KDE
+                pass
         
         # Rug opcional
         if rug:

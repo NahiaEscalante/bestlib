@@ -58,7 +58,7 @@ class StepPlotChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-                data_sorted = data.sort_values(by=x_col).copy()
+            data_sorted = data.sort_values(by=x_col).copy()
             else:
                 # Para listas, ordenar manualmente
                 data_sorted = sorted(data, key=lambda d: d.get(x_col, 0))
