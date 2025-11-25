@@ -2,11 +2,18 @@ from setuptools import setup, find_packages
 
 setup(
     name="bestlib",
-    version="0.1.0",
+    version="0.3.0",
     description="MatrixLayout widget for dashboards",
     author="Nahia, Alejandro, Max",
-    # Usar find_packages para incluir todos los subpaquetes automáticamente
-    packages=find_packages(),
+    packages=[
+        'BESTLIB',
+        'BESTLIB.charts',
+        'BESTLIB.core',
+        'BESTLIB.utils',
+        'BESTLIB.layouts',
+        'BESTLIB.compat',
+        'BESTLIB.data'
+    ],
     include_package_data=True,
     package_data={
         "BESTLIB": ["*.js", "*.css"],
