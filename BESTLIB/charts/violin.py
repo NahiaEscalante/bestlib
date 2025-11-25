@@ -147,27 +147,42 @@ class ViolinChart(ChartBase):
         Returns:
             dict: Información del violín con estructura {category, profile: [{y, w}]}
         """
+        # Convertir a numpy array si es posible
         if HAS_NUMPY and not isinstance(values, np.ndarray):
-            values = np.array(values)
+            try:
+                values = np.array(values)
+            except:
+                pass
         
         if len(values) == 0:
             return None
         
         # Calcular KDE para la forma del violín
         profile = []
+        
+        # Obtener rango de valores primero (necesario para todos los casos)
         try:
-            from scipy.stats import gaussian_kde
-            
-            # Obtener rango de valores
             if HAS_PANDAS and hasattr(values, 'min'):
                 min_val = float(values.min())
                 max_val = float(values.max())
-            elif HAS_NUMPY:
+            elif HAS_NUMPY and isinstance(values, np.ndarray):
                 min_val = float(np.min(values))
                 max_val = float(np.max(values))
             else:
-                min_val = float(min(values))
-                max_val = float(max(values))
+                # Fallback para listas
+                vals_list = list(values)
+                min_val = float(min(vals_list))
+                max_val = float(max(vals_list))
+        except Exception as e:
+            # Si falla incluso esto, no podemos continuar
+            return None
+        
+        # Intentar calcular KDE con scipy
+        try:
+            from scipy.stats import gaussian_kde
+            
+            if not HAS_NUMPY:
+                raise ImportError("Numpy requerido para KDE")
             
             kde = gaussian_kde(values)
             x_range = max_val - min_val
@@ -192,44 +207,74 @@ class ViolinChart(ChartBase):
                     })
                 except (ValueError, TypeError, OverflowError):
                     pass
-        except ImportError:
-            # Fallback: usar histograma como aproximación
+                    
+        except (ImportError, Exception) as e:
+            # Fallback 1: usar histograma como aproximación
             if HAS_NUMPY:
-                hist, bin_edges = np.histogram(values, bins=30, density=True)
-                bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-                max_hist = np.max(hist) if np.max(hist) > 0 else 1.0
-                
-                for y_val, h in zip(bin_centers, hist):
-                    try:
+                try:
+                    hist, bin_edges = np.histogram(values, bins=30, density=True)
+                    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+                    max_hist = np.max(hist) if np.max(hist) > 0 else 1.0
+                    
+                    for y_val, h in zip(bin_centers, hist):
+                        try:
+                            profile.append({
+                                'y': float(y_val),
+                                'w': float(h / max_hist)
+                            })
+                        except (ValueError, TypeError, OverflowError):
+                            pass
+                except Exception:
+                    pass
+            
+            # Fallback 2: crear perfil simple con distribución aproximada
+            if len(profile) == 0:
+                try:
+                    # Crear perfil simple con 20 puntos
+                    x_range = max_val - min_val
+                    if x_range == 0:
+                        x_range = 1.0
+                    
+                    # Generar puntos equidistantes
+                    n_points = 20
+                    step = x_range / (n_points - 1)
+                    
+                    # Calcular media para centrar la distribución
+                    if HAS_PANDAS and hasattr(values, 'mean'):
+                        mean_val = float(values.mean())
+                    elif HAS_NUMPY and isinstance(values, np.ndarray):
+                        mean_val = float(np.mean(values))
+                    else:
+                        vals_list = list(values)
+                        mean_val = sum(vals_list) / len(vals_list)
+                    
+                    # Crear perfil con forma gaussiana aproximada
+                    for i in range(n_points):
+                        y_val = min_val + i * step
+                        # Calcular densidad aproximada (gaussiana simple)
+                        # Máximo en la media, decae hacia los extremos
+                        distance_from_mean = abs(y_val - mean_val)
+                        max_distance = x_range / 2
+                        if max_distance > 0:
+                            # Normalizar distancia (0 en media, 1 en extremos)
+                            norm_dist = distance_from_mean / max_distance
+                            # Densidad gaussiana aproximada
+                            w_val = max(0.1, 1.0 - norm_dist * 0.9)  # No bajar de 0.1
+                        else:
+                            w_val = 1.0
+                        
                         profile.append({
                             'y': float(y_val),
-                            'w': float(h / max_hist)
+                            'w': float(w_val)
                         })
-                    except (ValueError, TypeError, OverflowError):
-                        pass
-        except Exception:
-            # Si falla KDE, crear perfil simple con los valores
-            if len(values) > 0:
-                try:
-                    if HAS_PANDAS and hasattr(values, 'min'):
-                        min_val = float(values.min())
-                        max_val = float(values.max())
-                    elif HAS_NUMPY:
-                        min_val = float(np.min(values))
-                        max_val = float(np.max(values))
-                    else:
-                        min_val = float(min(values))
-                        max_val = float(max(values))
-                    
-                    # Crear perfil simple con 3 puntos
+                except Exception:
+                    # Último fallback: perfil con 3 puntos
                     mid = (min_val + max_val) / 2
                     profile = [
                         {'y': float(min_val), 'w': 0.1},
                         {'y': float(mid), 'w': 1.0},
                         {'y': float(max_val), 'w': 0.1}
                     ]
-                except:
-                    pass
         
         if len(profile) == 0:
             return None
