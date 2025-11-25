@@ -7,30 +7,8 @@ from ..data.validators import validate_scatter_data
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
 
-# Import de pandas de forma defensiva para evitar errores de importación circular
-import sys  # sys siempre está disponible, importarlo fuera del try
-HAS_PANDAS = False
-pd = None
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    import pandas as pd
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
+from ..utils.imports import has_pandas, get_pandas
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class ScatterChart(ChartBase):
@@ -40,7 +18,7 @@ class ScatterChart(ChartBase):
     def chart_type(self):
         return 'scatter'
     
-    def validate_data(self, data, x_col=None, y_col=None, **kwargs):
+    def validate_data(self, data: Any, x_col: Optional[str] = None, y_col: Optional[str] = None, **kwargs) -> None:
         """
         Valida que los datos sean adecuados para scatter plot.
         
@@ -51,18 +29,23 @@ class ScatterChart(ChartBase):
             **kwargs: Otros parámetros
         
         Raises:
-            ChartError: Si los datos no son válidos
+            ChartError: Si los datos no son válidos o los parámetros son inválidos.
         """
-        if not x_col or not y_col:
-            raise ChartError("x_col e y_col son requeridos para scatter plot")
+        if data is None:
+            raise ChartError("data cannot be None")
+        if not isinstance(x_col, str) or not x_col:
+            raise ChartError("x_col must be non-empty str")
+        if not isinstance(y_col, str) or not y_col:
+            raise ChartError("y_col must be non-empty str")
         
         try:
             validate_scatter_data(data, x_col, y_col)
         except DataError as e:
             raise ChartError(f"Datos inválidos para scatter plot: {e}")
     
-    def prepare_data(self, data, x_col=None, y_col=None, category_col=None, 
-                     size_col=None, color_col=None, **kwargs):
+    def prepare_data(self, data: Any, x_col: Optional[str] = None, y_col: Optional[str] = None, 
+                     category_col: Optional[str] = None, size_col: Optional[str] = None, 
+                     color_col: Optional[str] = None, **kwargs) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         Prepara datos para scatter plot.
         
@@ -77,7 +60,19 @@ class ScatterChart(ChartBase):
         
         Returns:
             tuple: (datos_procesados, datos_originales)
+        
+        Raises:
+            ChartError: Si los parámetros opcionales no son strings válidos.
         """
+        if data is None:
+            raise ChartError("data cannot be None")
+        if size_col is not None and (not isinstance(size_col, str) or not size_col):
+            raise ChartError("size_col must be None or non-empty str")
+        if color_col is not None and (not isinstance(color_col, str) or not color_col):
+            raise ChartError("color_col must be None or non-empty str")
+        if category_col is not None and (not isinstance(category_col, str) or not category_col):
+            raise ChartError("category_col must be None or non-empty str")
+        
         processed_data, original_data = prepare_scatter_data(
             data, 
             x_col=x_col, 
@@ -88,7 +83,9 @@ class ScatterChart(ChartBase):
         )
         
         # Enriquecer con tamaño y color si se especificaron
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+        if has_pandas():
+            pd = get_pandas()
+            if pd and isinstance(data, pd.DataFrame):
             if size_col and size_col in data.columns:
                 size_values = data[size_col].astype(float, errors='ignore')
                 for idx in range(min(len(processed_data), len(size_values))):
@@ -115,18 +112,21 @@ class ScatterChart(ChartBase):
         # Aplicar sampling si se especifica maxPoints
         max_points = kwargs.get('maxPoints', None)
         if max_points and isinstance(max_points, int) and max_points > 0 and len(processed_data) > max_points:
-            if HAS_PANDAS and isinstance(data, pd.DataFrame):
-                step = len(data) / max_points
-                sample_indices = [int(i * step) for i in range(max_points)]
-                processed_data = [processed_data[i] for i in sample_indices if i < len(processed_data)]
+            if has_pandas():
+                pd = get_pandas()
+                if pd and isinstance(data, pd.DataFrame):
+                    step = len(data) / max_points
+                    sample_indices = [int(i * step) for i in range(max_points)]
+                    processed_data = [processed_data[i] for i in sample_indices if i < len(processed_data)]
             else:
                 step = len(processed_data) / max_points
                 processed_data = [processed_data[int(i * step)] for i in range(max_points) if int(i * step) < len(processed_data)]
         
         return processed_data, original_data
     
-    def get_spec(self, data, x_col=None, y_col=None, category_col=None,
-                 size_col=None, color_col=None, **kwargs):
+    def get_spec(self, data: Any, x_col: Optional[str] = None, y_col: Optional[str] = None,
+                 category_col: Optional[str] = None, size_col: Optional[str] = None, 
+                 color_col: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """
         Genera la especificación del scatter plot (BESTLIB Visualization Spec).
         
@@ -141,6 +141,9 @@ class ScatterChart(ChartBase):
         
         Returns:
             dict: Spec conforme a BESTLIB Visualization Spec
+        
+        Raises:
+            ChartError: Si los datos o parámetros son inválidos.
         """
         # Validar datos
         self.validate_data(data, x_col=x_col, y_col=y_col, **kwargs)

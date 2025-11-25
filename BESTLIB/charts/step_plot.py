@@ -8,34 +8,8 @@ from ..data.validators import validate_scatter_data
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
 
-# Import de pandas de forma defensiva para evitar errores de importación circular
-import sys  # sys siempre está disponible, importarlo fuera del try
-HAS_PANDAS = False
-pd = None
-
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            # Pandas está corrupto, limpiarlo
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    # Intentar importar pandas limpio
-    import pandas as pd
-    # Verificar que pandas esté completamente inicializado
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
+# ✅ MED-003: Eliminado HAS_PANDAS - usar has_pandas() y get_pandas() siempre
+from ...utils.imports import has_pandas, get_pandas
 
 
 class StepPlotChart(ChartBase):
@@ -80,8 +54,14 @@ class StepPlotChart(ChartBase):
             tuple: (datos_procesados, datos_originales)
         """
         # Ordenar por x_col para step plot
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            data_sorted = data.sort_values(by=x_col).copy()
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                data_sorted = data.sort_values(by=x_col).copy()
+            else:
+                # Para listas, ordenar manualmente
+                data_sorted = sorted(data, key=lambda d: d.get(x_col, 0))
         else:
             # Para listas, ordenar manualmente
             data_sorted = sorted(data, key=lambda d: d.get(x_col, 0))

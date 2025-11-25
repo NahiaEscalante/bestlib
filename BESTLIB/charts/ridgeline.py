@@ -7,42 +7,13 @@ from ..data.validators import validate_scatter_data
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
 
-# Import de pandas y numpy de forma defensiva para evitar errores de importación circular
-import sys  # sys siempre está disponible, importarlo fuera del try
-HAS_PANDAS = False
-HAS_NUMPY = False
-pd = None
-np = None
+# ✅ MED-003: Eliminado HAS_PANDAS - usar has_pandas() y get_pandas() siempre
+from ...utils.imports import has_pandas, get_pandas
 
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            # Pandas está corrupto, limpiarlo
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    # Intentar importar pandas limpio
-    import pandas as pd
-    # Verificar que pandas esté completamente inicializado
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
-
+# Import numpy directamente (no hay función helper para numpy)
 try:
     import numpy as np
-    HAS_NUMPY = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_NUMPY = False
+except (ImportError, AttributeError, ModuleNotFoundError):
     np = None
 
 
@@ -71,13 +42,16 @@ class RidgelineChart(ChartBase):
         if not category_col:
             raise ChartError("category_col es requerido para ridgeline")
         
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            if column not in data.columns:
-                raise ChartError(f"Columna '{column}' no encontrada")
-            if category_col not in data.columns:
-                raise ChartError(f"Columna '{category_col}' no encontrada")
-            if not pd.api.types.is_numeric_dtype(data[column]):
-                raise ChartError(f"Columna '{column}' debe ser numérica")
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                if column not in data.columns:
+                    raise ChartError(f"Columna '{column}' no encontrada")
+                if category_col not in data.columns:
+                    raise ChartError(f"Columna '{category_col}' no encontrada")
+                if not pd.api.types.is_numeric_dtype(data[column]):
+                    raise ChartError(f"Columna '{column}' debe ser numérica")
     
     def prepare_data(self, data, column=None, category_col=None, bandwidth=None, **kwargs):
         """
@@ -93,41 +67,46 @@ class RidgelineChart(ChartBase):
         Returns:
             dict: Datos preparados con KDE por categoría
         """
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            categories = data[category_col].unique()
-            result = {}
-            
-            for cat in categories:
-                cat_data = data[data[category_col] == cat][column].dropna().values
-                if len(cat_data) == 0:
-                    continue
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                categories = data[category_col].unique()
+                result = {}
                 
-                # Calcular KDE
-                try:
-                    from scipy.stats import gaussian_kde
-                    if bandwidth:
-                        kde = gaussian_kde(cat_data, bw_method=bandwidth)
-                    else:
-                        kde = gaussian_kde(cat_data)
+                for cat in categories:
+                    cat_data = data[data[category_col] == cat][column].dropna().values
+                    if len(cat_data) == 0:
+                        continue
                     
-                    x_min, x_max = float(np.min(cat_data)), float(np.max(cat_data))
-                    x_range = x_max - x_min
-                    x_padding = x_range * 0.1
-                    x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
-                    y_density = kde(x_eval)
-                    
-                    result[str(cat)] = [
-                        {'x': float(x), 'y': float(y)} 
-                        for x, y in zip(x_eval, y_density)
-                    ]
-                except ImportError:
-                    # Fallback: histograma
-                    hist, bin_edges = np.histogram(cat_data, bins=50, density=True)
-                    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-                    result[str(cat)] = [
-                        {'x': float(x), 'y': float(y)} 
-                        for x, y in zip(bin_centers, hist)
-                    ]
+                    # Calcular KDE
+                    try:
+                        from scipy.stats import gaussian_kde
+                        if bandwidth:
+                            kde = gaussian_kde(cat_data, bw_method=bandwidth)
+                        else:
+                            kde = gaussian_kde(cat_data)
+                        
+                        if np is not None:
+                            x_min, x_max = float(np.min(cat_data)), float(np.max(cat_data))
+                            x_range = x_max - x_min
+                            x_padding = x_range * 0.1
+                            x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
+                            y_density = kde(x_eval)
+                            
+                            result[str(cat)] = [
+                                {'x': float(x), 'y': float(y)} 
+                                for x, y in zip(x_eval, y_density)
+                            ]
+                    except ImportError:
+                        # Fallback: histograma
+                        if np is not None:
+                            hist, bin_edges = np.histogram(cat_data, bins=50, density=True)
+                            bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+                            result[str(cat)] = [
+                                {'x': float(x), 'y': float(y)} 
+                                for x, y in zip(bin_centers, hist)
+                            ]
         else:
             # Para listas, agrupar manualmente
             from collections import defaultdict
@@ -138,8 +117,8 @@ class RidgelineChart(ChartBase):
             
             result = {}
             for cat, values in grouped.items():
-                if HAS_NUMPY:
-                    values = np.array(values)
+                if np is not None:
+                    values = np.array([v for v in values if v is not None])
                 else:
                     values = [v for v in values if v is not None]
                 
@@ -154,22 +133,20 @@ class RidgelineChart(ChartBase):
                     else:
                         kde = gaussian_kde(values)
                     
-                    if HAS_NUMPY:
+                    if np is not None:
                         x_min, x_max = float(np.min(values)), float(np.max(values))
-                    else:
-                        x_min, x_max = float(min(values)), float(max(values))
-                    x_range = x_max - x_min
-                    x_padding = x_range * 0.1
-                    x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
-                    y_density = kde(x_eval)
-                    
-                    result[str(cat)] = [
-                        {'x': float(x), 'y': float(y)} 
-                        for x, y in zip(x_eval, y_density)
-                    ]
+                        x_range = x_max - x_min
+                        x_padding = x_range * 0.1
+                        x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
+                        y_density = kde(x_eval)
+                        
+                        result[str(cat)] = [
+                            {'x': float(x), 'y': float(y)} 
+                            for x, y in zip(x_eval, y_density)
+                        ]
                 except ImportError:
                     # Fallback
-                    if HAS_NUMPY:
+                    if np is not None:
                         hist, bin_edges = np.histogram(values, bins=50, density=True)
                         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
                         result[str(cat)] = [

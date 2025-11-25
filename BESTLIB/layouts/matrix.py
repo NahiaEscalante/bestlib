@@ -3,14 +3,19 @@ MatrixLayout - Refactorizado para usar módulos modulares
 """
 import uuid
 import weakref
-from ..core.events import EventManager
+from typing import Callable, Any, Optional
+# TEMP FIX: EventManager disabled until full migration
+# from ..core.events import EventManager
 from ..core.comm import CommManager
 from ..core.layout import LayoutEngine
 from ..render.html import HTMLGenerator
 from ..render.builder import JSBuilder
 from ..render.assets import AssetManager
 from ..utils.figsize import figsize_to_pixels, process_figsize_in_kwargs
-from ..core.exceptions import LayoutError
+from ..core.exceptions import LayoutError, get_logger
+
+# Inicializar logger centralizado
+logger = get_logger()
 
 try:
     import ipywidgets as widgets
@@ -18,38 +23,9 @@ try:
 except ImportError:
     HAS_WIDGETS = False
 
-# Import de pandas de forma defensiva para evitar errores de importación circular
-import sys  # sys siempre está disponible, importarlo fuera del try
-HAS_PANDAS = False
-pd = None
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    if 'pandas' in sys.modules:
-        # Si pandas ya está en sys.modules pero corrupto, intentar limpiarlo
-        try:
-            pd_test = sys.modules['pandas']
-            # Intentar acceder a un atributo básico para verificar si está corrupto
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            # Pandas está corrupto, limpiarlo
-            del sys.modules['pandas']
-            # También limpiar submódulos relacionados
-            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    
-    # Ahora intentar importar pandas
-    import pandas as pd
-    # Verificar que pandas esté completamente inicializado
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    # Si pandas no está disponible o está corrupto, continuar sin él
-    HAS_PANDAS = False
-    pd = None
+# Import de pandas de forma segura (sin manipular sys.modules)
+from ..utils.imports import has_pandas, get_pandas
+# ✅ MED-003: Eliminado HAS_PANDAS - usar has_pandas() y get_pandas() siempre
 
 
 class MatrixLayout:
@@ -79,14 +55,26 @@ class MatrixLayout:
         if ascii_layout is None:
             ascii_layout = "A"
         
+        # Validate ascii_layout immediately
+        if not isinstance(ascii_layout, str):
+            raise TypeError(f"ascii_layout must be str, received: {type(ascii_layout).__name__}")
+        ascii_layout = ascii_layout.strip()
+        if not ascii_layout:
+            raise ValueError("ascii_layout cannot be empty after strip")
+        
         self.ascii_layout = ascii_layout
         self.div_id = "matrix-" + str(uuid.uuid4())
         
         # Usar CommManager para registro de instancia
         CommManager.register_instance(self.div_id, self)
         
-        # Usar EventManager para gestión de eventos
-        self._event_manager = EventManager()
+        # TEMP FIX: EventManager disabled until full migration
+        # Using legacy `_handlers` for all events to maintain compatibility
+        # Initialize legacy handlers system
+        self._ensure_handlers()
+        
+        # EventManager temporarily disabled - do not use
+        # self._event_manager = EventManager()
         
         # Flag para rastrear si hay handlers personalizados
         self._has_custom_select_handler = False
@@ -113,6 +101,18 @@ class MatrixLayout:
         # Asegurar que el comm esté registrado usando CommManager
         CommManager.register_comm()
     
+    def _ensure_handlers(self):
+        """
+        Asegura que _handlers esté inicializado.
+        Helper method para evitar duplicación de código.
+        
+        Returns:
+            dict: Diccionario de handlers
+        """
+        if not hasattr(self, "_handlers"):
+            self._handlers = {}
+        return self._handlers
+    
     @classmethod
     def set_debug(cls, enabled: bool):
         """
@@ -121,19 +121,59 @@ class MatrixLayout:
         Args:
             enabled (bool): Si True, activa mensajes detallados de debug.
                            Si False, solo muestra errores críticos.
+        
+        Raises:
+            TypeError: Si enabled no es bool
         """
-        cls._debug = bool(enabled)
-        EventManager.set_debug(enabled)
+        if not isinstance(enabled, bool):
+            raise TypeError(f"enabled must be bool, received: {type(enabled).__name__}")
+        cls._debug = enabled
+        # TEMP FIX: EventManager disabled
+        # EventManager.set_debug(enabled)
         CommManager.set_debug(enabled)
     
     @classmethod
-    def on_global(cls, event, func):
-        """Registra un callback global para un tipo de evento"""
-        EventManager.on_global(event, func)
+    def _ensure_global_handlers(cls):
+        """Asegura que _global_handlers esté inicializado"""
+        if not hasattr(cls, "_global_handlers"):
+            cls._global_handlers = {}
+        return cls._global_handlers
     
-    def on(self, event, func):
+    @classmethod
+    def on_global(cls, event: str, func: Callable[[Any], None]) -> None:
+        """Registra un callback global para un tipo de evento"""
+        # Validación de parámetros
+        if not isinstance(event, str) or not event:
+            raise ValueError(f"event debe ser str no vacío, recibido: {event!r}")
+        if not callable(func):
+            raise TypeError(f"func debe ser callable, recibido: {type(func).__name__}")
+        
+        # TEMP FIX: EventManager disabled - using legacy system
+        # For now, global handlers are stored in class-level _global_handlers
+        handlers = cls._ensure_global_handlers()
+        handlers[event] = func
+        
+        # TEMP FIX: EventManager disabled
+        # EventManager.on_global(event, func)
+    
+    def on(self, event: str, func: Callable[[Any], None]) -> "MatrixLayout":
         """Registra un callback específico para esta instancia"""
-        self._event_manager.on(event, func)
+        # Validación de parámetros
+        if not isinstance(event, str) or not event:
+            raise ValueError(f"event debe ser str no vacío, recibido: {event!r}")
+        if not callable(func):
+            raise TypeError(f"func debe ser callable, recibido: {type(func).__name__}")
+        
+        # TEMP FIX: Registering handler in legacy system
+        # Ensure _handlers exists
+        handlers = self._ensure_handlers()
+        
+        # Register in legacy system
+        handlers.setdefault(event, []).append(func)
+        
+        # TEMP FIX: EventManager disabled
+        # self._event_manager.on(event, func)
+        
         # Si se registra un handler personalizado para 'select', marcar que hay uno personalizado
         if event == 'select':
             self._has_custom_select_handler = True
@@ -151,26 +191,31 @@ class MatrixLayout:
             count = payload.get('count', len(items))
             
             if count == 0:
-                print("📊 No hay elementos seleccionados")
+                logger.info("No hay elementos seleccionados")
                 return
             
-            print(f"\n📊 Elementos seleccionados: {count}")
-            print("=" * 60)
+            logger.info(f"\nElementos seleccionados: {count}")
+            logger.info("=" * 60)
             
             # Mostrar los primeros elementos (máximo 10 para no saturar)
             display_count = min(count, 10)
             for i, item in enumerate(items[:display_count]):
-                print(f"\n[{i+1}]")
+                logger.info(f"\n[{i+1}]")
                 for key, value in item.items():
                     if key != 'index' and key != '_original_row':
-                        print(f"   {key}: {value}")
+                        logger.info(f"   {key}: {value}")
             
             if count > display_count:
-                print(f"\n... y {count - display_count} elemento(s) más")
-            print("=" * 60)
-            print(f"\n💡 Tip: Usa layout.on('select', tu_funcion) para personalizar el manejo de selecciones")
+                logger.info(f"\n... y {count - display_count} elemento(s) más")
+            logger.info("=" * 60)
+            logger.info(f"\nTip: Usa layout.on('select', tu_funcion) para personalizar el manejo de selecciones")
         
-        self._event_manager.on('select', default_select_handler)
+        # TEMP FIX: Registering handler in legacy system
+        handlers = self._ensure_handlers()
+        handlers.setdefault('select', []).append(default_select_handler)
+        
+        # TEMP FIX: EventManager disabled
+        # self._event_manager.on('select', default_select_handler)
     
     @classmethod
     def register_comm(cls, force=False):
@@ -186,7 +231,7 @@ class MatrixLayout:
             scatter_letter: Letra del scatter plot (opcional)
         """
         if not HAS_WIDGETS:
-            print("⚠️ ipywidgets no está instalado. Instala con: pip install ipywidgets")
+            logger.warning("ipywidgets no está instalado. Instala con: pip install ipywidgets")
             return
         
         self._reactive_model = reactive_model
@@ -206,7 +251,12 @@ class MatrixLayout:
                     original_rows.append(item)
             reactive_model.update(original_rows)
         
-        self._event_manager.on('select', update_model)
+        # TEMP FIX: Registering handler in legacy system
+        handlers = self._ensure_handlers()
+        handlers.setdefault('select', []).append(update_model)
+        
+        # TEMP FIX: EventManager disabled
+        # self._event_manager.on('select', update_model)
         # Marcar que hay un handler personalizado (connect_selection también cuenta como personalizado)
         self._has_custom_select_handler = True
         return self
@@ -217,16 +267,44 @@ class MatrixLayout:
     
     @classmethod
     def map(cls, mapping):
-        """Mapea gráficos a letras del layout"""
+        """
+        Mapea gráficos a letras del layout
+        
+        Args:
+            mapping (dict): Diccionario de letras a specs
+        
+        Raises:
+            TypeError: Si mapping no es dict
+            ValueError: Si las keys no son str de longitud 1
+        """
+        if not isinstance(mapping, dict):
+            raise TypeError(f"mapping debe ser dict, recibido: {type(mapping).__name__}")
+        
+        # Validate that all keys are single-character strings
+        for key, value in mapping.items():
+            if not isinstance(key, str) or len(key) != 1:
+                raise ValueError(f"Todas las keys deben ser str de longitud 1. Recibido: {key!r}")
+        
         cls._map = mapping
     
     # Métodos map_* delegados al sistema de gráficos
     @classmethod
     def map_scatter(cls, letter, data, **kwargs):
         """Método helper para crear scatter plot"""
+        # Validación de parámetros
+        if not isinstance(letter, str) or not letter:
+            raise ValueError(f"letter debe ser str no vacío, recibido: {letter!r}")
+        if data is None:
+            raise ValueError("data no puede ser None")
+        if isinstance(data, (list, tuple)) and len(data) == 0:
+            raise ValueError("data no puede estar vacío")
+        
         from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('scatter')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'scatter' no está registrado en ChartRegistry")
+        
         spec = chart.get_spec(data, **kwargs)
         
         if not hasattr(cls, '_map') or cls._map is None:
@@ -237,9 +315,20 @@ class MatrixLayout:
     @classmethod
     def map_barchart(cls, letter, data, **kwargs):
         """Método helper para crear bar chart"""
+        # Validación de parámetros
+        if not isinstance(letter, str) or not letter:
+            raise ValueError(f"letter debe ser str no vacío, recibido: {letter!r}")
+        if data is None:
+            raise ValueError("data no puede ser None")
+        if isinstance(data, (list, tuple)) and len(data) == 0:
+            raise ValueError("data no puede estar vacío")
+        
         from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('bar')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'bar' no está registrado en ChartRegistry")
+        
         spec = chart.get_spec(data, **kwargs)
         
         if not hasattr(cls, '_map') or cls._map is None:
@@ -253,6 +342,8 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('line_plot')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'line_plot' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         
         if not hasattr(cls, '_map') or cls._map is None:
@@ -266,6 +357,8 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('horizontal_bar')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'horizontal_bar' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         
         if not hasattr(cls, '_map') or cls._map is None:
@@ -279,6 +372,8 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('hexbin')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'hexbin' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         
         if not hasattr(cls, '_map') or cls._map is None:
@@ -292,6 +387,8 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('errorbars')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'errorbars' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         
         if not hasattr(cls, '_map') or cls._map is None:
@@ -305,6 +402,8 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         
         chart = ChartRegistry.get('fill_between')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'fill_between' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         
         if not hasattr(cls, '_map') or cls._map is None:
@@ -318,6 +417,8 @@ class MatrixLayout:
         try:
             from ..charts import ChartRegistry
             chart = ChartRegistry.get('step_plot')
+            if chart is None:
+                raise ValueError(f"Tipo de gráfico 'step_plot' no está registrado en ChartRegistry")
             spec = chart.get_spec(data, x_col=x_col, y_col=y_col, **kwargs)
         except Exception:
             # Fallback: delegar a versión legacy
@@ -336,6 +437,8 @@ class MatrixLayout:
         """Método helper para crear KDE"""
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('kde')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'kde' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -347,6 +450,8 @@ class MatrixLayout:
         """Método helper para crear distplot"""
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('distplot')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'distplot' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -358,6 +463,8 @@ class MatrixLayout:
         """Método helper para crear rug plot"""
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('rug')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'rug' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -369,6 +476,8 @@ class MatrixLayout:
         """Método helper para crear Q-Q plot"""
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('qqplot')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'qqplot' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -380,6 +489,8 @@ class MatrixLayout:
         """Método helper para crear ECDF"""
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('ecdf')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'ecdf' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -391,6 +502,8 @@ class MatrixLayout:
         """Método helper para crear ridgeline plot"""
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('ridgeline')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'ridgeline' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -402,6 +515,8 @@ class MatrixLayout:
         """Método helper para crear ribbon plot"""
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('ribbon')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'ribbon' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -413,6 +528,8 @@ class MatrixLayout:
         """Método helper para crear 2D histogram"""
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('hist2d')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'hist2d' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -424,6 +541,8 @@ class MatrixLayout:
         """Método helper para crear polar plot"""
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('polar')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'polar' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -435,6 +554,8 @@ class MatrixLayout:
         """Método helper para crear funnel plot"""
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('funnel')
+        if chart is None:
+            raise ValueError(f"Tipo de gráfico 'funnel' no está registrado en ChartRegistry")
         spec = chart.get_spec(data, **kwargs)
         if not hasattr(cls, '_map') or cls._map is None:
             cls._map = {}
@@ -447,6 +568,8 @@ class MatrixLayout:
         try:
             from ..charts import ChartRegistry
             chart = ChartRegistry.get('histogram')
+            if chart is None:
+                raise ValueError(f"Tipo de gráfico 'histogram' no está registrado en ChartRegistry")
             spec = chart.get_spec(data, column=value_col, bins=bins, **kwargs)
         except Exception:
             # Fallback: delegar a versión legacy si ChartRegistry no tiene histogram
@@ -466,6 +589,8 @@ class MatrixLayout:
         try:
             from ..charts import ChartRegistry
             chart = ChartRegistry.get('pie')
+            if chart is None:
+                raise ValueError(f"Tipo de gráfico 'pie' no está registrado en ChartRegistry")
             spec = chart.get_spec(data, category_col=category_col, value_col=value_col, **kwargs)
         except Exception:
             # Fallback: delegar a versión legacy
@@ -485,6 +610,8 @@ class MatrixLayout:
         try:
             from ..charts import ChartRegistry
             chart = ChartRegistry.get('boxplot')
+            if chart is None:
+                raise ValueError(f"Tipo de gráfico 'boxplot' no está registrado en ChartRegistry")
             # Permitir 'column' como alias de 'value_col'
             if value_col is None and column is not None:
                 value_col = column
@@ -507,6 +634,8 @@ class MatrixLayout:
         try:
             from ..charts import ChartRegistry
             chart = ChartRegistry.get('line')
+            if chart is None:
+                raise ValueError(f"Tipo de gráfico 'line' no está registrado en ChartRegistry")
             spec = chart.get_spec(data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
         except Exception:
             # Fallback: delegar a versión legacy
@@ -526,6 +655,8 @@ class MatrixLayout:
         try:
             from ..charts import ChartRegistry
             chart = ChartRegistry.get('heatmap')
+            if chart is None:
+                raise ValueError(f"Tipo de gráfico 'heatmap' no está registrado en ChartRegistry")
             spec = chart.get_spec(data, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
         except Exception:
             # Fallback: delegar a versión legacy
@@ -545,6 +676,8 @@ class MatrixLayout:
         try:
             from ..charts import ChartRegistry
             chart = ChartRegistry.get('violin')
+            if chart is None:
+                raise ValueError(f"Tipo de gráfico 'violin' no está registrado en ChartRegistry")
             spec = chart.get_spec(data, value_col=value_col, category_col=category_col, bins=bins, **kwargs)
         except Exception:
             # Fallback: delegar a versión legacy
@@ -564,6 +697,8 @@ class MatrixLayout:
         try:
             from ..charts import ChartRegistry
             chart = ChartRegistry.get('radviz')
+            if chart is None:
+                raise ValueError(f"Tipo de gráfico 'radviz' no está registrado en ChartRegistry")
             spec = chart.get_spec(data, features=features, class_col=class_col, **kwargs)
         except Exception:
             # Fallback: delegar a versión legacy
@@ -583,6 +718,8 @@ class MatrixLayout:
         try:
             from ..charts import ChartRegistry
             chart = ChartRegistry.get('star_coordinates')
+            if chart is None:
+                raise ValueError(f"Tipo de gráfico 'star_coordinates' no está registrado en ChartRegistry")
             spec = chart.get_spec(data, features=features, class_col=class_col, **kwargs)
         except Exception:
             # Fallback: delegar a versión legacy
@@ -602,6 +739,8 @@ class MatrixLayout:
         try:
             from ..charts import ChartRegistry
             chart = ChartRegistry.get('parallel_coordinates')
+            if chart is None:
+                raise ValueError(f"Tipo de gráfico 'parallel_coordinates' no está registrado en ChartRegistry")
             spec = chart.get_spec(data, dimensions=dimensions, category_col=category_col, **kwargs)
         except Exception:
             # Fallback: delegar a versión legacy
@@ -621,6 +760,8 @@ class MatrixLayout:
         try:
             from ..charts import ChartRegistry
             chart = ChartRegistry.get('grouped_barchart')
+            if chart is None:
+                raise ValueError(f"Tipo de gráfico 'grouped_barchart' no está registrado en ChartRegistry")
             spec = chart.get_spec(data, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
         except Exception:
             # Fallback: delegar a versión legacy
@@ -810,7 +951,7 @@ class MatrixLayout:
             display(Javascript(js_content))
             
         except Exception as e:
-            print(f"❌ Error: {e}")
+            logger.error(f"Error: {e}", exc_info=True)
     
     def merge(self, letters=True):
         """Configura merge explícito para este layout"""

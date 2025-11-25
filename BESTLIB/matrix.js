@@ -17,6 +17,11 @@
       global._bestlibComms = {};
     }
     
+    // Lock para prevenir creación concurrente de comms
+    if (!global._bestlibCommLocks) {
+      global._bestlibCommLocks = {};
+    }
+    
     // Si ya existe un comm en cache, retornarlo
     if (global._bestlibComms[divId]) {
       const cachedComm = global._bestlibComms[divId];
@@ -26,10 +31,21 @@
       }
       // Si es un comm válido, retornarlo
       if (cachedComm && typeof cachedComm.send === 'function') {
-        return cachedComm;
+        // Verificar que el comm no esté cerrado
+        if (cachedComm.comm_id || cachedComm._closed !== true) {
+          return cachedComm;
+        }
+        // Comm cerrado, limpiarlo
+        delete global._bestlibComms[divId];
+      } else {
+        // Comm inválido, limpiarlo
+        delete global._bestlibComms[divId];
       }
-      // Si el comm es inválido, limpiarlo y crear uno nuevo
-      delete global._bestlibComms[divId];
+    }
+    
+    // Si ya hay una creación en progreso, retornar esa promesa
+    if (global._bestlibCommLocks[divId]) {
+      return global._bestlibCommLocks[divId];
     }
     
     // Función interna para crear comm con retry
@@ -56,16 +72,24 @@
       if (global.google && global.google.colab && global.google.colab.kernel) {
         const commPromise = global.google.colab.kernel.comms.open("bestlib_matrix", { div_id: divId });
         
-          // Guardar la promesa en cache
-          global._bestlibComms[divId] = commPromise;
-          
-          // Manejar errores de la promesa
-        commPromise.then(comm => {
-          global._bestlibComms[divId] = comm;
-        }).catch(err => {
+        // Guardar la promesa en lock para prevenir creación concurrente
+        global._bestlibCommLocks[divId] = commPromise;
+        
+        // Manejar errores de la promesa con timeout
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Timeout creando comm en Colab')), 10000);
+        });
+        
+        Promise.race([commPromise, timeoutPromise])
+          .then(comm => {
+            global._bestlibComms[divId] = comm;
+            delete global._bestlibCommLocks[divId];
+          })
+          .catch(err => {
             console.error('Error al crear comm en Colab:', err);
-            // Limpiar cache en caso de error
+            // Limpiar cache y lock en caso de error
             delete global._bestlibComms[divId];
+            delete global._bestlibCommLocks[divId];
             // Mostrar mensaje visual en el contenedor si existe
             const container = document.getElementById(divId);
             if (container) {
@@ -74,7 +98,7 @@
               errorDiv.textContent = 'Error al establecer comunicación con Python. Algunas funciones interactivas pueden no funcionar.';
               container.appendChild(errorDiv);
             }
-        });
+          });
         
         return commPromise;
       }
@@ -119,6 +143,84 @@
   }
   
   /**
+   * Valida y sanitiza un payload antes de enviarlo a Python
+   * @param {*} payload - Payload a validar
+   * @returns {object} Payload validado y sanitizado
+   */
+  function validatePayload(payload) {
+    if (payload === null || payload === undefined) {
+      return {};
+    }
+    
+    // Si no es un objeto, intentar convertirlo
+    if (typeof payload !== 'object') {
+      return { value: payload };
+    }
+    
+    // Si es un array, validar elementos antes de convertir
+    if (Array.isArray(payload)) {
+      // ✅ CRIT-011: Filtrar elementos inválidos
+      const validItems = payload.filter(item => 
+        item !== null && 
+        item !== undefined && 
+        typeof item === 'object' &&
+        !Array.isArray(item)
+      );
+      return { items: validItems };
+    }
+    
+    // Sanitizar el objeto (remover funciones, circular references, etc.)
+    try {
+      // Usar JSON para sanitizar (solo datos serializables)
+      return JSON.parse(JSON.stringify(payload));
+    } catch (e) {
+      console.warn('Error al sanitizar payload, usando versión simplificada:', e);
+      // Retornar versión simplificada
+      const sanitized = {};
+      for (const key in payload) {
+        if (payload.hasOwnProperty(key)) {
+          const value = payload[key];
+          if (typeof value !== 'function' && typeof value !== 'object') {
+            sanitized[key] = value;
+          }
+        }
+      }
+      return sanitized;
+    }
+  }
+  
+  /**
+   * Limpia comms muertos del cache
+   * @param {number} maxAge - Edad máxima en ms (por defecto 5 minutos)
+   */
+  function cleanupDeadComms(maxAge = 5 * 60 * 1000) {
+    if (!global._bestlibComms) {
+      return;
+    }
+    
+    const now = Date.now();
+    for (const divId in global._bestlibComms) {
+      if (global._bestlibComms.hasOwnProperty(divId)) {
+        const comm = global._bestlibComms[divId];
+        
+        // Si es una promesa que nunca se resolvió y es muy antigua, limpiarla
+        if (comm instanceof Promise) {
+          // No podemos verificar edad de promesas fácilmente, saltar por ahora
+          continue;
+        }
+        
+        // Si el comm está cerrado o no tiene método send, limpiarlo
+        if (!comm || typeof comm.send !== 'function' || comm._closed === true) {
+          delete global._bestlibComms[divId];
+          if (global._bestlibCommLocks && global._bestlibCommLocks[divId]) {
+            delete global._bestlibCommLocks[divId];
+          }
+        }
+      }
+    }
+  }
+  
+  /**
    * Envía un evento desde JavaScript a Python
    * Compatible con Jupyter Notebook clásico y Google Colab
    * @param {string} divId - ID del contenedor matrix
@@ -127,29 +229,65 @@
    * @param {number} maxRetries - Número máximo de intentos (por defecto 3)
    */
   async function sendEvent(divId, type, payload, maxRetries = 3) {
+    // Limpiar comms muertos periódicamente
+    if (!global._bestlibCleanupInterval) {
+      global._bestlibCleanupInterval = setInterval(cleanupDeadComms, 60000); // Cada minuto
+    }
     let attempts = 0;
     
     while (attempts < maxRetries) {
     try {
         attempts++;
+        // ✅ CRIT-012: Validar divId antes de usar
+        if (!divId || typeof divId !== 'string' || divId.length === 0) {
+          console.error('Invalid divId:', divId);
+          return;
+        }
+        
         const commOrPromise = getComm(divId, maxRetries);
       
       if (!commOrPromise) {
           if (attempts >= maxRetries) {
             console.warn('No se pudo obtener comm después de ' + maxRetries + ' intentos. Evento no enviado:', type);
+            // Mostrar mensaje visual al usuario
+            const container = document.getElementById(divId);
+            if (container) {
+              const warningDiv = document.createElement('div');
+              warningDiv.style.cssText = 'color: orange; padding: 5px; border: 1px solid orange; background: #fff8e1; font-size: 12px;';
+              warningDiv.textContent = '⚠️ Comunicación con Python no disponible. Algunas funciones interactivas pueden no funcionar.';
+              // Solo agregar si no existe ya
+              if (!container.querySelector('.bestlib-comm-warning')) {
+                warningDiv.className = 'bestlib-comm-warning';
+                container.appendChild(warningDiv);
+              }
+            }
           }
         return;
       }
       
         // Si es una promesa (Colab), esperar a que se resuelva con timeout
         let comm;
+        let timeoutHandle = null;
         if (commOrPromise instanceof Promise) {
           try {
-            comm = await Promise.race([
-              commOrPromise,
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
-            ]);
+            const timeoutPromise = new Promise((_, reject) => {
+              timeoutHandle = setTimeout(() => reject(new Error('Timeout')), 5000);
+            });
+            
+            comm = await Promise.race([commOrPromise, timeoutPromise]);
+            
+            // Limpiar timeout si la promesa se resolvió
+            if (timeoutHandle) {
+              clearTimeout(timeoutHandle);
+              timeoutHandle = null;
+            }
           } catch (e) {
+            // Limpiar timeout en caso de error
+            if (timeoutHandle) {
+              clearTimeout(timeoutHandle);
+              timeoutHandle = null;
+            }
+            
             if (e.message === 'Timeout') {
               console.warn('Timeout esperando comm (intento ' + attempts + ')');
               if (attempts < maxRetries) {
@@ -172,10 +310,13 @@
         return;
       }
       
+      // Validar y sanitizar payload
+      const sanitizedPayload = validatePayload(payload);
+      
       const message = { 
         type: type, 
         div_id: divId, 
-        payload: payload 
+        payload: sanitizedPayload 
       };
       
       // Enviar datos

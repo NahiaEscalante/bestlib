@@ -1,6 +1,8 @@
 """
 HTML Generator - Generador de HTML para BESTLIB
 """
+from typing import Optional
+import html as html_module
 from ..utils.json import sanitize_for_json
 import json
 
@@ -11,7 +13,7 @@ class HTMLGenerator:
     """
     
     @staticmethod
-    def generate_container(div_id, inline_style=""):
+    def generate_container(div_id: str, inline_style: str = "") -> str:
         """
         Genera el contenedor HTML para un layout.
         
@@ -21,14 +23,23 @@ class HTMLGenerator:
         
         Returns:
             str: HTML del contenedor
+        
+        Raises:
+            ValueError: Si div_id no es str no vacío
         """
+        if not isinstance(div_id, str) or not div_id:
+            raise ValueError(f"div_id debe ser str no vacío, recibido: {div_id!r}")
+        
+        # Escapar div_id para prevenir XSS
+        safe_div_id = html_module.escape(div_id)
+        
         if inline_style:
-            return f'<div id="{div_id}" class="matrix-layout" {inline_style}></div>'
+            return f'<div id="{safe_div_id}" class="matrix-layout" {inline_style}></div>'
         else:
-            return f'<div id="{div_id}" class="matrix-layout"></div>'
+            return f'<div id="{safe_div_id}" class="matrix-layout"></div>'
     
     @staticmethod
-    def generate_style_tag(css_code):
+    def generate_style_tag(css_code: str) -> str:
         """
         Genera el tag <style> con CSS.
         
@@ -41,7 +52,7 @@ class HTMLGenerator:
         return f"<style>{css_code}</style>"
     
     @staticmethod
-    def generate_script_tag(js_code):
+    def generate_script_tag(js_code: str) -> str:
         """
         Genera el tag <script> con JavaScript.
         
@@ -54,7 +65,7 @@ class HTMLGenerator:
         return f"<script>{js_code}</script>"
     
     @staticmethod
-    def generate_full_html(div_id, css_code, js_code, inline_style=""):
+    def generate_full_html(div_id: str, css_code: str, js_code: str, inline_style: str = "") -> str:
         """
         Genera HTML completo con CSS y JS.
         
@@ -66,6 +77,9 @@ class HTMLGenerator:
         
         Returns:
             str: HTML completo
+        
+        Raises:
+            ValueError: Si div_id no es str no vacío
         """
         # Wrapper seguro para cargar D3.js ANTES del código principal
         d3_loader = """<script>
@@ -93,24 +107,26 @@ class HTMLGenerator:
         return f"{d3_loader}\n{style_tag}\n{container}\n{script_tag}"
     
     @staticmethod
-    def escape_js_string(s):
+    def escape_js_string(s: Any) -> str:
         """
         Escapa una cadena para uso en JavaScript.
         
         Args:
-            s (str): Cadena a escapar
+            s: Cadena o valor a escapar
         
         Returns:
-            str: Cadena escapada
+            str: Cadena escapada (o "null" si s es None)
         """
         if s is None:
             return "null"
+        if not isinstance(s, (str, int, float, bool)):
+            s = str(s)
         # Escapar backticks para template literals
         s = str(s).replace("`", "\\`").replace("$", "\\$")
         return s
     
     @staticmethod
-    def generate_mapping_js(mapping):
+    def generate_mapping_js(mapping: dict) -> str:
         """
         Genera código JavaScript para el mapping.
         
@@ -118,7 +134,7 @@ class HTMLGenerator:
             mapping (dict): Mapping de letras a specs
         
         Returns:
-            str: Código JavaScript
+            str: Código JavaScript (JSON string)
         """
         sanitized = sanitize_for_json(mapping)
         return json.dumps(sanitized)

@@ -1,35 +1,12 @@
 """
 Validadores de datos para BESTLIB
 """
-# Import de pandas de forma defensiva para evitar errores de importación circular
-HAS_PANDAS = False
-pd = None
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    import sys
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in sys.modules.keys() if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    import pandas as pd
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
-
+from typing import Any, Optional, List, Tuple, Dict
 from ..core.exceptions import DataError
+from ..utils.imports import has_pandas, get_pandas
 
 
-def validate_data_structure(data, required_type=None):
+def validate_data_structure(data: Any, required_type: Optional[str] = None) -> None:
     """
     Valida que los datos tengan el formato correcto.
     
@@ -38,11 +15,21 @@ def validate_data_structure(data, required_type=None):
         required_type: Tipo esperado ('DataFrame' o 'list')
     
     Raises:
+        TypeError: Si required_type no es str o tiene valor inválido
         DataError: Si los datos no tienen el formato correcto
     """
+    if required_type is not None:
+        if not isinstance(required_type, str):
+            raise TypeError(f"required_type debe ser str, recibido: {type(required_type).__name__}")
+        if required_type not in ("DataFrame", "list"):
+            raise ValueError(f"required_type debe ser 'DataFrame' o 'list', recibido: {required_type!r}")
+    
     if required_type == 'DataFrame':
-        if not HAS_PANDAS:
+        if not has_pandas():
             raise DataError("pandas no está instalado. Instala con: pip install pandas")
+        pd = get_pandas()
+        if pd is None:
+            raise DataError("pandas no está disponible")
         if not isinstance(data, pd.DataFrame):
             raise DataError(f"Se esperaba un DataFrame de pandas, pero se recibió: {type(data).__name__}")
         if data.empty:
@@ -56,7 +43,7 @@ def validate_data_structure(data, required_type=None):
             raise DataError("Los elementos de la lista deben ser diccionarios")
 
 
-def validate_columns(data, required_cols, required_type=None):
+def validate_columns(data: Any, required_cols: List[str], required_type: Optional[str] = None) -> None:
     """
     Valida que los datos tengan las columnas/keys requeridas.
     
@@ -66,11 +53,26 @@ def validate_columns(data, required_cols, required_type=None):
         required_type: Tipo esperado ('DataFrame' o 'list')
     
     Raises:
+        ValueError: Si required_cols está vacío o required_type es inválido
         DataError: Si faltan columnas/keys requeridas
     """
+    if not isinstance(required_cols, (list, tuple)) or len(required_cols) == 0:
+        raise ValueError(f"required_cols debe ser lista/tupla no vacía, recibido: {required_cols!r}")
+    
+    if required_type is not None and required_type not in ("DataFrame", "list"):
+        raise ValueError(f"required_type debe ser 'DataFrame' o 'list', recibido: {required_type!r}")
+    
     if required_type == 'DataFrame':
-        if not HAS_PANDAS or not isinstance(data, pd.DataFrame):
+        if not has_pandas():
+            raise DataError("pandas no está instalado. Instala con: pip install pandas")
+        pd = get_pandas()
+        if pd is None or not isinstance(data, pd.DataFrame):
             raise DataError("Datos deben ser DataFrame de pandas")
+        if data.empty:
+            raise DataError("El DataFrame está vacío")
+        # ✅ NUEVO: Validar que tenga columnas
+        if len(data.columns) == 0:
+            raise DataError("El DataFrame no tiene columnas")
         missing_cols = [col for col in required_cols if col not in data.columns]
         if missing_cols:
             raise DataError(
@@ -88,7 +90,7 @@ def validate_columns(data, required_cols, required_type=None):
             raise DataError(f"Faltan las siguientes keys en los diccionarios: {missing_keys}")
 
 
-def validate_data_types(data, column_types=None):
+def validate_data_types(data: Any, column_types: Optional[Dict[str, type]] = None) -> bool:
     """
     Valida tipos de datos en columnas (básico).
     
@@ -103,7 +105,7 @@ def validate_data_types(data, column_types=None):
     return True
 
 
-def validate_scatter_data(data, x_col, y_col):
+def validate_scatter_data(data: Any, x_col: str, y_col: str) -> None:
     """
     Valida datos para scatter plot.
     
@@ -113,17 +115,28 @@ def validate_scatter_data(data, x_col, y_col):
         y_col: Nombre de columna para eje Y
     
     Raises:
-        DataError: Si los datos no son válidos
+        DataError: Si data es None o los datos no son válidos
+        ValueError: Si x_col o y_col son inválidos
     """
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
-        validate_data_structure(data, required_type='DataFrame')
-        validate_columns(data, [x_col, y_col], required_type='DataFrame')
-    else:
-        validate_data_structure(data, required_type='list')
-        validate_columns(data, [x_col, y_col], required_type='list')
+    if data is None:
+        raise DataError("data no puede ser None")
+    if not isinstance(x_col, str) or not x_col:
+        raise ValueError(f"x_col debe ser str no vacío, recibido: {x_col!r}")
+    if not isinstance(y_col, str) or not y_col:
+        raise ValueError(f"y_col debe ser str no vacío, recibido: {y_col!r}")
+    
+    if has_pandas():
+        pd = get_pandas()
+        if pd is not None and isinstance(data, pd.DataFrame):
+            validate_data_structure(data, required_type='DataFrame')
+            validate_columns(data, [x_col, y_col], required_type='DataFrame')
+            return
+    
+    validate_data_structure(data, required_type='list')
+    validate_columns(data, [x_col, y_col], required_type='list')
 
 
-def validate_bar_data(data, category_col, value_col=None):
+def validate_bar_data(data: Any, category_col: str, value_col: Optional[str] = None) -> None:
     """
     Valida datos para bar chart.
     
@@ -133,18 +146,27 @@ def validate_bar_data(data, category_col, value_col=None):
         value_col: Nombre de columna numérica (opcional)
     
     Raises:
-        DataError: Si los datos no son válidos
+        DataError: Si data es None o los datos no son válidos
+        ValueError: Si category_col es inválido
     """
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
-        validate_data_structure(data, required_type='DataFrame')
-        required = [category_col]
-        if value_col:
-            required.append(value_col)
-        validate_columns(data, required, required_type='DataFrame')
-    else:
-        validate_data_structure(data, required_type='list')
-        required = [category_col]
-        if value_col:
-            required.append(value_col)
-        validate_columns(data, required, required_type='list')
+    if data is None:
+        raise DataError("data no puede ser None")
+    if not isinstance(category_col, str) or not category_col:
+        raise ValueError(f"category_col debe ser str no vacío, recibido: {category_col!r}")
+    
+    if has_pandas():
+        pd = get_pandas()
+        if pd is not None and isinstance(data, pd.DataFrame):
+            validate_data_structure(data, required_type='DataFrame')
+            required = [category_col]
+            if value_col:
+                required.append(value_col)
+            validate_columns(data, required, required_type='DataFrame')
+            return
+    
+    validate_data_structure(data, required_type='list')
+    required = [category_col]
+    if value_col:
+        required.append(value_col)
+    validate_columns(data, required, required_type='list')
 

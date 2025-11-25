@@ -1,137 +1,142 @@
 """
 Sistema de eventos y callbacks para BESTLIB
+
+⚠️ DEPRECATED: Este módulo está oficialmente deprecado.
+
+CRIT-013: EventManager Deshabilitado
+
+Decisión arquitectónica:
+Se decidió no rehabilitar EventManager y declararlo oficialmente deprecado.
+core/events.py se mantiene solo como stub para compatibilidad,
+y toda la gestión de eventos se realiza a través de core/comm.py.
+No hay impacto en la funcionalidad actual.
+
+Este módulo NO debe usarse en ningún flujo de ejecución.
+Use core/comm.py (CommManager) para gestión de eventos.
 """
-import weakref
+import warnings
+from typing import Any, Callable, Dict, List, Optional
 
 
 class EventManager:
     """
-    Gestor centralizado de eventos y callbacks.
-    Proporciona sistema de eventos con soporte para múltiples handlers por tipo de evento.
+    Gestor centralizado de eventos y callbacks (DEPRECATED).
+    
+    ⚠️ DEPRECATED: Esta clase está oficialmente deprecada y no debe usarse.
+    
+    Toda la gestión de eventos se realiza a través de core/comm.py (CommManager).
+    Este stub se mantiene solo para compatibilidad hacia atrás.
+    
+    Todos los métodos lanzan RuntimeError si se intentan usar.
     """
     
-    _global_handlers = {}  # dict[str, callable] - Handlers globales
-    _debug = False  # Modo debug
+    _global_handlers = {}  # dict[str, callable] - Handlers globales (no usado)
+    _debug = False  # Modo debug (no usado)
     
     @classmethod
-    def set_debug(cls, enabled: bool):
+    def set_debug(cls, enabled: bool) -> None:
         """
-        Activa/desactiva mensajes de debug.
+        DEPRECATED: Este método no debe usarse.
         
-        Args:
-            enabled (bool): Si True, activa mensajes detallados de debug.
+        Raises:
+            RuntimeError: Siempre, porque EventManager está deprecado
         """
-        cls._debug = enabled
+        raise RuntimeError(
+            "EventManager está deprecado. Use core/comm.py (CommManager) para gestión de eventos. "
+            "Ver CRIT-013 en documentación."
+        )
     
     @classmethod
-    def on_global(cls, event, func):
+    def on_global(cls, event: str, func: Callable[[Any], None]) -> None:
         """
-        Registra un callback global para un tipo de evento.
+        DEPRECATED: Este método no debe usarse.
         
-        Los callbacks globales se ejecutan para TODOS los layouts, no solo uno específico.
-        Útil para logging o procesamiento centralizado de eventos.
-        
-        Args:
-            event (str): Tipo de evento ('select', 'click', 'brush', etc.)
-            func (callable): Función callback que recibe el payload del evento
+        Raises:
+            RuntimeError: Siempre, porque EventManager está deprecado
         """
-        cls._global_handlers[event] = func
+        raise RuntimeError(
+            "EventManager está deprecado. Use core/comm.py (CommManager) para gestión de eventos. "
+            "Ver CRIT-013 en documentación."
+        )
     
     @classmethod
-    def get_global_handler(cls, event):
-        """Obtiene el handler global para un tipo de evento"""
-        return cls._global_handlers.get(event)
+    def get_global_handler(cls, event: str) -> Optional[Callable[[Any], None]]:
+        """
+        DEPRECATED: Este método no debe usarse.
+        
+        Raises:
+            RuntimeError: Siempre, porque EventManager está deprecado
+        """
+        raise RuntimeError(
+            "EventManager está deprecado. Use core/comm.py (CommManager) para gestión de eventos. "
+            "Ver CRIT-013 en documentación."
+        )
     
     @classmethod
-    def has_global_handler(cls, event):
-        """Verifica si existe handler global para un tipo de evento"""
-        return event in cls._global_handlers
+    def has_global_handler(cls, event: str) -> bool:
+        """
+        DEPRECATED: Este método no debe usarse.
+        
+        Raises:
+            RuntimeError: Siempre, porque EventManager está deprecado
+        """
+        raise RuntimeError(
+            "EventManager está deprecado. Use core/comm.py (CommManager) para gestión de eventos. "
+            "Ver CRIT-013 en documentación."
+        )
     
     def __init__(self):
-        """Inicializa un EventManager de instancia"""
-        self._handlers = {}  # dict[str, list[callable]] - Handlers de instancia
+        """
+        Inicializa un EventManager de instancia (DEPRECATED).
+        
+        Raises:
+            DeprecationWarning: Siempre, porque EventManager está deprecado
+            RuntimeError: Siempre, porque EventManager está deprecado
+        """
+        warnings.warn(
+            "EventManager está deprecado y no debe usarse. "
+            "Use core/comm.py (CommManager) para gestión de eventos. "
+            "Ver CRIT-013 en documentación.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        raise RuntimeError(
+            "EventManager está deprecado. Use core/comm.py (CommManager) para gestión de eventos. "
+            "Ver CRIT-013 en documentación."
+        )
     
-    def on(self, event, func):
+    def on(self, event: str, func: Callable[[Any], None]) -> "EventManager":
         """
-        Registra un callback específico para esta instancia.
+        DEPRECATED: Este método no debe usarse.
         
-        Nota: Si se registran múltiples handlers para el mismo evento,
-        todos se ejecutarán.
-        
-        Args:
-            event (str): Tipo de evento
-            func (callable): Función callback
-        
-        Returns:
-            self para encadenamiento
+        Raises:
+            RuntimeError: Siempre, porque EventManager está deprecado
         """
-        if event not in self._handlers:
-            self._handlers[event] = []
-        elif not isinstance(self._handlers[event], list):
-            # Convertir handler único a lista
-            self._handlers[event] = [self._handlers[event]]
-        
-        self._handlers[event].append(func)
-        return self
+        raise RuntimeError(
+            "EventManager está deprecado. Use core/comm.py (CommManager) para gestión de eventos. "
+            "Ver CRIT-013 en documentación."
+        )
     
-    def get_handlers(self, event):
+    def get_handlers(self, event: str) -> List[Callable[[Any], None]]:
         """
-        Obtiene todos los handlers para un tipo de evento (instancia + globales).
+        DEPRECATED: Este método no debe usarse.
         
-        Args:
-            event (str): Tipo de evento
-        
-        Returns:
-            list: Lista de handlers a ejecutar
+        Raises:
+            RuntimeError: Siempre, porque EventManager está deprecado
         """
-        handlers = []
-        
-        # Handlers de instancia
-        if event in self._handlers:
-            inst_handlers = self._handlers[event]
-            if isinstance(inst_handlers, list):
-                handlers.extend(inst_handlers)
-            else:
-                handlers.append(inst_handlers)
-        
-        # Handler global
-        global_handler = self._global_handlers.get(event)
-        if global_handler:
-            handlers.append(global_handler)
-        
-        return handlers
+        raise RuntimeError(
+            "EventManager está deprecado. Use core/comm.py (CommManager) para gestión de eventos. "
+            "Ver CRIT-013 en documentación."
+        )
     
-    def emit(self, event, payload):
+    def emit(self, event: str, payload: Dict[str, Any]) -> None:
         """
-        Emite un evento, ejecutando todos los handlers registrados.
+        DEPRECATED: Este método no debe usarse.
         
-        Args:
-            event (str): Tipo de evento
-            payload (dict): Datos del evento
+        Raises:
+            RuntimeError: Siempre, porque EventManager está deprecado
         """
-        handlers = self.get_handlers(event)
-        
-        if handlers:
-            if self._debug:
-                print(f"🔄 [EventManager] Encontrados {len(handlers)} handler(s) para evento '{event}'")
-            for idx, handler in enumerate(handlers):
-                try:
-                    if self._debug:
-                        print(f"   🔄 [EventManager] Ejecutando handler #{idx+1}/{len(handlers)}")
-                    handler(payload)
-                    if self._debug:
-                        print(f"   ✅ [EventManager] Handler #{idx+1} completado")
-                except Exception as e:
-                    error_msg = f"❌ [EventManager] Error en handler #{idx+1} para evento '{event}': {e}"
-                    if self._debug:
-                        print(error_msg)
-                        import traceback
-                        traceback.print_exc()
-                    else:
-                        print(f"⚠️ {error_msg}")
-        else:
-            if self._debug:
-                print(f"⚠️ [EventManager] No hay handler registrado para '{event}'")
-                print(f"   Handlers disponibles: {list(self._handlers.keys())}")
-                print(f"   Handlers globales: {list(self._global_handlers.keys())}")
-
+        raise RuntimeError(
+            "EventManager está deprecado. Use core/comm.py (CommManager) para gestión de eventos. "
+            "Ver CRIT-013 en documentación."
+        )

@@ -7,38 +7,13 @@ from ..data.validators import validate_scatter_data
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
 
-# Import de pandas y numpy de forma defensiva para evitar errores de importación circular
-import sys  # sys siempre está disponible, importarlo fuera del try
-HAS_PANDAS = False
-HAS_NUMPY = False
-pd = None
-np = None
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    import pandas as pd
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
+# ✅ MED-003: Eliminado HAS_PANDAS - usar has_pandas() y get_pandas() siempre
+from ...utils.imports import has_pandas, get_pandas
 
+# Import numpy directamente (no hay función helper para numpy)
 try:
     import numpy as np
-    HAS_NUMPY = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_NUMPY = False
+except (ImportError, AttributeError, ModuleNotFoundError):
     np = None
 
 
@@ -64,11 +39,14 @@ class RugChart(ChartBase):
         if not column:
             raise ChartError("column es requerido para rug plot")
         
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            if column not in data.columns:
-                raise ChartError(f"Columna '{column}' no encontrada en los datos")
-            if not pd.api.types.is_numeric_dtype(data[column]):
-                raise ChartError(f"Columna '{column}' debe ser numérica")
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                if column not in data.columns:
+                    raise ChartError(f"Columna '{column}' no encontrada en los datos")
+                if not pd.api.types.is_numeric_dtype(data[column]):
+                    raise ChartError(f"Columna '{column}' debe ser numérica")
         else:
             if isinstance(data, list) and len(data) > 0:
                 if column not in data[0]:
@@ -88,18 +66,25 @@ class RugChart(ChartBase):
         Returns:
             dict: Datos preparados con 'x' y 'y' (posiciones en el eje)
         """
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            values = data[column].dropna().values
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                values = data[column].dropna().values
+            else:
+                values = [d[column] for d in data if column in d and d[column] is not None]
+                if np is not None:
+                    values = np.array(values)
         else:
             values = [d[column] for d in data if column in d and d[column] is not None]
-            if HAS_NUMPY:
+            if np is not None:
                 values = np.array(values)
         
         if len(values) == 0:
             raise ChartError("No hay datos válidos para rug plot")
         
         # Asegurar que values sea un array numpy para el procesamiento
-        if HAS_NUMPY and not isinstance(values, np.ndarray):
+        if np is not None and not isinstance(values, np.ndarray):
             values = np.array(values)
         
         # Crear datos para rug plot: cada valor se marca en el eje
@@ -109,7 +94,7 @@ class RugChart(ChartBase):
             try:
                 # Convertir a float y validar
                 float_val = float(val)
-                if HAS_NUMPY and np.isnan(float_val):
+                if np is not None and np.isnan(float_val):
                     continue  # Saltar NaN
                 rug_data.append({
                     'x': float_val

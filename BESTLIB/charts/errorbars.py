@@ -8,34 +8,8 @@ from ..data.validators import validate_scatter_data
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
 
-# Import de pandas de forma defensiva para evitar errores de importación circular
-import sys  # sys siempre está disponible, importarlo fuera del try
-HAS_PANDAS = False
-pd = None
-
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            # Pandas está corrupto, limpiarlo
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    # Intentar importar pandas limpio
-    import pandas as pd
-    # Verificar que pandas esté completamente inicializado
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
+# ✅ MED-003: Eliminado HAS_PANDAS - usar has_pandas() y get_pandas() siempre
+from ...utils.imports import has_pandas, get_pandas
 
 
 class ErrorbarsChart(ChartBase):
@@ -66,15 +40,18 @@ class ErrorbarsChart(ChartBase):
         except DataError as e:
             raise ChartError(f"Datos inválidos para errorbars: {e}")
         
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
         # Validar que exista columna de error si se especifica
         yerr = kwargs.get('yerr')
         xerr = kwargs.get('xerr')
         
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            if yerr and yerr not in data.columns:
-                raise ChartError(f"Columna '{yerr}' no encontrada para yerr")
-            if xerr and xerr not in data.columns:
-                raise ChartError(f"Columna '{xerr}' no encontrada para xerr")
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                if yerr and yerr not in data.columns:
+                    raise ChartError(f"Columna '{yerr}' no encontrada para yerr")
+                if xerr and xerr not in data.columns:
+                    raise ChartError(f"Columna '{xerr}' no encontrada para xerr")
         elif isinstance(data, list) and len(data) > 0:
             if yerr and yerr not in data[0]:
                 raise ChartError(f"Key '{yerr}' no encontrada para yerr")
@@ -102,22 +79,39 @@ class ErrorbarsChart(ChartBase):
             y_col=y_col
         )
         
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
         # Agregar valores de error a los datos procesados
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            if yerr and yerr in data.columns:
-                yerr_values = data[yerr].astype(float, errors='ignore')
-                for idx in range(min(len(processed_data), len(yerr_values))):
-                    try:
-                        processed_data[idx]['yerr'] = float(yerr_values.iloc[idx])
-                    except (ValueError, TypeError):
-                        processed_data[idx]['yerr'] = 0
-            if xerr and xerr in data.columns:
-                xerr_values = data[xerr].astype(float, errors='ignore')
-                for idx in range(min(len(processed_data), len(xerr_values))):
-                    try:
-                        processed_data[idx]['xerr'] = float(xerr_values.iloc[idx])
-                    except (ValueError, TypeError):
-                        processed_data[idx]['xerr'] = 0
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                if yerr and yerr in data.columns:
+                    yerr_values = data[yerr].astype(float, errors='ignore')
+                    for idx in range(min(len(processed_data), len(yerr_values))):
+                        try:
+                            processed_data[idx]['yerr'] = float(yerr_values.iloc[idx])
+                        except (ValueError, TypeError):
+                            processed_data[idx]['yerr'] = 0
+                if xerr and xerr in data.columns:
+                    xerr_values = data[xerr].astype(float, errors='ignore')
+                    for idx in range(min(len(processed_data), len(xerr_values))):
+                        try:
+                            processed_data[idx]['xerr'] = float(xerr_values.iloc[idx])
+                        except (ValueError, TypeError):
+                            processed_data[idx]['xerr'] = 0
+            else:
+                if isinstance(data, list):
+                    for idx, item in enumerate(data):
+                        if idx < len(processed_data):
+                            if yerr and yerr in item:
+                                try:
+                                    processed_data[idx]['yerr'] = float(item.get(yerr, 0))
+                                except (ValueError, TypeError):
+                                    processed_data[idx]['yerr'] = 0
+                            if xerr and xerr in item:
+                                try:
+                                    processed_data[idx]['xerr'] = float(item.get(xerr, 0))
+                                except (ValueError, TypeError):
+                                    processed_data[idx]['xerr'] = 0
         else:
             if isinstance(data, list):
                 for idx, item in enumerate(data):
@@ -125,12 +119,12 @@ class ErrorbarsChart(ChartBase):
                         if yerr and yerr in item:
                             try:
                                 processed_data[idx]['yerr'] = float(item.get(yerr, 0))
-                            except Exception:
+                            except (ValueError, TypeError):
                                 processed_data[idx]['yerr'] = 0
                         if xerr and xerr in item:
                             try:
                                 processed_data[idx]['xerr'] = float(item.get(xerr, 0))
-                            except Exception:
+                            except (ValueError, TypeError):
                                 processed_data[idx]['xerr'] = 0
         
         return processed_data, original_data

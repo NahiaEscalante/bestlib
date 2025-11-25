@@ -7,42 +7,13 @@ from ..data.validators import validate_scatter_data
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
 
-# Import de pandas y numpy de forma defensiva para evitar errores de importación circular
-import sys  # sys siempre está disponible, importarlo fuera del try
-HAS_PANDAS = False
-HAS_NUMPY = False
-pd = None
-np = None
+# ✅ MED-003: Eliminado HAS_PANDAS - usar has_pandas() y get_pandas() siempre
+from ...utils.imports import has_pandas, get_pandas
 
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            # Pandas está corrupto, limpiarlo
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    # Intentar importar pandas limpio
-    import pandas as pd
-    # Verificar que pandas esté completamente inicializado
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
-
+# Import numpy directamente (no hay función helper para numpy)
 try:
     import numpy as np
-    HAS_NUMPY = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_NUMPY = False
+except (ImportError, AttributeError, ModuleNotFoundError):
     np = None
 
 
@@ -68,11 +39,14 @@ class DistplotChart(ChartBase):
         if not column:
             raise ChartError("column es requerido para distplot")
         
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            if column not in data.columns:
-                raise ChartError(f"Columna '{column}' no encontrada en los datos")
-            if not pd.api.types.is_numeric_dtype(data[column]):
-                raise ChartError(f"Columna '{column}' debe ser numérica")
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                if column not in data.columns:
+                    raise ChartError(f"Columna '{column}' no encontrada en los datos")
+                if not pd.api.types.is_numeric_dtype(data[column]):
+                    raise ChartError(f"Columna '{column}' debe ser numérica")
         else:
             if isinstance(data, list) and len(data) > 0:
                 if column not in data[0]:
@@ -95,24 +69,31 @@ class DistplotChart(ChartBase):
         Returns:
             dict: Datos preparados con histograma y opcionalmente KDE
         """
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            values = data[column].dropna().values
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                values = data[column].dropna().values
+            else:
+                values = [d[column] for d in data if column in d and d[column] is not None]
+                if np is not None:
+                    values = np.array(values)
         else:
             values = [d[column] for d in data if column in d and d[column] is not None]
-            if HAS_NUMPY:
+            if np is not None:
                 values = np.array(values)
         
         if len(values) == 0:
             raise ChartError("No hay datos válidos para distplot")
         
         # Asegurar que values sea un array numpy para el procesamiento
-        if HAS_NUMPY and not isinstance(values, np.ndarray):
+        if np is not None and not isinstance(values, np.ndarray):
             values = np.array(values)
         
         result = {}
         
         # Histograma
-        if HAS_NUMPY:
+        if np is not None:
             hist, bin_edges = np.histogram(values, bins=bins, density=True)
             bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
             histogram_data = []
@@ -147,28 +128,32 @@ class DistplotChart(ChartBase):
         
         # KDE opcional
         if kde:
-            try:
-                from scipy.stats import gaussian_kde
-                kde_obj = gaussian_kde(values)
-                x_min, x_max = float(np.min(values)), float(np.max(values))
-                x_range = x_max - x_min
-                x_padding = x_range * 0.1
-                x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
-                y_density = kde_obj(x_eval)
-                
-                kde_data = []
-                for x, y in zip(x_eval, y_density):
-                    try:
-                        kde_data.append({
-                            'x': float(x) if not np.isnan(x) else 0.0,
-                            'y': float(y) if not np.isnan(y) else 0.0
-                        })
-                    except (ValueError, TypeError, OverflowError):
-                        kde_data.append({'x': 0.0, 'y': 0.0})
-                result['kde'] = kde_data
-            except ImportError:
-                # Si no hay scipy, no incluir KDE
+            if np is None:
+                # No se puede calcular KDE sin numpy
                 pass
+            else:
+                try:
+                    from scipy.stats import gaussian_kde
+                    kde_obj = gaussian_kde(values)
+                    x_min, x_max = float(np.min(values)), float(np.max(values))
+                    x_range = x_max - x_min
+                    x_padding = x_range * 0.1
+                    x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
+                    y_density = kde_obj(x_eval)
+                    
+                    kde_data = []
+                    for x, y in zip(x_eval, y_density):
+                        try:
+                            kde_data.append({
+                                'x': float(x) if not np.isnan(x) else 0.0,
+                                'y': float(y) if not np.isnan(y) else 0.0
+                            })
+                        except (ValueError, TypeError, OverflowError):
+                            kde_data.append({'x': 0.0, 'y': 0.0})
+                    result['kde'] = kde_data
+                except ImportError:
+                    # Si no hay scipy, no incluir KDE
+                    pass
         
         # Rug opcional
         if rug:

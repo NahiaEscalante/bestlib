@@ -21,7 +21,15 @@ class JupyterCommEngine(CommEngineBase):
             from IPython import get_ipython
             ip = get_ipython()
             return ip is not None and hasattr(ip, "kernel")
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError) as e:
+            # Errores esperados al verificar IPython
+            return False
+        except Exception as e:
+            # Error inesperado - registrar pero no fallar
+            import logging
+            logging.getLogger('BESTLIB').warning(
+                f"Error inesperado al verificar IPython: {e}"
+            )
             return False
     
     def register_comm(self, comm_target="bestlib_matrix"):

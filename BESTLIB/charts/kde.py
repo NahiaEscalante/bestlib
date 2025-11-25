@@ -7,42 +7,13 @@ from ..data.validators import validate_scatter_data
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
 
-# Import de pandas y numpy de forma defensiva para evitar errores de importación circular
-import sys  # sys siempre está disponible, importarlo fuera del try
-HAS_PANDAS = False
-HAS_NUMPY = False
-pd = None
-np = None
+# ✅ MED-003: Eliminado HAS_PANDAS - usar has_pandas() y get_pandas() siempre
+from ...utils.imports import has_pandas, get_pandas
 
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            # Pandas está corrupto, limpiarlo
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    # Intentar importar pandas limpio
-    import pandas as pd
-    # Verificar que pandas esté completamente inicializado
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
-
+# Import numpy directamente (no hay función helper para numpy)
 try:
     import numpy as np
-    HAS_NUMPY = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_NUMPY = False
+except (ImportError, AttributeError, ModuleNotFoundError):
     np = None
 
 
@@ -68,11 +39,14 @@ class KdeChart(ChartBase):
         if not column:
             raise ChartError("column es requerido para KDE")
         
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            if column not in data.columns:
-                raise ChartError(f"Columna '{column}' no encontrada en los datos")
-            if not pd.api.types.is_numeric_dtype(data[column]):
-                raise ChartError(f"Columna '{column}' debe ser numérica")
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                if column not in data.columns:
+                    raise ChartError(f"Columna '{column}' no encontrada en los datos")
+                if not pd.api.types.is_numeric_dtype(data[column]):
+                    raise ChartError(f"Columna '{column}' debe ser numérica")
         else:
             if isinstance(data, list) and len(data) > 0:
                 if column not in data[0]:
@@ -93,18 +67,25 @@ class KdeChart(ChartBase):
         Returns:
             dict: Datos preparados con 'x' y 'y' (densidad)
         """
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            values = data[column].dropna().values
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                values = data[column].dropna().values
+            else:
+                values = [d[column] for d in data if column in d and d[column] is not None]
+                if np is not None:
+                    values = np.array(values)
         else:
             values = [d[column] for d in data if column in d and d[column] is not None]
-            if HAS_NUMPY:
+            if np is not None:
                 values = np.array(values)
         
         if len(values) == 0:
             raise ChartError("No hay datos válidos para calcular KDE")
         
         # Asegurar que values sea un array numpy para el procesamiento
-        if HAS_NUMPY and not isinstance(values, np.ndarray):
+        if np is not None and not isinstance(values, np.ndarray):
             values = np.array(values)
         
         # Calcular KDE usando scipy si está disponible, sino usar numpy
@@ -116,31 +97,34 @@ class KdeChart(ChartBase):
                 kde = gaussian_kde(values)
             
             # Crear rango de valores para evaluar
-            x_min, x_max = float(np.min(values)), float(np.max(values))
-            x_range = x_max - x_min
-            if x_range == 0:
-                # Si todos los valores son iguales, crear un rango pequeño alrededor del valor
-                x_min = x_min - 0.1
-                x_max = x_max + 0.1
-                x_range = 0.2
-            x_padding = x_range * 0.1  # 10% padding
-            x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
-            y_density = kde(x_eval)
-            
-            # Convertir a lista de puntos - asegurar que sean tipos Python nativos
-            kde_data = []
-            for x, y in zip(x_eval, y_density):
-                try:
-                    kde_data.append({
-                        'x': float(x) if not np.isnan(x) else 0.0,
-                        'y': float(y) if not np.isnan(y) else 0.0
-                    })
-                except (ValueError, TypeError, OverflowError):
-                    # Si hay un error de conversión, usar 0.0
-                    kde_data.append({'x': 0.0, 'y': 0.0})
+            if np is not None:
+                x_min, x_max = float(np.min(values)), float(np.max(values))
+                x_range = x_max - x_min
+                if x_range == 0:
+                    # Si todos los valores son iguales, crear un rango pequeño alrededor del valor
+                    x_min = x_min - 0.1
+                    x_max = x_max + 0.1
+                    x_range = 0.2
+                x_padding = x_range * 0.1  # 10% padding
+                x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
+                y_density = kde(x_eval)
+                
+                # Convertir a lista de puntos - asegurar que sean tipos Python nativos
+                kde_data = []
+                for x, y in zip(x_eval, y_density):
+                    try:
+                        kde_data.append({
+                            'x': float(x) if not np.isnan(x) else 0.0,
+                            'y': float(y) if not np.isnan(y) else 0.0
+                        })
+                    except (ValueError, TypeError, OverflowError):
+                        # Si hay un error de conversión, usar 0.0
+                        kde_data.append({'x': 0.0, 'y': 0.0})
+            else:
+                raise ChartError("numpy es requerido para calcular KDE")
         except ImportError:
             # Fallback: usar histograma normalizado como aproximación
-            if HAS_NUMPY:
+            if np is not None:
                 hist, bin_edges = np.histogram(values, bins=50, density=True)
                 bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
                 kde_data = []

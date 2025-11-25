@@ -8,34 +8,8 @@ from ..data.validators import validate_scatter_data
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
 
-# Import de pandas de forma defensiva para evitar errores de importación circular
-import sys  # sys siempre está disponible, importarlo fuera del try
-HAS_PANDAS = False
-pd = None
-
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            # Pandas está corrupto, limpiarlo
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    # Intentar importar pandas limpio
-    import pandas as pd
-    # Verificar que pandas esté completamente inicializado
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
+# ✅ MED-003: Eliminado HAS_PANDAS - usar has_pandas() y get_pandas() siempre
+from ...utils.imports import has_pandas, get_pandas
 
 
 class FillBetweenChart(ChartBase):
@@ -64,14 +38,17 @@ class FillBetweenChart(ChartBase):
         if not y1 or not y2:
             raise ChartError("y1 e y2 son requeridos para fill_between")
         
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
         # Validar que las columnas existan
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            if x_col not in data.columns:
-                raise ChartError(f"Columna '{x_col}' no encontrada")
-            if y1 not in data.columns:
-                raise ChartError(f"Columna '{y1}' no encontrada")
-            if y2 not in data.columns:
-                raise ChartError(f"Columna '{y2}' no encontrada")
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                if x_col not in data.columns:
+                    raise ChartError(f"Columna '{x_col}' no encontrada")
+                if y1 not in data.columns:
+                    raise ChartError(f"Columna '{y1}' no encontrada")
+                if y2 not in data.columns:
+                    raise ChartError(f"Columna '{y2}' no encontrada")
         elif isinstance(data, list) and len(data) > 0:
             if x_col not in data[0]:
                 raise ChartError(f"Key '{x_col}' no encontrada")
@@ -101,18 +78,32 @@ class FillBetweenChart(ChartBase):
             y_col=y1
         )
         
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
         # Agregar y2 a los datos procesados
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            if y2 in data.columns:
-                y2_values = data[y2].astype(float, errors='ignore')
-                for idx in range(min(len(processed_data), len(y2_values))):
-                    try:
-                        processed_data[idx]['y2'] = float(y2_values.iloc[idx])
-                        # Renombrar y a y1 para claridad
-                        if 'y' in processed_data[idx]:
-                            processed_data[idx]['y1'] = processed_data[idx].pop('y')
-                    except (ValueError, TypeError):
-                        processed_data[idx]['y2'] = processed_data[idx].get('y', 0)
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                if y2 in data.columns:
+                    y2_values = data[y2].astype(float, errors='ignore')
+                    for idx in range(min(len(processed_data), len(y2_values))):
+                        try:
+                            processed_data[idx]['y2'] = float(y2_values.iloc[idx])
+                            # Renombrar y a y1 para claridad
+                            if 'y' in processed_data[idx]:
+                                processed_data[idx]['y1'] = processed_data[idx].pop('y')
+                        except (ValueError, TypeError):
+                            processed_data[idx]['y2'] = processed_data[idx].get('y', 0)
+            else:
+                if isinstance(data, list):
+                    for idx, item in enumerate(data):
+                        if idx < len(processed_data):
+                            if y2 in item:
+                                try:
+                                    processed_data[idx]['y2'] = float(item.get(y2, 0))
+                                    if 'y' in processed_data[idx]:
+                                        processed_data[idx]['y1'] = processed_data[idx].pop('y')
+                                except (ValueError, TypeError):
+                                    processed_data[idx]['y2'] = processed_data[idx].get('y', 0)
         else:
             if isinstance(data, list):
                 for idx, item in enumerate(data):
@@ -122,7 +113,7 @@ class FillBetweenChart(ChartBase):
                                 processed_data[idx]['y2'] = float(item.get(y2, 0))
                                 if 'y' in processed_data[idx]:
                                     processed_data[idx]['y1'] = processed_data[idx].pop('y')
-                            except Exception:
+                            except (ValueError, TypeError):
                                 processed_data[idx]['y2'] = processed_data[idx].get('y', 0)
         
         return processed_data, original_data

@@ -7,42 +7,13 @@ from ..data.validators import validate_scatter_data
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
 
-# Import de pandas y numpy de forma defensiva para evitar errores de importación circular
-import sys  # sys siempre está disponible, importarlo fuera del try
-HAS_PANDAS = False
-HAS_NUMPY = False
-pd = None
-np = None
+# ✅ MED-003: Eliminado HAS_PANDAS - usar has_pandas() y get_pandas() siempre
+from ...utils.imports import has_pandas, get_pandas
 
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            # Pandas está corrupto, limpiarlo
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    # Intentar importar pandas limpio
-    import pandas as pd
-    # Verificar que pandas esté completamente inicializado
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
-
+# Import numpy directamente (no hay función helper para numpy)
 try:
     import numpy as np
-    HAS_NUMPY = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_NUMPY = False
+except (ImportError, AttributeError, ModuleNotFoundError):
     np = None
 
 
@@ -88,25 +59,35 @@ class PolarChart(ChartBase):
         Returns:
             dict: Datos preparados con x, y (coordenadas cartesianas)
         """
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            angles = data[angle_col].values
-            radii = data[radius_col].values
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                angles = data[angle_col].values
+                radii = data[radius_col].values
+            else:
+                angles = [d[angle_col] for d in data if angle_col in d]
+                radii = [d[radius_col] for d in data if radius_col in d]
+                if np is not None:
+                    angles = np.array(angles)
+                    radii = np.array(radii)
         else:
-            angles = [d[angle_col] for d in data if angle_col in d and angle_col in d]
-            radii = [d[radius_col] for d in data if radius_col in d and radius_col in d]
-            if HAS_NUMPY:
+            angles = [d[angle_col] for d in data if angle_col in d]
+            radii = [d[radius_col] for d in data if radius_col in d]
+            if np is not None:
                 angles = np.array(angles)
                 radii = np.array(radii)
         
         # Convertir ángulos a radianes si es necesario
         if angle_unit == 'deg':
-            if HAS_NUMPY:
+            if np is not None:
                 angles = np.deg2rad(angles)
             else:
-                angles = [np.pi * a / 180.0 for a in angles]
+                import math
+                angles = [math.pi * a / 180.0 for a in angles]
         
         # Convertir a coordenadas cartesianas
-        if HAS_NUMPY:
+        if np is not None:
             x_coords = radii * np.cos(angles)
             y_coords = radii * np.sin(angles)
         else:

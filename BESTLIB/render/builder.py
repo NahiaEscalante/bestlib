@@ -1,6 +1,7 @@
 """
 JS Builder - Constructor de código JavaScript modular
 """
+from typing import Dict, Any
 from ..utils.json import sanitize_for_json
 import json
 
@@ -11,7 +12,7 @@ class JSBuilder:
     """
     
     @staticmethod
-    def build_render_call(div_id, layout_ascii, mapping, wait_for_d3=False):
+    def build_render_call(div_id: str, layout_ascii: str, mapping: Dict[str, Any], wait_for_d3: bool = False) -> str:
         """
         Construye la llamada a render() en JavaScript.
         
@@ -23,7 +24,18 @@ class JSBuilder:
         
         Returns:
             str: Código JavaScript
+        
+        Raises:
+            TypeError: Si los parámetros no son del tipo correcto
+            ValueError: Si div_id no es str no vacío
         """
+        if not isinstance(div_id, str) or not div_id:
+            raise ValueError(f"div_id debe ser str no vacío, recibido: {div_id!r}")
+        if not isinstance(layout_ascii, str):
+            raise TypeError(f"layout_ascii debe ser str, recibido: {type(layout_ascii).__name__}")
+        if not isinstance(mapping, dict):
+            raise TypeError(f"mapping debe ser dict, recibido: {type(mapping).__name__}")
+        
         # Escapar layout ASCII para template literal
         escaped_layout = layout_ascii.replace("`", "\\`").replace("$", "\\$")
         
@@ -87,7 +99,7 @@ class JSBuilder:
 """
     
     @staticmethod
-    def build_full_js(js_lib_code, div_id, layout_ascii, mapping, wait_for_d3=False):
+    def build_full_js(js_lib_code: str, div_id: str, layout_ascii: str, mapping: Dict[str, Any], wait_for_d3: bool = False) -> str:
         """
         Construye código JavaScript completo incluyendo la librería.
         
@@ -100,12 +112,16 @@ class JSBuilder:
         
         Returns:
             str: Código JavaScript completo
+        
+        Raises:
+            TypeError: Si los parámetros no son del tipo correcto
+            ValueError: Si div_id no es str no vacío
         """
         render_call = JSBuilder.build_render_call(div_id, layout_ascii, mapping, wait_for_d3=wait_for_d3)
         return f"{js_lib_code}\n{render_call}"
     
     @staticmethod
-    def build_comm_code(comm_engine_js):
+    def build_comm_code(comm_engine_js: str) -> str:
         """
         Incluye código del engine de comunicación en el JS.
         
@@ -118,7 +134,7 @@ class JSBuilder:
         return f"{comm_engine_js}\n"
     
     @staticmethod
-    def wrap_in_iife(js_code):
+    def wrap_in_iife(js_code: str) -> str:
         """
         Envuelve código JS en IIFE (Immediately Invoked Function Expression).
         

@@ -6,15 +6,21 @@ NOTA: Este módulo está siendo reemplazado por ReactiveMatrixLayout que integra
 LinkedViews dentro de la matriz ASCII. Se mantiene por compatibilidad.
 """
 
-from .matrix import MatrixLayout
+# Usar versión modular en lugar de legacy
+try:
+    from .layouts.matrix import MatrixLayout
+except ImportError:
+    # Fallback a legacy solo si es necesario
+    from .matrix import MatrixLayout
 from collections import Counter
 
-try:
+# Import de pandas de forma segura (sin manipular sys.modules)
+from .utils.imports import has_pandas, get_pandas
+from .core.exceptions import get_logger
+from typing import Any, Dict, List, Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
     import pandas as pd
-    HAS_PANDAS = True
-except ImportError:
-    HAS_PANDAS = False
-    pd = None
 
 try:
     from IPython.display import display, HTML, Javascript
@@ -63,17 +69,41 @@ class LinkedViews:
         self._container_id = f"linked-views-{id(self)}"
         self._updating_charts = set()  # {div_id} - Flags para evitar actualizaciones simultáneas
         
-    def set_data(self, data):
+    def set_data(self, data: Union[List[Dict[str, Any]], "pd.DataFrame"]) -> "LinkedViews":
         """
         Establece los datos originales para todas las vistas.
         
         Args:
-            data: Lista de diccionarios con los datos
+            data: Lista de diccionarios o DataFrame de pandas con los datos
+        
+        Returns:
+            LinkedViews: self para encadenamiento
+        
+        Raises:
+            ValueError: Si data es None.
+            TypeError: Si data no es lista de diccionarios ni DataFrame.
         """
+        if data is None:
+            raise ValueError("data cannot be None")
+        
+        # Validar tipo de datos
+        if has_pandas():
+            pd = get_pandas()
+            if isinstance(data, pd.DataFrame):
+                self._data = data
+                return self
+        
+        if not isinstance(data, list):
+            raise TypeError(f"data must be list or DataFrame, received: {type(data).__name__}")
+        
+        if len(data) > 0:
+            if not isinstance(data[0], dict):
+                raise ValueError("If data is list, all elements must be dicts")
+        
         self._data = data
         return self
     
-    def add_scatter(self, view_id, data=None, x_field='x', y_field='y', 
+    def add_scatter(self, view_id: str, data=None, x_field='x', y_field='y', 
                    category_field='category', interactive=True, 
                    x_col=None, y_col=None, category_col=None, **kwargs):
         """
@@ -90,7 +120,15 @@ class LinkedViews:
             y_col: Nombre de columna para eje Y (nuevo, preferido con DataFrames)
             category_col: Nombre de columna para categorías (nuevo, preferido con DataFrames)
             **kwargs: Argumentos adicionales (colorMap, pointRadius, etc.)
+        
+        Returns:
+            LinkedViews: self para encadenamiento
+        
+        Raises:
+            ValueError: Si view_id no es str no vacío.
         """
+        if not isinstance(view_id, str) or not view_id:
+            raise ValueError(f"view_id must be non-empty str, received: {view_id!r}")
         if data:
             self._data = data
         
@@ -109,7 +147,7 @@ class LinkedViews:
         }
         return self
     
-    def add_barchart(self, view_id, category_field='category', 
+    def add_barchart(self, view_id: str, category_field='category', 
                     value_field=None, aggregation='count',
                     category_col=None, value_col=None, **kwargs):
         """
@@ -126,7 +164,15 @@ class LinkedViews:
                 - colorMap: Diccionario {categoria: color} para colorear barras
                 - color: Color único para todas las barras (ignorado si colorMap está presente)
                 - axes: Mostrar ejes (default: True)
+        
+        Returns:
+            LinkedViews: self para encadenamiento
+        
+        Raises:
+            ValueError: Si view_id no es str no vacío.
         """
+        if not isinstance(view_id, str) or not view_id:
+            raise ValueError(f"view_id must be non-empty str, received: {view_id!r}")
         # Usar nuevos parámetros si están disponibles
         category_field = category_col or category_field
         value_field = value_col or value_field
@@ -140,15 +186,39 @@ class LinkedViews:
         }
         return self
     
-    def _prepare_scatter_data(self, view_config, data):
-        """Prepara datos para scatter plot, soportando DataFrames"""
+    def _prepare_scatter_data(self, view_config: Dict[str, Any], data: Any) -> List[Dict[str, Any]]:
+        """
+        Prepara datos para scatter plot, soportando DataFrames.
+        
+        Args:
+            view_config: Configuración de la vista con x_field, y_field, category_field
+            data: DataFrame o lista de diccionarios
+        
+        Returns:
+            List[Dict[str, Any]]: Datos preparados para scatter plot
+        
+        Raises:
+            TypeError: Si view_config no es dict o falta alguna clave requerida.
+            ValueError: Si view_config no tiene las claves requeridas.
+        """
+        if not isinstance(view_config, dict):
+            raise TypeError(f"view_config must be dict, received: {type(view_config).__name__}")
+        
+        required_keys = ['x_field', 'y_field', 'category_field']
+        for key in required_keys:
+            if key not in view_config:
+                raise ValueError(f"view_config missing required key: {key}")
+        
         x_field = view_config['x_field']
         y_field = view_config['y_field']
         cat_field = view_config['category_field']
         
-        # Si es DataFrame, usar el método helper de MatrixLayout
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            processed_data, original_data = MatrixLayout._prepare_data(
+        # Si es DataFrame, usar preparators en lugar de método privado
+        if has_pandas():
+            pd = get_pandas()
+            if pd and isinstance(data, pd.DataFrame):
+                from ..data.preparators import prepare_scatter_data
+                processed_data, original_data = prepare_scatter_data(
                 data, 
                 x_col=x_field, 
                 y_col=y_field, 
@@ -167,13 +237,34 @@ class LinkedViews:
                 })
             return scatter_data
     
-    def _prepare_barchart_data(self, view_config, data):
-        """Prepara datos para bar chart, soportando DataFrames"""
+    def _prepare_barchart_data(self, view_config: Dict[str, Any], data: Any) -> List[Dict[str, Any]]:
+        """
+        Prepara datos para bar chart, soportando DataFrames.
+        
+        Args:
+            view_config: Configuración de la vista con category_field y opcionalmente value_field
+            data: DataFrame o lista de diccionarios
+        
+        Returns:
+            List[Dict[str, Any]]: Datos preparados para bar chart
+        
+        Raises:
+            TypeError: Si view_config no es dict o falta category_field.
+            ValueError: Si view_config no tiene category_field.
+        """
+        if not isinstance(view_config, dict):
+            raise TypeError(f"view_config must be dict, received: {type(view_config).__name__}")
+        
+        if 'category_field' not in view_config:
+            raise ValueError("view_config missing required key: category_field")
+        
         cat_field = view_config['category_field']
         value_field = view_config.get('value_field')
         
         # Si es DataFrame, procesar directamente
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+        if has_pandas():
+            pd = get_pandas()
+            if isinstance(data, pd.DataFrame):
             if value_field and value_field in data.columns:
                 # Agrupar y sumar
                 bar_data = data.groupby(cat_field)[value_field].sum().reset_index()
@@ -230,10 +321,11 @@ class LinkedViews:
         # Callback para actualizar selección
         def on_select(payload):
             # Debug: verificar que el callback se está ejecutando
+            logger = get_logger()
             if MatrixLayout._debug:
-                print(f"🔵 [LinkedViews] Callback select ejecutado")
-                print(f"   - Payload keys: {list(payload.keys())}")
-                print(f"   - Layout div_id: {layout.div_id}")
+                logger.debug(f"🔵 [LinkedViews] Callback select ejecutado")
+                logger.debug(f"   - Payload keys: {list(payload.keys())}")
+                logger.debug(f"   - Layout div_id: {layout.div_id}")
             
             # Extraer items del payload
             items = payload.get('items', [])
@@ -243,7 +335,7 @@ class LinkedViews:
                 # Si no hay items, limpiar selección
                 self._selected_data = []
                 if MatrixLayout._debug:
-                    print(f"   ⚠️ No hay items en el payload, limpiando selección")
+                    logger.debug(f"   ⚠️ No hay items en el payload, limpiando selección")
             else:
                 # Asegurar que items sea una lista
                 if not isinstance(items, list):
@@ -254,10 +346,10 @@ class LinkedViews:
                 self._selected_data = items
                 
                 if MatrixLayout._debug:
-                    print(f"   ✅ {len(items)} items recibidos")
+                    logger.debug(f"   ✅ {len(items)} items recibidos")
                     if len(items) > 0:
-                        print(f"   - Primer item keys: {list(items[0].keys()) if isinstance(items[0], dict) else 'No es dict'}")
-                        print(f"   - Primer item: {items[0]}")
+                        logger.debug(f"   - Primer item keys: {list(items[0].keys()) if isinstance(items[0], dict) else 'No es dict'}")
+                        logger.debug(f"   - Primer item: {items[0]}")
             
             # Actualizar todas las vistas dependientes
             self._update_linked_views()
@@ -272,7 +364,8 @@ class LinkedViews:
         # Esto asegura que los eventos lleguen al callback correcto
         if hasattr(layout, 'div_id') and layout.div_id:
             if MatrixLayout._debug:
-                print(f"✅ [LinkedViews] Layout registrado con div_id: {layout.div_id}")
+                logger = get_logger()
+                logger.debug(f"✅ [LinkedViews] Layout registrado con div_id: {layout.div_id}")
         
         # Configurar scatter
         scatter_spec = {
@@ -325,8 +418,9 @@ class LinkedViews:
             return
         
         # Debug: verificar que se está actualizando
+        logger = get_logger()
         if MatrixLayout._debug:
-            print(f"🔄 [LinkedViews] Actualizando vistas enlazadas con {len(self._selected_data) if self._selected_data else 0} items seleccionados")
+            logger.debug(f"🔄 [LinkedViews] Actualizando vistas enlazadas con {len(self._selected_data) if self._selected_data else 0} items seleccionados")
         
         # Actualizar solo los bar charts con datos seleccionados
         for view_id, view_config in self._views.items():
@@ -338,10 +432,10 @@ class LinkedViews:
                 if not data or len(data) == 0:
                     data = self._data
                     if MatrixLayout._debug:
-                        print(f"   ⚠️ No hay datos seleccionados, usando todos los datos originales ({len(self._data)} items)")
+                        logger.debug(f"   ⚠️ No hay datos seleccionados, usando todos los datos originales ({len(self._data)} items)")
                 else:
                     if MatrixLayout._debug:
-                        print(f"   ✅ Usando {len(data)} items seleccionados")
+                        logger.debug(f"   ✅ Usando {len(data)} items seleccionados")
                 
                 # Extraer los datos originales
                 # CRÍTICO: Los items pueden venir con _original_row (usado por matrix.js) o _original (usado por _prepare_scatter_data),
@@ -369,15 +463,15 @@ class LinkedViews:
                         original_data.append(item)
                 
                 if MatrixLayout._debug:
-                    print(f"   📊 Datos originales extraídos: {len(original_data)} items")
+                    logger.debug(f"   📊 Datos originales extraídos: {len(original_data)} items")
                 
                 # Preparar nuevos datos del barchart
                 bar_data = self._prepare_barchart_data(view_config, original_data)
                 
                 if MatrixLayout._debug:
-                    print(f"   📊 Datos del barchart preparados: {len(bar_data)} categorías")
+                    logger.debug(f"   📊 Datos del barchart preparados: {len(bar_data)} categorías")
                     for bar in bar_data:
-                        print(f"      - {bar.get('category', 'N/A')}: {bar.get('value', 0)}")
+                        logger.debug(f"      - {bar.get('category', 'N/A')}: {bar.get('value', 0)}")
                 
                 # Actualizar el spec del layout existente
                 bar_spec = {
@@ -396,11 +490,11 @@ class LinkedViews:
                     # Obtener la letra de la vista (por defecto 'B' para barchart)
                     letter = view_config.get('letter', 'B')
                     if MatrixLayout._debug:
-                        print(f"   🔄 Actualizando bar chart '{view_id}' (div_id: {div_id}, letter: {letter})")
+                        logger.debug(f"   🔄 Actualizando bar chart '{view_id}' (div_id: {div_id}, letter: {letter})")
                     self._update_chart_with_js(div_id, bar_spec, letter=letter)
                 else:
                     if MatrixLayout._debug:
-                        print(f"   ⚠️ No se encontró div_id para vista '{view_id}'")
+                        logger.debug(f"   ⚠️ No se encontró div_id para vista '{view_id}'")
         
         # Actualizar widget de selección si existe
         self._update_selection_widget_display()
@@ -762,7 +856,8 @@ class LinkedViews:
             display(linked.selection_widget)
         """
         if not HAS_WIDGETS:
-            print("⚠️ ipywidgets no está instalado. Instala con: pip install ipywidgets")
+            logger = get_logger()
+            logger.warning("⚠️ ipywidgets no está instalado. Instala con: pip install ipywidgets")
             return None
         
         if not hasattr(self, '_selection_widget') or self._selection_widget is None:

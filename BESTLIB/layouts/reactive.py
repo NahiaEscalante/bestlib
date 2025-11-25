@@ -9,38 +9,13 @@ except ImportError:
     HAS_WIDGETS = False
     widgets = None
 
-# Import de pandas de forma defensiva para evitar errores de importación circular
-import sys  # sys siempre está disponible, importarlo fuera del try
-HAS_PANDAS = False
-pd = None
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    if 'pandas' in sys.modules:
-        # Si pandas ya está en sys.modules pero corrupto, intentar limpiarlo
-        try:
-            pd_test = sys.modules['pandas']
-            # Intentar acceder a un atributo básico para verificar si está corrupto
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            # Pandas está corrupto, limpiarlo
-            del sys.modules['pandas']
-            # También limpiar submódulos relacionados
-            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    
-    # Ahora intentar importar pandas
-    import pandas as pd
-    # Verificar que pandas esté completamente inicializado
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    # Si pandas no está disponible o está corrupto, continuar sin él
-    HAS_PANDAS = False
-    pd = None
+# Import de pandas de forma segura usando utils.imports
+from ..utils.imports import has_pandas, get_pandas
+from ..core.validation import safe_dataframe, safe_get_first_item
+from ..core.exceptions import get_logger
+
+# Inicializar logger centralizado
+logger = get_logger()
 
 # Importar desde módulos modulares
 from .matrix import MatrixLayout
@@ -174,7 +149,7 @@ class ReactiveMatrixLayout:
         # Sistema de vistas enlazadas
         self._views = {}  # {view_id: view_config}
         self._data = None  # DataFrame o lista de diccionarios
-        self._selected_data = pd.DataFrame() if HAS_PANDAS else []  # Datos seleccionados actualmente (DataFrame)
+        self._selected_data = get_pandas().DataFrame() if has_pandas() else []  # Datos seleccionados actualmente (DataFrame)
         self._view_letters = {}  # {view_id: letter} - mapeo de vista a letra del layout
         self._barchart_callbacks = {}  # {letter: callback_func} - para evitar duplicados
         self._barchart_cell_ids = {}  # {letter: cell_id} - IDs de celdas de bar charts
@@ -227,7 +202,7 @@ class ReactiveMatrixLayout:
             self._selection_variables[letter] = selection_var
             # Crear variable en el namespace del usuario (inicializar como DataFrame vacío)
             import __main__
-            if HAS_PANDAS:
+            if has_pandas():
                 pd_module = globals().get('pd')
                 if pd_module is None:
                     import sys
@@ -241,8 +216,9 @@ class ReactiveMatrixLayout:
                 empty_df = []
             setattr(__main__, selection_var, empty_df)
             if self._debug or MatrixLayout._debug:
-                df_type = "DataFrame" if HAS_PANDAS else "lista"
-                print(f"📦 Variable '{selection_var}' creada para guardar selecciones de scatter '{letter}' como {df_type}")
+                df_type = "DataFrame" if has_pandas() else "lista"
+                logger = get_logger()
+                logger.info(f"Variable '{selection_var}' creada para guardar selecciones de scatter '{letter}' como {df_type}")
         
         # Crear un SelectionModel específico para este scatter plot
         # Esto permite que cada scatter plot actualice solo sus bar charts asociados
@@ -264,7 +240,8 @@ class ReactiveMatrixLayout:
             items = payload.get('items', [])
             if not isinstance(items, list):
                 if self._debug or MatrixLayout._debug:
-                    print(f"⚠️ [ReactiveMatrixLayout] items no es lista: {type(items)}")
+                    logger = get_logger()
+                    logger.warning(f"[ReactiveMatrixLayout] items no es lista: {type(items)}")
                 items = []
             
             # ✅ CORRECCIÓN: Filtrado más flexible
@@ -273,17 +250,19 @@ class ReactiveMatrixLayout:
             if event_scatter_letter is not None and event_scatter_letter != scatter_letter_capture:
                 # Este evento no es para este scatter plot, ignorar
                 if self._debug or MatrixLayout._debug:
-                    print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{scatter_letter_capture}', recibido '{event_scatter_letter}'")
+                    logger = get_logger()
+                    logger.debug(f"[ReactiveMatrixLayout] Evento ignorado: esperado '{scatter_letter_capture}', recibido '{event_scatter_letter}'")
                 return
             
             if self._debug or MatrixLayout._debug:
-                print(f"✅ [ReactiveMatrixLayout] Evento recibido para scatter '{scatter_letter_capture}': {len(items)} items")
+                logger = get_logger()
+                logger.info(f"[ReactiveMatrixLayout] Evento recibido para scatter '{scatter_letter_capture}': {len(items)} items")
             
             # ✅ CORRECCIÓN: Validar conversión a DataFrame
             items_df = _items_to_dataframe(items)
             if items_df is None or (hasattr(items_df, 'empty') and items_df.empty and len(items) > 0):
                 if self._debug or MatrixLayout._debug:
-                    print(f"⚠️ [ReactiveMatrixLayout] Error al convertir {len(items)} items a DataFrame")
+                    logger.warning(f"[ReactiveMatrixLayout] Error al convertir {len(items)} items a DataFrame")
                 # Continuar con lista como fallback
             
             # ✅ CORRECCIÓN: Guardar DataFrame en SelectionModel también
@@ -336,7 +315,8 @@ class ReactiveMatrixLayout:
         if 'interactive' not in scatter_spec or scatter_spec.get('interactive') is None:
             scatter_spec['interactive'] = interactive
             if self._debug or MatrixLayout._debug:
-                print(f"⚠️ [ReactiveMatrixLayout] interactive no estaba en spec, agregado manualmente: {interactive}")
+                logger = get_logger()
+                logger.debug(f"[ReactiveMatrixLayout] interactive no estaba en spec, agregado manualmente: {interactive}")
         
         # Asegurar que los identificadores estén en el spec guardado
         if scatter_spec:
@@ -346,7 +326,8 @@ class ReactiveMatrixLayout:
             
             # Debug: verificar que el spec tiene los identificadores
             if self._debug or MatrixLayout._debug:
-                print(f"✅ [ReactiveMatrixLayout] Scatter plot '{letter}' configurado con __scatter_letter__={scatter_spec.get('__scatter_letter__')}")
+                logger = get_logger()
+                logger.debug(f"[ReactiveMatrixLayout] Scatter plot '{letter}' configurado con __scatter_letter__={scatter_spec.get('__scatter_letter__')}")
         
         # Registrar vista para sistema de enlace
         view_id = f"scatter_{letter}"
@@ -428,7 +409,7 @@ class ReactiveMatrixLayout:
                 # Crear variable en el namespace del usuario (inicializar como DataFrame vacío)
                 import __main__
                 # Asegurar que pd esté disponible (usar el del módulo global)
-                if HAS_PANDAS:
+                if has_pandas():
                     # Usar globals() para evitar UnboundLocalError
                     pd_module = globals().get('pd')
                     if pd_module is None:
@@ -443,8 +424,9 @@ class ReactiveMatrixLayout:
                     empty_df = []
                 setattr(__main__, selection_var, empty_df)
                 if self._debug or MatrixLayout._debug:
-                    df_type = "DataFrame" if HAS_PANDAS else "lista"
-                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de bar chart '{letter}' como {df_type}")
+                    df_type = "DataFrame" if has_pandas() else "lista"
+                    logger = get_logger()
+                    logger.info(f"Variable '{selection_var}' creada para guardar selecciones de bar chart '{letter}' como {df_type}")
             
             # Flag para prevenir actualizaciones recursivas del bar chart
             barchart_update_flag = f'_barchart_updating_{letter}'
@@ -459,7 +441,8 @@ class ReactiveMatrixLayout:
                 items = payload.get('items', [])
                 if not isinstance(items, list):
                     if self._debug or MatrixLayout._debug:
-                        print(f"⚠️ [ReactiveMatrixLayout] items no es lista: {type(items)}")
+                        logger = get_logger()
+                    logger.warning(f"[ReactiveMatrixLayout] items no es lista: {type(items)}")
                     items = []
                 
                 # ✅ CORRECCIÓN: Filtrado más flexible
@@ -471,11 +454,13 @@ class ReactiveMatrixLayout:
                 # Verificar flag de actualización del bar chart
                 if self._barchart_update_flags.get(barchart_update_flag, False):
                     if self._debug or MatrixLayout._debug:
-                        print(f"⏭️ [ReactiveMatrixLayout] Bar chart '{letter}' está siendo actualizado, ignorando evento")
+                        logger = get_logger()
+                        logger.debug(f"[ReactiveMatrixLayout] Bar chart '{letter}' está siendo actualizado, ignorando evento")
                     return
                 
                 if self._debug or MatrixLayout._debug:
-                    print(f"✅ [ReactiveMatrixLayout] Evento recibido para bar chart '{letter}': {len(items)} items")
+                    logger = get_logger()
+                    logger.info(f"[ReactiveMatrixLayout] Evento recibido para bar chart '{letter}': {len(items)} items")
                 
                 # CRÍTICO: Prevenir actualizaciones recursivas
                 # Marcar flag ANTES de actualizar el SelectionModel
@@ -486,7 +471,7 @@ class ReactiveMatrixLayout:
                     items_df = _items_to_dataframe(items)
                     if items_df is None or (hasattr(items_df, 'empty') and items_df.empty and len(items) > 0):
                         if self._debug or MatrixLayout._debug:
-                            print(f"⚠️ [ReactiveMatrixLayout] Error al convertir {len(items)} items a DataFrame")
+                            logger.warning(f"[ReactiveMatrixLayout] Error al convertir {len(items)} items a DataFrame")
                         # Continuar con lista como fallback
                     
                     # ✅ CORRECCIÓN: Usar DataFrame si está disponible, sino lista
@@ -510,7 +495,8 @@ class ReactiveMatrixLayout:
                         setattr(__main__, selection_var, items_df if items_df is not None else items)
                         if self._debug or MatrixLayout._debug:
                             count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
-                            print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
+                            logger = get_logger()
+                            logger.info(f"Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
                 finally:
                     # Reset flag después de un delay más largo para evitar bucles
                     # El delay debe ser lo suficientemente largo para que el pie chart termine de actualizarse
@@ -532,7 +518,8 @@ class ReactiveMatrixLayout:
         # Evitar registrar múltiples callbacks para la misma letra (solo si es enlazada)
         if not is_primary and letter in self._barchart_callbacks:
             if self._debug or MatrixLayout._debug:
-                print(f"⚠️ Bar chart para '{letter}' ya está registrado. Ignorando registro duplicado.")
+                logger = get_logger()
+                logger.warning(f"Bar chart para '{letter}' ya está registrado. Ignorando registro duplicado.")
             return self
         
         # Inicializar primary_letter siempre
@@ -567,10 +554,11 @@ class ReactiveMatrixLayout:
                 all_available = available_scatters + available_primary
                 
                 if self._debug or MatrixLayout._debug:
-                    print(f"❌ [ReactiveMatrixLayout] Vista principal '{linked_to}' no existe para barchart '{letter}'")
-                    print(f"   - Scatter plots disponibles: {available_scatters}")
-                    print(f"   - Vistas principales disponibles: {available_primary}")
-                    print(f"   - Todas las vistas: {all_available}")
+                    logger = get_logger()
+                    logger.error(f"[ReactiveMatrixLayout] Vista principal '{linked_to}' no existe para barchart '{letter}'")
+                    logger.debug(f"   - Scatter plots disponibles: {available_scatters}")
+                    logger.debug(f"   - Vistas principales disponibles: {available_primary}")
+                    logger.debug(f"   - Todas las vistas: {all_available}")
                 
                 error_msg = f"Vista principal '{linked_to}' no existe. "
                 if all_available:
@@ -629,9 +617,9 @@ class ReactiveMatrixLayout:
         
             # Debug: verificar que la vista principal existe
             if self._debug or MatrixLayout._debug:
-                print(f"🔗 [ReactiveMatrixLayout] Registrando callback para bar chart '{letter}' enlazado a vista principal '{primary_letter}'")
-                print(f"   - SelectionModel ID: {id(primary_selection)}")
-                print(f"   - Callbacks actuales: {len(primary_selection._callbacks)}")
+                logger.debug(f"[ReactiveMatrixLayout] Registrando callback para bar chart '{letter}' enlazado a vista principal '{primary_letter}'")
+                logger.debug(f"   - SelectionModel ID: {id(primary_selection)}")
+                logger.debug(f"   - Callbacks actuales: {len(primary_selection._callbacks)}")
             
             # Configurar callback para actualizar bar chart cuando cambia selección
             def update_barchart(items, count):
@@ -639,7 +627,7 @@ class ReactiveMatrixLayout:
                 try:
                     # Debug: verificar que el callback se está ejecutando
                     if self._debug or MatrixLayout._debug:
-                        print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando bar chart '{letter}' con {count} items seleccionados")
+                        logger.debug(f"[ReactiveMatrixLayout] Callback ejecutado: Actualizando bar chart '{letter}' con {count} items seleccionados")
                     import json
                     from IPython.display import Javascript
                     import time
@@ -648,9 +636,13 @@ class ReactiveMatrixLayout:
                     data_to_use = self._data
                     if items and len(items) > 0:
                         # Convertir lista de dicts a DataFrame si es necesario
-                        if HAS_PANDAS and isinstance(items[0], dict):
-                            import pandas as pd
-                            data_to_use = pd.DataFrame(items)
+                        # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+                        if has_pandas() and isinstance(items, list) and len(items) > 0:
+                            # ✅ CRIT-002, CRIT-003: Usar helpers centralizados
+                            first_item = safe_get_first_item(items)
+                            if first_item is not None and isinstance(first_item, dict):
+                                df_result = safe_dataframe(items)
+                                data_to_use = df_result if df_result is not None else items
                         else:
                             data_to_use = items
                     else:
@@ -957,9 +949,7 @@ class ReactiveMatrixLayout:
                     
                 except Exception as e:
                     if self._debug or MatrixLayout._debug:
-                        print(f"⚠️ Error actualizando bar chart: {e}")
-                        import traceback
-                        traceback.print_exc()
+                        logger.error(f"Error actualizando bar chart: {e}", exc_info=True)
                     # Asegurar que el flag se resetee incluso si hay error
                     js_reset_flag = f"""
                     <script>
@@ -1033,7 +1023,7 @@ class ReactiveMatrixLayout:
                 self._selection_variables[letter] = selection_var
                 import __main__
                 # Asegurar que pd esté disponible (usar el del módulo global)
-                if HAS_PANDAS:
+                if has_pandas():
                     pd_module = globals().get('pd')
                     if pd_module is None:
                         import sys
@@ -1047,8 +1037,8 @@ class ReactiveMatrixLayout:
                     empty_df = []
                 setattr(__main__, selection_var, empty_df)
                 if self._debug or MatrixLayout._debug:
-                    df_type = "DataFrame" if HAS_PANDAS else "lista"
-                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de grouped bar chart '{letter}' como {df_type}")
+                    df_type = "DataFrame" if has_pandas() else "lista"
+                    logger.debug(f"Variable '{selection_var}' creada para guardar selecciones de grouped bar chart '{letter}' como {df_type}")
             
             def grouped_handler(payload):
                 event_letter = payload.get('__view_letter__')
@@ -1058,7 +1048,7 @@ class ReactiveMatrixLayout:
                 items = payload.get('items', [])
                 
                 if self._debug or MatrixLayout._debug:
-                    print(f"✅ [ReactiveMatrixLayout] Evento recibido para grouped bar chart '{letter}': {len(items)} items")
+                    logger.debug(f"[ReactiveMatrixLayout] Evento recibido para grouped bar chart '{letter}': {len(items)} items")
                 
                 # Convertir items a DataFrame antes de guardar
                 items_df = _items_to_dataframe(items)
@@ -1073,7 +1063,7 @@ class ReactiveMatrixLayout:
                     setattr(__main__, selection_var, items_df if items_df is not None else items)
                     if self._debug or MatrixLayout._debug:
                         count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
-                        print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
+                        logger.debug(f"Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
             
             self._layout.on('select', grouped_handler)
             
@@ -1099,10 +1089,25 @@ class ReactiveMatrixLayout:
                 primary_letter = list(all_primary.keys())[-1]
                 primary_selection = all_primary[primary_letter]
                 if self._debug or MatrixLayout._debug:
-                    print(f"💡 Grouped bar chart '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
+                    logger.debug(f"Grouped bar chart '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
             
             def update(items, count):
-                data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+                # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+                if not items:
+                    data_to_use = self._data
+                elif has_pandas() and isinstance(items, list) and len(items) > 0:
+                    # ✅ CRIT-002, CRIT-003: Usar helpers centralizados
+                    first_item = safe_get_first_item(items)
+                    if first_item is not None and isinstance(first_item, dict):
+                        df_result = safe_dataframe(items)
+                        if df_result is not None:
+                            data_to_use = df_result
+                        else:
+                            data_to_use = items
+                    else:
+                        data_to_use = items
+                else:
+                    data_to_use = items
                 try:
                     MatrixLayout.map_grouped_barchart(letter, data_to_use, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
                 except Exception:
@@ -1151,7 +1156,7 @@ class ReactiveMatrixLayout:
                 raise ValueError("No hay scatter plots disponibles. Agrega un scatter plot primero con add_scatter().")
             scatter_letter = list(self._scatter_selection_models.keys())[-1]
             if self._debug or MatrixLayout._debug:
-                print(f"💡 Gráfico '{letter}' ({chart_type}) enlazado automáticamente a scatter '{scatter_letter}'")
+                logger.debug(f"Gráfico '{letter}' ({chart_type}) enlazado automáticamente a scatter '{scatter_letter}'")
         
         # Guardar información del gráfico enlazado
         self._linked_charts[letter] = {
@@ -1168,7 +1173,7 @@ class ReactiveMatrixLayout:
                 # Por defecto, actualizar el mapping del gráfico
                 # Los gráficos específicos pueden sobrescribir este comportamiento
                 if self._debug or MatrixLayout._debug:
-                    print(f"🔄 Actualizando gráfico '{letter}' ({chart_type}) con {count} elementos seleccionados")
+                    logger.debug(f"Actualizando gráfico '{letter}' ({chart_type}) con {count} elementos seleccionados")
             
             update_func = generic_update
         
@@ -1241,7 +1246,7 @@ class ReactiveMatrixLayout:
                 self._selection_variables[letter] = selection_var
                 import __main__
                 # Asegurar que pd esté disponible (usar el del módulo global)
-                if HAS_PANDAS:
+                if has_pandas():
                     pd_module = globals().get('pd')
                     if pd_module is None:
                         import sys
@@ -1255,8 +1260,8 @@ class ReactiveMatrixLayout:
                     empty_df = []
                 setattr(__main__, selection_var, empty_df)
                 if self._debug or MatrixLayout._debug:
-                    df_type = "DataFrame" if HAS_PANDAS else "lista"
-                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de histogram '{letter}' como {df_type}")
+                    df_type = "DataFrame" if has_pandas() else "lista"
+                    logger.debug(f"Variable '{selection_var}' creada para guardar selecciones de histogram '{letter}' como {df_type}")
             
             # Crear handler para eventos de selección del histogram
             def histogram_handler(payload):
@@ -1268,7 +1273,7 @@ class ReactiveMatrixLayout:
                 items = payload.get('items', [])
                 
                 if self._debug or MatrixLayout._debug:
-                    print(f"✅ [ReactiveMatrixLayout] Evento recibido para histogram '{letter}': {len(items)} items")
+                    logger.debug(f"[ReactiveMatrixLayout] Evento recibido para histogram '{letter}': {len(items)} items")
                 
                 # Convertir items a DataFrame antes de guardar
                 items_df = _items_to_dataframe(items)
@@ -1282,7 +1287,7 @@ class ReactiveMatrixLayout:
                     self.set_selection(selection_var, items_df if items_df is not None else items)
                     if self._debug or MatrixLayout._debug:
                         count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
-                        print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
+                        logger.debug(f"Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
             
             self._layout.on('select', histogram_handler)
             
@@ -1322,10 +1327,10 @@ class ReactiveMatrixLayout:
                 all_available = available_scatters + available_primary
                 
                 if self._debug or MatrixLayout._debug:
-                    print(f"❌ [ReactiveMatrixLayout] Vista principal '{linked_to}' no existe para histogram '{letter}'")
-                    print(f"   - Scatter plots disponibles: {available_scatters}")
-                    print(f"   - Vistas principales disponibles: {available_primary}")
-                    print(f"   - Todas las vistas: {all_available}")
+                    logger.error(f"[ReactiveMatrixLayout] Vista principal '{linked_to}' no existe para histogram '{letter}'")
+                    logger.error(f"   - Scatter plots disponibles: {available_scatters}")
+                    logger.error(f"   - Vistas principales disponibles: {available_primary}")
+                    logger.error(f"   - Todas las vistas: {all_available}")
                 
                 error_msg = f"Vista principal '{linked_to}' no existe. "
                 if all_available:
@@ -1358,7 +1363,7 @@ class ReactiveMatrixLayout:
                             processed_items.append(item)
                     
                     if processed_items:
-                        if HAS_PANDAS:
+                        if has_pandas():
                             pd_module = globals().get('pd')
                             if pd_module is None:
                                 import sys
@@ -1368,17 +1373,21 @@ class ReactiveMatrixLayout:
                                     import pandas as pd_module
                                     globals()['pd'] = pd_module
                             try:
-                                if isinstance(processed_items[0], dict):
-                                    initial_data = pd_module.DataFrame(processed_items)
+                                # ✅ CORRECCIÓN: Validar que processed_items tenga elementos antes de acceder a [0]
+                                if isinstance(processed_items, list) and len(processed_items) > 0:
+                                    if isinstance(processed_items[0], dict):
+                                        initial_data = pd_module.DataFrame(processed_items)
+                                    else:
+                                        initial_data = pd_module.DataFrame(processed_items)
                                 else:
-                                    initial_data = pd_module.DataFrame(processed_items)
+                                    initial_data = self._data
                             except Exception:
                                 initial_data = self._data
                         else:
                             initial_data = processed_items
                     
                     if self._debug or MatrixLayout._debug:
-                        print(f"📊 Histogram '{letter}' inicializado con {len(processed_items) if processed_items else len(self._data)} items (hay selección activa)")
+                        logger.debug(f"Histogram '{letter}' inicializado con {len(processed_items) if processed_items else len(self._data)} items (hay selección activa)")
             
             # Guardar parámetros
             hist_params = {
@@ -1399,7 +1408,7 @@ class ReactiveMatrixLayout:
                 # CRÍTICO: Flag para evitar ejecuciones múltiples simultáneas
                 if hasattr(update_histogram, '_executing') and update_histogram._executing:
                     if self._debug or MatrixLayout._debug:
-                        print(f"   ⏭️ Histogram '{letter}' callback ya está ejecutándose, ignorando llamada duplicada")
+                        logger.debug(f"   Histogram '{letter}' callback ya está ejecutándose, ignorando llamada duplicada")
                     return
                 update_histogram._executing = True
                 
@@ -1408,7 +1417,7 @@ class ReactiveMatrixLayout:
                     from IPython.display import Javascript
                     
                     if self._debug or MatrixLayout._debug:
-                        print(f"   🔄 Histogram '{letter}' callback ejecutándose con {count} items")
+                        logger.debug(f"   Histogram '{letter}' callback ejecutándose con {count} items")
                     
                     # Usar datos seleccionados o todos los datos
                     data_to_use = self._data
@@ -1431,18 +1440,36 @@ class ReactiveMatrixLayout:
                                 processed_items.append(item)
                         
                         if processed_items:
-                            if HAS_PANDAS:
+                            if has_pandas():
                                 import pandas as pd
                                 # Intentar crear DataFrame desde los items procesados
                                 try:
-                                    if isinstance(processed_items[0], dict):
-                                        data_to_use = pd.DataFrame(processed_items)
+                                    # ✅ CORRECCIÓN: Validar que processed_items tenga elementos antes de acceder a [0]
+                                    if isinstance(processed_items, list) and len(processed_items) > 0:
+                                    # ✅ CRIT-002, CRIT-003: Usar helpers centralizados
+                                    first_item = safe_get_first_item(processed_items)
+                                    if first_item is not None and isinstance(first_item, dict):
+                                        df_result = safe_dataframe(processed_items)
+                                        if df_result is not None:
+                                            data_to_use = df_result
+                                        else:
+                                            data_to_use = processed_items
+                                    else:
+                                        data_to_use = processed_items
                                     else:
                                         # Si no son diccionarios, intentar convertir
-                                        data_to_use = pd.DataFrame(processed_items)
+                                            # ✅ CRIT-002: Usar helper centralizado
+                                            df_result = safe_dataframe(processed_items)
+                                            data_to_use = df_result if df_result is not None else processed_items
+                                    else:
+                                        data_to_use = processed_items
+                                except (ValueError, TypeError, KeyError, AttributeError) as e:
+                                    logger = get_logger()
+                                    logger.warning(f"Error esperado creando DataFrame desde items: {e}")
+                                    data_to_use = self._data
                                 except Exception as e:
-                                    if self._debug or MatrixLayout._debug:
-                                        print(f"⚠️ Error creando DataFrame desde items: {e}")
+                                    logger = get_logger()
+                                    logger.error(f"Error inesperado creando DataFrame desde items: {e}", exc_info=True)
                                     data_to_use = self._data
                             else:
                                 data_to_use = processed_items
@@ -1454,7 +1481,7 @@ class ReactiveMatrixLayout:
                     
                     # Preparar datos para histograma
                     # IMPORTANTE: Almacenar filas originales para cada bin
-                    if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
+                    if has_pandas() and isinstance(data_to_use, get_pandas().DataFrame):
                         # Obtener valores y filas originales
                         original_data = data_to_use.to_dict('records')
                         values_with_rows = []
@@ -1506,7 +1533,7 @@ class ReactiveMatrixLayout:
                     bin_rows = [[] for _ in range(len(bin_edges) - 1)]  # Lista de listas para cada bin
                     
                     # Asegurar que pd esté disponible (usar globals para evitar UnboundLocalError)
-                    if HAS_PANDAS:
+                    if has_pandas():
                         pd_module = globals().get('pd')
                         if pd_module is None:
                             import sys
@@ -1724,14 +1751,14 @@ class ReactiveMatrixLayout:
                 except Exception as e:
                     # MatrixLayout ya está importado al principio de la función
                     if self._debug or MatrixLayout._debug:
-                        print(f"⚠️ Error actualizando histograma: {e}")
+                        logger.error(f"Error actualizando histograma: {e}", exc_info=True)
                         import traceback
                         traceback.print_exc()
                 finally:
                     # CRÍTICO: Resetear flag después de completar
                     update_histogram._executing = False
                     if self._debug or MatrixLayout._debug:
-                        print(f"   ✅ Histogram '{letter}' callback completado")
+                        logger.debug(f"   Histogram '{letter}' callback completado")
             
             # Registrar callback en el modelo de selección de la vista principal
             primary_selection.on_change(update_histogram)
@@ -1756,20 +1783,23 @@ class ReactiveMatrixLayout:
                             processed_items.append(item)
                     
                     if processed_items:
-                        if HAS_PANDAS:
+                        if has_pandas():
                             import pandas as pd
                             try:
-                                if isinstance(processed_items[0], dict):
-                                    initial_data = pd.DataFrame(processed_items)
+                                # ✅ CRIT-002, CRIT-003: Usar helpers centralizados
+                                first_item = safe_get_first_item(processed_items)
+                                if first_item is not None:
+                                    df_result = safe_dataframe(processed_items)
+                                    initial_data = df_result if df_result is not None else processed_items
                                 else:
-                                    initial_data = pd.DataFrame(processed_items)
+                                    initial_data = processed_items
                             except Exception:
                                 initial_data = self._data
                         else:
                             initial_data = processed_items
                     
                     if self._debug or MatrixLayout._debug:
-                        print(f"📊 Histogram '{letter}' inicializado con {len(processed_items) if processed_items else len(self._data)} items (hay selección activa)")
+                        logger.debug(f"Histogram '{letter}' inicializado con {len(processed_items) if processed_items else len(self._data)} items (hay selección activa)")
         
         # Crear histograma inicial con datos filtrados si hay selección, o todos los datos si no
         MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **kwargs)
@@ -1806,7 +1836,7 @@ class ReactiveMatrixLayout:
         # Verificar si ya existe un callback para este boxplot (evitar duplicados)
         if letter in self._boxplot_callbacks:
             if self._debug or MatrixLayout._debug:
-                print(f"⚠️ Boxplot para '{letter}' ya está registrado. Ignorando registro duplicado.")
+                logger.warning(f"Boxplot para '{letter}' ya está registrado. Ignorando registro duplicado.")
             return self
         
         # Determinar a qué vista principal enlazar
@@ -1831,10 +1861,10 @@ class ReactiveMatrixLayout:
                     all_available = available_scatters + available_primary
                     
                     if self._debug or MatrixLayout._debug:
-                        print(f"❌ [ReactiveMatrixLayout] Vista principal '{linked_to}' no existe para boxplot '{letter}'")
-                        print(f"   - Scatter plots disponibles: {available_scatters}")
-                        print(f"   - Vistas principales disponibles: {available_primary}")
-                        print(f"   - Todas las vistas: {all_available}")
+                        logger.error(f"[ReactiveMatrixLayout] Vista principal '{linked_to}' no existe para boxplot '{letter}'")
+                        logger.error(f"   - Scatter plots disponibles: {available_scatters}")
+                        logger.error(f"   - Vistas principales disponibles: {available_primary}")
+                        logger.error(f"   - Todas las vistas: {all_available}")
                     
                     error_msg = f"Vista principal '{linked_to}' no existe. "
                     if all_available:
@@ -1852,7 +1882,7 @@ class ReactiveMatrixLayout:
             primary_letter = list(all_primary.keys())[-1]
             primary_selection = all_primary[primary_letter]
             if self._debug or MatrixLayout._debug:
-                print(f"💡 Boxplot '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
+                logger.debug(f"Boxplot '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
         
         # Agregar __linked_to__ al spec para indicadores visuales en JavaScript (solo si hay enlace)
         if primary_letter is not None:
@@ -1877,7 +1907,7 @@ class ReactiveMatrixLayout:
             
             # ✅ CORRECCIÓN CRÍTICA: Importar pandas al principio para evitar UnboundLocalError
             pd_module = None
-            if HAS_PANDAS:
+            if has_pandas():
                 # Intentar obtener pd de globals primero
                 pd_module = globals().get('pd')
                 if pd_module is None:
@@ -1891,7 +1921,7 @@ class ReactiveMatrixLayout:
             # CRÍTICO: Flag para evitar ejecuciones múltiples simultáneas
             if hasattr(update_boxplot, '_executing') and update_boxplot._executing:
                 if self._debug or MatrixLayout._debug:
-                    print(f"   ⏭️ Boxplot '{letter}' callback ya está ejecutándose, ignorando llamada duplicada")
+                    logger.debug(f"   Boxplot '{letter}' callback ya está ejecutándose, ignorando llamada duplicada")
                 return
             update_boxplot._executing = True
             
@@ -1899,7 +1929,7 @@ class ReactiveMatrixLayout:
             # Si items está vacío o no tiene la estructura esperada, usar todos los datos
             if not items or (isinstance(items, list) and len(items) == 0):
                 if self._debug or MatrixLayout._debug:
-                    print(f"   ℹ️ Boxplot '{letter}': items vacío, usando todos los datos")
+                    logger.debug(f"   Boxplot '{letter}': items vacío, usando todos los datos")
                 items = None
                 count = 0
             
@@ -1908,7 +1938,7 @@ class ReactiveMatrixLayout:
                 from IPython.display import Javascript
                 
                 if self._debug or MatrixLayout._debug:
-                    print(f"   🔄 Boxplot '{letter}' callback ejecutándose con {count} items")
+                    logger.debug(f"   Boxplot '{letter}' callback ejecutándose con {count} items")
                 
                 # ✅ CORRECCIÓN CRÍTICA: Usar datos seleccionados o todos los datos
                 # Estrategia mejorada: usar índices originales si están disponibles, o crear DataFrame desde items
@@ -1916,7 +1946,7 @@ class ReactiveMatrixLayout:
                 if items and len(items) > 0:
                     # ✅ ESTRATEGIA 1: Si tenemos índices originales en el payload, usarlos para filtrar self._data
                     # Esto garantiza que tenemos todas las columnas del DataFrame original
-                    if HAS_PANDAS and pd_module is not None and isinstance(self._data, pd_module.DataFrame):
+                    if has_pandas() and pd_module is not None and isinstance(self._data, pd_module.DataFrame):
                         # Buscar índices en el payload (pueden venir en diferentes formatos)
                         indices = None
                         if hasattr(items, '__iter__') and not isinstance(items, (str, dict)):
@@ -1944,17 +1974,21 @@ class ReactiveMatrixLayout:
                         if processed_items:
                             try:
                                 # Intentar crear DataFrame desde los items procesados
-                                if HAS_PANDAS and pd_module is not None:
-                                    if isinstance(processed_items[0], dict):
-                                        data_from_items = pd_module.DataFrame(processed_items)
+                                if has_pandas() and pd_module is not None:
+                                    # ✅ CORRECCIÓN: Validar que processed_items tenga elementos antes de acceder a [0]
+                                    if isinstance(processed_items, list) and len(processed_items) > 0:
+                                        if isinstance(processed_items[0], dict):
+                                            data_from_items = pd_module.DataFrame(processed_items)
+                                        else:
+                                            data_from_items = pd_module.DataFrame(processed_items)
                                     else:
-                                        data_from_items = pd_module.DataFrame(processed_items)
+                                        data_from_items = processed_items
                                     
                                     # ✅ CORRECCIÓN CRÍTICA: Verificar que el DataFrame tenga todas las columnas necesarias
                                     # Si falta la columna del boxplot, usar self._data completo
                                     if column and column not in data_from_items.columns:
                                         if self._debug or MatrixLayout._debug:
-                                            print(f"⚠️ Error actualizando boxplot: '{column}' no está en datos filtrados, usando todos los datos")
+                                            logger.warning(f"Error actualizando boxplot: '{column}' no está en datos filtrados, usando todos los datos")
                                         data_to_use = self._data
                                     else:
                                         data_to_use = data_from_items
@@ -1962,7 +1996,7 @@ class ReactiveMatrixLayout:
                                     data_to_use = processed_items
                             except Exception as e:
                                 if self._debug or MatrixLayout._debug:
-                                    print(f"⚠️ Error creando DataFrame desde items: {e}")
+                                    logger.warning(f"Error creando DataFrame desde items: {e}", exc_info=True)
                                 # Si falla, usar todos los datos
                                 data_to_use = self._data
                         else:
@@ -1977,16 +2011,16 @@ class ReactiveMatrixLayout:
                 
                 # Preparar datos para boxplot
                 # ✅ CORRECCIÓN: pd_module ya está definido al principio de la función
-                if HAS_PANDAS and pd_module is not None and isinstance(data_to_use, pd_module.DataFrame):
+                if has_pandas() and pd_module is not None and isinstance(data_to_use, pd_module.DataFrame):
                         # ✅ CORRECCIÓN CRÍTICA: Verificar que las columnas necesarias existen
                         if column not in data_to_use.columns:
                             if self._debug or MatrixLayout._debug:
-                                print(f"⚠️ Error actualizando boxplot: '{column}' no está en datos. Columnas disponibles: {list(data_to_use.columns)[:10]}")
+                                logger.warning(f"Error actualizando boxplot: '{column}' no está en datos. Columnas disponibles: {list(data_to_use.columns)[:10]}")
                             # Intentar usar todos los datos
                             data_to_use = self._data
                             if column not in data_to_use.columns:
                                 if self._debug or MatrixLayout._debug:
-                                    print(f"❌ Error crítico: '{column}' no está en datos originales")
+                                    logger.error(f"Error crítico: '{column}' no está en datos originales")
                                 update_boxplot._executing = False
                                 return
                         
@@ -2017,12 +2051,12 @@ class ReactiveMatrixLayout:
                             # ✅ CORRECCIÓN CRÍTICA: Verificar que la columna existe antes de acceder
                             if column not in data_to_use.columns:
                                 if self._debug or MatrixLayout._debug:
-                                    print(f"⚠️ Error actualizando boxplot: '{column}' no está en datos. Columnas disponibles: {list(data_to_use.columns)[:10]}")
+                                    logger.warning(f"Error actualizando boxplot: '{column}' no está en datos. Columnas disponibles: {list(data_to_use.columns)[:10]}")
                                 # Usar todos los datos si la columna no está en los datos filtrados
                                 data_to_use = self._data
                                 if column not in data_to_use.columns:
                                     if self._debug or MatrixLayout._debug:
-                                        print(f"❌ Error crítico: '{column}' no está en datos originales")
+                                        logger.error(f"Error crítico: '{column}' no está en datos originales")
                                     update_boxplot._executing = False
                                     return
                             
@@ -2274,11 +2308,11 @@ class ReactiveMatrixLayout:
                     display(Javascript(js_update), clear=False, display_id=f'boxplot-update-{letter}', update=True)
                     
                     if self._debug or MatrixLayout._debug:
-                        print(f"   📤 JavaScript del boxplot '{letter}' ejecutado (display_id: boxplot-update-{letter})")
+                        logger.debug(f"   JavaScript del boxplot '{letter}' ejecutado (display_id: boxplot-update-{letter})")
                 except Exception as e:
                     from .matrix import MatrixLayout
                     if self._debug or MatrixLayout._debug:
-                        print(f"⚠️ Error ejecutando JavaScript del boxplot: {e}")
+                        logger.error(f"Error ejecutando JavaScript del boxplot: {e}", exc_info=True)
                         import traceback
                         traceback.print_exc()
                     
@@ -2286,13 +2320,13 @@ class ReactiveMatrixLayout:
                 from .matrix import MatrixLayout
                 import traceback
                 if self._debug or MatrixLayout._debug:
-                    print(f"⚠️ Error actualizando boxplot: {e}")
+                    logger.error(f"Error actualizando boxplot: {e}", exc_info=True)
                     traceback.print_exc()
             finally:
                 # CRÍTICO: Resetear flag después de completar
                 update_boxplot._executing = False
                 if self._debug or MatrixLayout._debug:
-                    print(f"   ✅ Boxplot '{letter}' callback completado")
+                    logger.debug(f"   Boxplot '{letter}' callback completado")
         
         # Registrar callback en el SelectionModel de la vista principal
         primary_selection.on_change(update_boxplot)
@@ -2320,33 +2354,37 @@ class ReactiveMatrixLayout:
                         processed_items.append(item)
                 
                 if processed_items:
-                    if HAS_PANDAS:
+                    if has_pandas():
                         import pandas as pd
                         try:
-                            if isinstance(processed_items[0], dict):
-                                initial_data = pd.DataFrame(processed_items)
+                            # ✅ CORRECCIÓN: Validar que processed_items tenga elementos antes de acceder a [0]
+                            if isinstance(processed_items, list) and len(processed_items) > 0:
+                                if isinstance(processed_items[0], dict):
+                                    initial_data = pd.DataFrame(processed_items)
+                                else:
+                                    initial_data = pd.DataFrame(processed_items)
                             else:
-                                initial_data = pd.DataFrame(processed_items)
+                                initial_data = self._data
                         except Exception:
                             initial_data = self._data
                     else:
                         initial_data = processed_items
                 
                 if self._debug or MatrixLayout._debug:
-                    print(f"📊 Boxplot '{letter}' inicializado con {len(processed_items) if processed_items else len(self._data)} items (hay selección activa)")
+                        logger.debug(f"Boxplot '{letter}' inicializado con {len(processed_items) if processed_items else len(self._data)} items (hay selección activa)")
         
         # Debug: verificar que el callback se registró
         if self._debug or MatrixLayout._debug:
-            print(f"🔗 [ReactiveMatrixLayout] Callback registrado para boxplot '{letter}' enlazado a vista principal '{primary_letter}'")
-            print(f"   - SelectionModel ID: {id(primary_selection)}")
-            print(f"   - Callbacks registrados: {len(primary_selection._callbacks)}")
-            print(f"   - Boxplot callbacks guardados: {list(self._boxplot_callbacks.keys())}")
+            logger.debug(f"[ReactiveMatrixLayout] Callback registrado para boxplot '{letter}' enlazado a vista principal '{primary_letter}'")
+            logger.debug(f"   - SelectionModel ID: {id(primary_selection)}")
+            logger.debug(f"   - Callbacks registrados: {len(primary_selection._callbacks)}")
+            logger.debug(f"   - Boxplot callbacks guardados: {list(self._boxplot_callbacks.keys())}")
         
         # Crear boxplot inicial con datos filtrados si hay selección, o todos los datos si no
         data_to_use = initial_data
-        # Asegurar que pd esté disponible si HAS_PANDAS es True
+        # Asegurar que pd esté disponible si has_pandas() es True
         # Usar globals() para acceder al pd del módulo y evitar UnboundLocalError
-        if HAS_PANDAS:
+                if has_pandas():
             # Obtener pd del módulo global
             pd_module = globals().get('pd')
             if pd_module is None:
@@ -2445,7 +2483,7 @@ class ReactiveMatrixLayout:
     def _prepare_barchart_data(self, data, category_col, value_col, kwargs):
         """Helper para preparar datos del bar chart (incluyendo _original_rows)"""
         try:
-            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if has_pandas() and isinstance(data, get_pandas().DataFrame):
                 if value_col and value_col in data.columns:
                     bar_data = data.groupby(category_col)[value_col].sum().reset_index()
                     bar_data = bar_data.rename(columns={category_col: 'category', value_col: 'value'})
@@ -2493,7 +2531,7 @@ class ReactiveMatrixLayout:
             from .matrix import MatrixLayout
             import traceback
             if self._debug or MatrixLayout._debug:
-                print(f"⚠️ Error preparando datos del bar chart: {e}")
+                logger.error(f"Error preparando datos del bar chart: {e}", exc_info=True)
                 traceback.print_exc()
             return []
     
@@ -2522,7 +2560,19 @@ class ReactiveMatrixLayout:
         scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
         sel = self._scatter_selection_models[scatter_letter]
         def update(items, count):
-            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+            if not items:
+                data_to_use = self._data
+            elif has_pandas() and isinstance(items, list) and len(items) > 0:
+                if isinstance(items[0], dict):
+                    pd = get_pandas()
+                    # ✅ CRIT-002: Usar helper centralizado
+                    df_result = safe_dataframe(items)
+                    data_to_use = df_result if df_result is not None else items
+                else:
+                    data_to_use = items
+            else:
+                data_to_use = items
             try:
                 MatrixLayout.map_heatmap(letter, data_to_use, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
             except Exception:
@@ -2532,7 +2582,7 @@ class ReactiveMatrixLayout:
 
     def add_correlation_heatmap(self, letter, linked_to=None, **kwargs):
         from .matrix import MatrixLayout
-        if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
+        if not (has_pandas() and isinstance(self._data, get_pandas().DataFrame)):
             raise ValueError("add_correlation_heatmap requiere DataFrame")
         MatrixLayout.map_correlation_heatmap(letter, self._data, **kwargs)
         # link
@@ -2541,7 +2591,24 @@ class ReactiveMatrixLayout:
         scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
         sel = self._scatter_selection_models[scatter_letter]
         def update(items, count):
-            df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+            # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+            if not items:
+                df = self._data
+            elif has_pandas() and isinstance(items, list) and len(items) > 0:
+                # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+                if isinstance(items, list) and len(items) > 0:
+                    # ✅ CRIT-002, CRIT-003: Validar items antes de acceder
+                first_item = safe_get_first_item(items)
+                if first_item is not None and isinstance(first_item, dict):
+                    df_result = safe_dataframe(items)
+                    if df_result is not None:
+                        df = df_result
+                    else:
+                        df = None
+                else:
+                    df = None
+            else:
+                df = None
             if df is None:
                 return
             try:
@@ -2561,7 +2628,19 @@ class ReactiveMatrixLayout:
         scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
         sel = self._scatter_selection_models[scatter_letter]
         def update(items, count):
-            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+            if not items:
+                data_to_use = self._data
+            elif has_pandas() and isinstance(items, list) and len(items) > 0:
+                if isinstance(items[0], dict):
+                    pd = get_pandas()
+                    # ✅ CRIT-002: Usar helper centralizado
+                    df_result = safe_dataframe(items)
+                    data_to_use = df_result if df_result is not None else items
+                else:
+                    data_to_use = items
+            else:
+                data_to_use = items
             try:
                 MatrixLayout.map_line(letter, data_to_use, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
             except Exception:
@@ -2625,7 +2704,7 @@ class ReactiveMatrixLayout:
                 self._selection_variables[letter] = selection_var
                 import __main__
                 # Asegurar que pd esté disponible (usar el del módulo global)
-                if HAS_PANDAS:
+                if has_pandas():
                     pd_module = globals().get('pd')
                     if pd_module is None:
                         import sys
@@ -2639,8 +2718,8 @@ class ReactiveMatrixLayout:
                     empty_df = []
                 setattr(__main__, selection_var, empty_df)
                 if self._debug or MatrixLayout._debug:
-                    df_type = "DataFrame" if HAS_PANDAS else "lista"
-                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de pie chart '{letter}' como {df_type}")
+                    df_type = "DataFrame" if has_pandas() else "lista"
+                    logger.debug(f"Variable '{selection_var}' creada para guardar selecciones de pie chart '{letter}' como {df_type}")
             
             # Crear handler para eventos de selección del pie chart
             def pie_handler(payload):
@@ -2654,7 +2733,7 @@ class ReactiveMatrixLayout:
                 if event_letter is not None and event_letter != letter:
                     # El evento es para otra vista, ignorar
                     if self._debug or MatrixLayout._debug:
-                        print(f"⏭️ [ReactiveMatrixLayout] Evento de pie chart ignorado: esperado '{letter}', recibido '{event_letter}'")
+                        logger.debug(f"[ReactiveMatrixLayout] Evento de pie chart ignorado: esperado '{letter}', recibido '{event_letter}'")
                     return
                 
                 # Si event_letter es None, podría ser un evento antiguo sin __view_letter__
@@ -2663,7 +2742,7 @@ class ReactiveMatrixLayout:
                 items = payload.get('items', [])
                 
                 if self._debug or MatrixLayout._debug:
-                    print(f"✅ [ReactiveMatrixLayout] Evento recibido para pie chart '{letter}': {len(items)} items")
+                    logger.debug(f"[ReactiveMatrixLayout] Evento recibido para pie chart '{letter}': {len(items)} items")
                 
                 # Convertir items a DataFrame antes de guardar
                 items_df = _items_to_dataframe(items)
@@ -2681,7 +2760,7 @@ class ReactiveMatrixLayout:
             self._layout.on('select', pie_handler)
             
             if self._debug or MatrixLayout._debug:
-                print(f"📝 [ReactiveMatrixLayout] Handler registrado para pie chart '{letter}' con selection_var='{selection_var}'")
+                logger.debug(f"[ReactiveMatrixLayout] Handler registrado para pie chart '{letter}' con selection_var='{selection_var}'")
             
             kwargs['__view_letter__'] = letter
             kwargs['__is_primary_view__'] = True
@@ -2740,14 +2819,14 @@ class ReactiveMatrixLayout:
                 # Prevenir actualizaciones recursivas
                 if self._update_flags.get(pie_update_flag, False):
                     if self._debug or MatrixLayout._debug:
-                        print(f"⏭️ [ReactiveMatrixLayout] Actualización de pie chart '{letter}' ya en progreso, ignorando...")
+                        logger.debug(f"[ReactiveMatrixLayout] Actualización de pie chart '{letter}' ya en progreso, ignorando...")
                     return
                 
                 self._update_flags[pie_update_flag] = True
                 
                 try:
                     if self._debug or MatrixLayout._debug:
-                        print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando pie chart '{letter}' con {count} items seleccionados")
+                        logger.debug(f"[ReactiveMatrixLayout] Callback ejecutado: Actualizando pie chart '{letter}' con {count} items seleccionados")
                     
                     # Procesar items: los items del bar chart ya son las filas originales
                     # Cuando el bar chart envía eventos, items contiene directamente las filas originales
@@ -2775,10 +2854,22 @@ class ReactiveMatrixLayout:
                                 processed_items.append(item)
                         
                         if processed_items:
-                            if HAS_PANDAS and isinstance(processed_items[0], dict):
-                                import pandas as pd
-                                data_to_use = pd.DataFrame(processed_items)
+                            # ✅ CORRECCIÓN: Validar que processed_items tenga elementos antes de acceder a [0]
+                            if has_pandas() and isinstance(processed_items, list) and len(processed_items) > 0:
+                                if isinstance(processed_items[0], dict):
+                                    pd = get_pandas()
+                                    if pd is not None:
+                                        data_to_use = pd.DataFrame(processed_items)
+                                    else:
+                                        data_to_use = processed_items
+                                else:
+                                    data_to_use = processed_items
                             else:
+                                data_to_use = processed_items
+                                else:
+                                    data_to_use = processed_items
+                            else:
+                                data_to_use = processed_items
                                 data_to_use = processed_items
                         else:
                             # Si no hay items procesados, usar todos los datos
@@ -2788,10 +2879,10 @@ class ReactiveMatrixLayout:
                         data_to_use = self._data
                     
                     # Validar que category_col existe en los datos
-                    if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
+                    if has_pandas() and isinstance(data_to_use, get_pandas().DataFrame):
                         if category_col and category_col not in data_to_use.columns:
                             if self._debug or MatrixLayout._debug:
-                                print(f"⚠️ Columna '{category_col}' no encontrada en datos. Columnas disponibles: {list(data_to_use.columns)}")
+                                logger.warning(f"Columna '{category_col}' no encontrada en datos. Columnas disponibles: {list(data_to_use.columns)}")
                             # Intentar usar todos los datos originales
                             data_to_use = self._data
                     
@@ -2804,7 +2895,7 @@ class ReactiveMatrixLayout:
                         # Preparar datos para el pie chart
                         # IMPORTANTE: Incluir _original_rows para cada categoría
                         # Esto permite que cuando se hace click en el pie chart, se envíen todas las filas originales
-                        if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
+                        if has_pandas() and isinstance(data_to_use, get_pandas().DataFrame):
                             if category_col and category_col in data_to_use.columns:
                                 # IMPORTANTE: Almacenar filas originales para cada categoría
                                 original_data = data_to_use.to_dict('records')
@@ -2840,7 +2931,7 @@ class ReactiveMatrixLayout:
                                     ]
                             else:
                                 if self._debug or MatrixLayout._debug:
-                                    print(f"⚠️ No se puede crear pie chart: columna '{category_col}' no encontrada")
+                                    logger.warning(f"No se puede crear pie chart: columna '{category_col}' no encontrada")
                                 return
                         else:
                             from collections import Counter, defaultdict
@@ -2893,7 +2984,7 @@ class ReactiveMatrixLayout:
                             pie_data_hash = hashlib.md5(pie_data_str.encode()).hexdigest()
                             if self._pie_data_cache.get(pie_data_cache_key) == pie_data_hash:
                                 if self._debug or MatrixLayout._debug:
-                                    print(f"⏭️ [ReactiveMatrixLayout] Datos del pie chart '{letter}' no han cambiado, ignorando actualización")
+                                    logger.debug(f"[ReactiveMatrixLayout] Datos del pie chart '{letter}' no han cambiado, ignorando actualización")
                                 self._update_flags[pie_update_flag] = False
                                 return
                             
@@ -3097,12 +3188,12 @@ class ReactiveMatrixLayout:
                             display(Javascript(js_update), clear=False, display_id=f'piechart-update-{letter}', update=True)
                         except Exception as e:
                             if self._debug or MatrixLayout._debug:
-                                print(f"⚠️ Error ejecutando JavaScript del pie chart: {e}")
+                                logger.error(f"Error ejecutando JavaScript del pie chart: {e}", exc_info=True)
                                 import traceback
                                 traceback.print_exc()
                     except Exception as e:
                         if self._debug or MatrixLayout._debug:
-                            print(f"⚠️ Error actualizando pie chart con JavaScript: {e}")
+                            logger.error(f"Error actualizando pie chart con JavaScript: {e}", exc_info=True)
                             traceback.print_exc()
                     finally:
                         # Reset flag después de un pequeño delay para evitar bucles
@@ -3114,7 +3205,7 @@ class ReactiveMatrixLayout:
                         threading.Thread(target=reset_flag, daemon=True).start()
                 except Exception as e:
                     if self._debug or MatrixLayout._debug:
-                        print(f"⚠️ Error actualizando pie chart: {e}")
+                        logger.error(f"Error actualizando pie chart: {e}", exc_info=True)
                         traceback.print_exc()
                     # Reset flag en caso de error
                     self._update_flags[pie_update_flag] = False
@@ -3124,9 +3215,9 @@ class ReactiveMatrixLayout:
             
             # Debug: verificar que el callback se registró
             if self._debug or MatrixLayout._debug:
-                print(f"🔗 [ReactiveMatrixLayout] Callback registrado para pie chart '{letter}' enlazado a vista principal '{primary_letter}'")
-                print(f"   - SelectionModel ID: {id(primary_selection)}")
-                print(f"   - Callbacks registrados: {len(primary_selection._callbacks)}")
+                logger.debug(f"[ReactiveMatrixLayout] Callback registrado para pie chart '{letter}' enlazado a vista principal '{primary_letter}'")
+                logger.debug(f"   - SelectionModel ID: {id(primary_selection)}")
+                logger.debug(f"   - Callbacks registrados: {len(primary_selection._callbacks)}")
         
         return self
 
@@ -3150,7 +3241,19 @@ class ReactiveMatrixLayout:
             raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
         
         def update(items, count):
-            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+            if not items:
+                data_to_use = self._data
+            elif has_pandas() and isinstance(items, list) and len(items) > 0:
+                if isinstance(items[0], dict):
+                    pd = get_pandas()
+                    # ✅ CRIT-002: Usar helper centralizado
+                    df_result = safe_dataframe(items)
+                    data_to_use = df_result if df_result is not None else items
+                else:
+                    data_to_use = items
+            else:
+                data_to_use = items
             try:
                 MatrixLayout.map_violin(letter, data_to_use, value_col=value_col, category_col=category_col, bins=bins, **kwargs)
             except Exception:
@@ -3160,7 +3263,7 @@ class ReactiveMatrixLayout:
 
     def add_radviz(self, letter, features=None, class_col=None, linked_to=None, **kwargs):
         from .matrix import MatrixLayout
-        if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
+        if not (has_pandas() and isinstance(self._data, get_pandas().DataFrame)):
             raise ValueError("add_radviz requiere DataFrame")
         MatrixLayout.map_radviz(letter, self._data, features=features, class_col=class_col, **kwargs)
         
@@ -3178,7 +3281,24 @@ class ReactiveMatrixLayout:
             raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
         
         def update(items, count):
-            df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+            # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+            if not items:
+                df = self._data
+            elif has_pandas() and isinstance(items, list) and len(items) > 0:
+                # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+                if isinstance(items, list) and len(items) > 0:
+                    # ✅ CRIT-002, CRIT-003: Validar items antes de acceder
+                first_item = safe_get_first_item(items)
+                if first_item is not None and isinstance(first_item, dict):
+                    df_result = safe_dataframe(items)
+                    if df_result is not None:
+                        df = df_result
+                    else:
+                        df = None
+                else:
+                    df = None
+            else:
+                df = None
             if df is None:
                 return
             try:
@@ -3203,7 +3323,7 @@ class ReactiveMatrixLayout:
             self para encadenamiento
         """
         from .matrix import MatrixLayout
-        if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
+        if not (has_pandas() and isinstance(self._data, get_pandas().DataFrame)):
             raise ValueError("add_star_coordinates requiere DataFrame")
         MatrixLayout.map_star_coordinates(letter, self._data, features=features, class_col=class_col, **kwargs)
         
@@ -3221,7 +3341,24 @@ class ReactiveMatrixLayout:
             raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
         
         def update(items, count):
-            df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+            # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+            if not items:
+                df = self._data
+            elif has_pandas() and isinstance(items, list) and len(items) > 0:
+                # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+                if isinstance(items, list) and len(items) > 0:
+                    # ✅ CRIT-002, CRIT-003: Validar items antes de acceder
+                first_item = safe_get_first_item(items)
+                if first_item is not None and isinstance(first_item, dict):
+                    df_result = safe_dataframe(items)
+                    if df_result is not None:
+                        df = df_result
+                    else:
+                        df = None
+                else:
+                    df = None
+            else:
+                df = None
             if df is None:
                 return
             try:
@@ -3246,7 +3383,7 @@ class ReactiveMatrixLayout:
             self para encadenamiento
         """
         from .matrix import MatrixLayout
-        if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
+        if not (has_pandas() and isinstance(self._data, get_pandas().DataFrame)):
             raise ValueError("add_parallel_coordinates requiere DataFrame")
         MatrixLayout.map_parallel_coordinates(letter, self._data, dimensions=dimensions, category_col=category_col, **kwargs)
         
@@ -3264,7 +3401,24 @@ class ReactiveMatrixLayout:
             raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
         
         def update(items, count):
-            df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+            # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+            if not items:
+                df = self._data
+            elif has_pandas() and isinstance(items, list) and len(items) > 0:
+                # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+                if isinstance(items, list) and len(items) > 0:
+                    # ✅ CRIT-002, CRIT-003: Validar items antes de acceder
+                first_item = safe_get_first_item(items)
+                if first_item is not None and isinstance(first_item, dict):
+                    df_result = safe_dataframe(items)
+                    if df_result is not None:
+                        df = df_result
+                    else:
+                        df = None
+                else:
+                    df = None
+            else:
+                df = None
             if df is None:
                 return
             try:
@@ -3290,7 +3444,7 @@ class ReactiveMatrixLayout:
         Requiere que los datos provengan de un DataFrame de pandas.
         """
         from .matrix import MatrixLayout
-        if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
+        if not (has_pandas() and isinstance(self._data, get_pandas().DataFrame)):
             raise ValueError("add_confusion_matrix requiere un DataFrame de pandas")
         if y_true_col is None or y_pred_col is None:
             raise ValueError("Debes especificar y_true_col y y_pred_col")
@@ -3306,7 +3460,14 @@ class ReactiveMatrixLayout:
             y_pred = df[y_pred_col]
             labels = sorted(list(set(y_true) | set(y_pred)))
             cm = confusion_matrix(y_true, y_pred, labels=labels, normalize='true' if normalize else None)
+            # ✅ CRIT-002: Usar get_pandas() en lugar de pd directo
+            pd = get_pandas()
+            # ✅ CRIT-002: Usar get_pandas() en lugar de pd directo
+            pd = get_pandas()
+            if pd is not None:
             cm_df = pd.DataFrame(cm, index=labels, columns=labels)
+            else:
+                raise ImportError("pandas es requerido para confusion matrix")
             MatrixLayout.map_heatmap(
                 letter, cm_df.reset_index().melt(id_vars='index', var_name='Pred', value_name='Value'),
                 x_col='Pred', y_col='index', value_col='Value',
@@ -3327,7 +3488,15 @@ class ReactiveMatrixLayout:
             if not items:
                 render_confusion(self._data)
                 return
-            df_sel = pd.DataFrame(items) if isinstance(items[0], dict) else self._data
+            # ✅ CRIT-002, CRIT-003: Validar items antes de acceder
+            first_item = safe_get_first_item(items)
+            if first_item is not None and isinstance(first_item, dict):
+                df_result = safe_dataframe(items)
+                df_sel = df_result if df_result is not None else self._data
+                else:
+                    df_sel = self._data
+            else:
+                df_sel = self._data
             try:
                 render_confusion(df_sel)
             except Exception:
@@ -3364,7 +3533,19 @@ class ReactiveMatrixLayout:
         else:
             return self
         def update(items, count):
-            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+            if not items:
+                data_to_use = self._data
+            elif has_pandas() and isinstance(items, list) and len(items) > 0:
+                if isinstance(items[0], dict):
+                    pd = get_pandas()
+                    # ✅ CRIT-002: Usar helper centralizado
+                    df_result = safe_dataframe(items)
+                    data_to_use = df_result if df_result is not None else items
+                else:
+                    data_to_use = items
+            else:
+                data_to_use = items
             try:
                 MatrixLayout.map_line_plot(letter, data_to_use, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
             except Exception:
@@ -3399,7 +3580,19 @@ class ReactiveMatrixLayout:
         else:
             return self
         def update(items, count):
-            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+            if not items:
+                data_to_use = self._data
+            elif has_pandas() and isinstance(items, list) and len(items) > 0:
+                if isinstance(items[0], dict):
+                    pd = get_pandas()
+                    # ✅ CRIT-002: Usar helper centralizado
+                    df_result = safe_dataframe(items)
+                    data_to_use = df_result if df_result is not None else items
+                else:
+                    data_to_use = items
+            else:
+                data_to_use = items
             try:
                 MatrixLayout.map_horizontal_bar(letter, data_to_use, category_col=category_col, value_col=value_col, **kwargs)
             except Exception:
@@ -3434,7 +3627,19 @@ class ReactiveMatrixLayout:
         else:
             return self
         def update(items, count):
-            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+            if not items:
+                data_to_use = self._data
+            elif has_pandas() and isinstance(items, list) and len(items) > 0:
+                if isinstance(items[0], dict):
+                    pd = get_pandas()
+                    # ✅ CRIT-002: Usar helper centralizado
+                    df_result = safe_dataframe(items)
+                    data_to_use = df_result if df_result is not None else items
+                else:
+                    data_to_use = items
+            else:
+                data_to_use = items
             try:
                 MatrixLayout.map_hexbin(letter, data_to_use, x_col=x_col, y_col=y_col, **kwargs)
             except Exception:
@@ -3471,7 +3676,19 @@ class ReactiveMatrixLayout:
         else:
             return self
         def update(items, count):
-            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+            if not items:
+                data_to_use = self._data
+            elif has_pandas() and isinstance(items, list) and len(items) > 0:
+                if isinstance(items[0], dict):
+                    pd = get_pandas()
+                    # ✅ CRIT-002: Usar helper centralizado
+                    df_result = safe_dataframe(items)
+                    data_to_use = df_result if df_result is not None else items
+                else:
+                    data_to_use = items
+            else:
+                data_to_use = items
             try:
                 MatrixLayout.map_errorbars(letter, data_to_use, x_col=x_col, y_col=y_col, yerr=yerr, xerr=xerr, **kwargs)
             except Exception:
@@ -3507,7 +3724,19 @@ class ReactiveMatrixLayout:
         else:
             return self
         def update(items, count):
-            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+            if not items:
+                data_to_use = self._data
+            elif has_pandas() and isinstance(items, list) and len(items) > 0:
+                if isinstance(items[0], dict):
+                    pd = get_pandas()
+                    # ✅ CRIT-002: Usar helper centralizado
+                    df_result = safe_dataframe(items)
+                    data_to_use = df_result if df_result is not None else items
+                else:
+                    data_to_use = items
+            else:
+                data_to_use = items
             try:
                 MatrixLayout.map_fill_between(letter, data_to_use, x_col=x_col, y1=y1, y2=y2, **kwargs)
             except Exception:
@@ -3542,7 +3771,19 @@ class ReactiveMatrixLayout:
         else:
             return self
         def update(items, count):
-            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
+            if not items:
+                data_to_use = self._data
+            elif has_pandas() and isinstance(items, list) and len(items) > 0:
+                if isinstance(items[0], dict):
+                    pd = get_pandas()
+                    # ✅ CRIT-002: Usar helper centralizado
+                    df_result = safe_dataframe(items)
+                    data_to_use = df_result if df_result is not None else items
+                else:
+                    data_to_use = items
+            else:
+                data_to_use = items
             try:
                 MatrixLayout.map_step(letter, data_to_use, x_col=x_col, y_col=y_col, **kwargs)
             except Exception:
@@ -3604,7 +3845,7 @@ class ReactiveMatrixLayout:
             display(layout.selection_widget)
         """
         if not HAS_WIDGETS:
-            print("⚠️ ipywidgets no está instalado")
+            logger.warning("ipywidgets no está instalado")
             return None
             
         if not hasattr(self.selection_model, '_widget'):
@@ -3689,8 +3930,9 @@ class ReactiveMatrixLayout:
                         if view_letter in self._primary_view_models:
                             return self._primary_view_models[view_letter].get_items()
                 # Si no se encuentra, retornar DataFrame vacío
-                if HAS_PANDAS:
-                    return pd.DataFrame()
+                if has_pandas():
+                    # ✅ CRIT-002: Usar helper centralizado
+                    return safe_dataframe([]) or []
                 else:
                     return []
         else:
@@ -3708,8 +3950,8 @@ class ReactiveMatrixLayout:
         import __main__
         setattr(__main__, selection_var_name, items)
         if self._debug or MatrixLayout._debug:
-            count_msg = f"{len(items)} filas" if HAS_PANDAS and isinstance(items, pd.DataFrame) else f"{len(items)} items"
-            print(f"💾 Selección guardada en variable '{selection_var_name}': {count_msg}")
+            count_msg = f"{len(items)} filas" if has_pandas() and isinstance(items, pd.DataFrame) else f"{len(items)} items"
+            logger.debug(f"Selección guardada en variable '{selection_var_name}': {count_msg}")
 
 
 # ==========================

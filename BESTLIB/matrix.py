@@ -1,3 +1,22 @@
+"""
+⚠️ DEPRECATED: Este módulo está deprecado.
+
+Por favor, usa BESTLIB.layouts.matrix.MatrixLayout en su lugar.
+Este módulo se mantiene solo por compatibilidad hacia atrás.
+
+Este módulo será removido en una versión futura.
+"""
+import warnings
+
+# Emitir warning de deprecación
+warnings.warn(
+    "BESTLIB.matrix.MatrixLayout está deprecado. "
+    "Por favor, usa BESTLIB.layouts.matrix.MatrixLayout en su lugar. "
+    "Este módulo será removido en una versión futura.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import uuid
 import json
 import os
@@ -9,38 +28,12 @@ try:
 except ImportError:
     HAS_WIDGETS = False
 
-# Import de pandas de forma defensiva para evitar errores de importación circular
-HAS_PANDAS = False
-pd = None
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    import sys
-    if 'pandas' in sys.modules:
-        # Si pandas ya está en sys.modules pero corrupto, intentar limpiarlo
-        try:
-            pd_test = sys.modules['pandas']
-            # Intentar acceder a un atributo básico para verificar si está corrupto
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            # Pandas está corrupto, limpiarlo
-            del sys.modules['pandas']
-            # También limpiar submódulos relacionados
-            modules_to_remove = [k for k in sys.modules.keys() if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    
-    # Ahora intentar importar pandas
-    import pandas as pd
-    # Verificar que pandas esté completamente inicializado
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    # Si pandas no está disponible o está corrupto, continuar sin él
-    HAS_PANDAS = False
-    pd = None
+# Import de pandas de forma segura (sin manipular sys.modules)
+from .utils.imports import has_pandas, get_pandas
+from .core.exceptions import get_logger
+
+# Inicializar logger centralizado
+logger = get_logger()
 
 # Cache para archivos JS y CSS (cargados una sola vez)
 _cached_js = None
@@ -66,19 +59,24 @@ class MatrixLayout:
             
         Returns:
             Tupla (width, height) en píxeles, o None
+        
+        Raises:
+            TypeError: Si figsize no es None, tuple o list, o si los valores no son numéricos.
         """
         if figsize is None:
             return None
-        if isinstance(figsize, (tuple, list)) and len(figsize) == 2:
-            # Si los valores son > 50, asumimos que ya están en píxeles
-            # Si son <= 50, asumimos que están en pulgadas
-            width, height = figsize
-            if width > 50 and height > 50:
-                return (int(width), int(height))
-            else:
-                # Convertir de pulgadas a píxeles (96 DPI)
-                return (int(width * 96), int(height * 96))
-        return None
+        if not isinstance(figsize, (tuple, list)) or len(figsize) != 2:
+            raise TypeError(f"figsize must be tuple/list of 2 numbers, received: {type(figsize).__name__}")
+        width, height = figsize
+        if not isinstance(width, (int, float)) or not isinstance(height, (int, float)):
+            raise TypeError(f"figsize values must be numeric, received: width={type(width).__name__}, height={type(height).__name__}")
+        # Si los valores son > 50, asumimos que ya están en píxeles
+        # Si son <= 50, asumimos que están en pulgadas
+        if width > 50 and height > 50:
+            return (int(width), int(height))
+        else:
+            # Convertir de pulgadas a píxeles (96 DPI)
+            return (int(width * 96), int(height * 96))
     
     @classmethod
     def _process_figsize_in_kwargs(cls, kwargs):
@@ -87,7 +85,12 @@ class MatrixLayout:
         
         Args:
             kwargs: Diccionario de argumentos que puede contener 'figsize'
+        
+        Raises:
+            TypeError: Si kwargs no es dict.
         """
+        if not isinstance(kwargs, dict):
+            raise TypeError(f"kwargs must be dict, received: {type(kwargs).__name__}")
         if 'figsize' in kwargs:
             figsize_px = cls._figsize_to_pixels(kwargs['figsize'])
             if figsize_px:
@@ -113,45 +116,47 @@ class MatrixLayout:
             - datos_procesados: Lista de diccionarios con formato estándar
             - datos_originales: Lista de diccionarios con todas las columnas originales
         """
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            # OPTIMIZACIÓN: Convertir DataFrame a lista de diccionarios una sola vez
-            original_data = data.to_dict('records')
-            
-            # OPTIMIZACIÓN: Usar operaciones vectorizadas en lugar de iterrows()
-            # Crear DataFrame con solo las columnas necesarias
-            df_work = pd.DataFrame(index=data.index)
-            
-            # Mapear columnas según especificación (vectorizado)
-            if x_col and x_col in data.columns:
-                df_work['x'] = data[x_col]
-            elif 'x' in data.columns:
-                df_work['x'] = data['x']
-            
-            if y_col and y_col in data.columns:
-                df_work['y'] = data[y_col]
-            elif 'y' in data.columns:
-                df_work['y'] = data['y']
-            
-            if category_col and category_col in data.columns:
-                df_work['category'] = data[category_col]
-            elif 'category' in data.columns:
-                df_work['category'] = data['category']
-            
-            if value_col and value_col in data.columns:
-                df_work['value'] = data[value_col]
-            elif 'value' in data.columns:
-                df_work['value'] = data['value']
-            
-            # OPTIMIZACIÓN: Convertir a lista de diccionarios y agregar referencias
-            # Esto es mucho más rápido que iterrows()
-            processed_data = df_work.to_dict('records')
-            
-            # Agregar referencias a filas originales e índices
-            for idx, item in enumerate(processed_data):
-                item['_original_row'] = original_data[idx]
-                item['_original_index'] = int(data.index[idx])
-            
-            return processed_data, original_data
+        if has_pandas():
+            pd = get_pandas()
+            if pd and isinstance(data, pd.DataFrame):
+                # OPTIMIZACIÓN: Convertir DataFrame a lista de diccionarios una sola vez
+                original_data = data.to_dict('records')
+                
+                # OPTIMIZACIÓN: Usar operaciones vectorizadas en lugar de iterrows()
+                # Crear DataFrame con solo las columnas necesarias
+                df_work = pd.DataFrame(index=data.index)
+                
+                # Mapear columnas según especificación (vectorizado)
+                if x_col and x_col in data.columns:
+                    df_work['x'] = data[x_col]
+                elif 'x' in data.columns:
+                    df_work['x'] = data['x']
+                
+                if y_col and y_col in data.columns:
+                    df_work['y'] = data[y_col]
+                elif 'y' in data.columns:
+                    df_work['y'] = data['y']
+                
+                if category_col and category_col in data.columns:
+                    df_work['category'] = data[category_col]
+                elif 'category' in data.columns:
+                    df_work['category'] = data['category']
+                
+                if value_col and value_col in data.columns:
+                    df_work['value'] = data[value_col]
+                elif 'value' in data.columns:
+                    df_work['value'] = data['value']
+                
+                # OPTIMIZACIÓN: Convertir a lista de diccionarios y agregar referencias
+                # Esto es mucho más rápido que iterrows()
+                processed_data = df_work.to_dict('records')
+                
+                # Agregar referencias a filas originales e índices
+                for idx, item in enumerate(processed_data):
+                    item['_original_row'] = original_data[idx]
+                    item['_original_index'] = int(data.index[idx])
+                
+                return processed_data, original_data
         else:
             # Si ya es lista de diccionarios, solo agregar referencias
             if isinstance(data, list):
@@ -182,9 +187,10 @@ class MatrixLayout:
             ValueError: Si los datos no tienen el formato correcto o faltan columnas/keys
         """
         if required_type == 'DataFrame':
-            if not HAS_PANDAS:
+            if not has_pandas():
                 raise ValueError("pandas no está instalado. Instala con: pip install pandas")
-            if not isinstance(data, pd.DataFrame):
+            pd = get_pandas()
+            if pd is None or not isinstance(data, pd.DataFrame):
                 raise ValueError(f"Se esperaba un DataFrame de pandas, pero se recibió: {type(data).__name__}")
             if data.empty:
                 raise ValueError("El DataFrame está vacío")
@@ -239,10 +245,16 @@ class MatrixLayout:
         
         Ejemplo:
             def log_selection(payload):
-                print(f"Selección global: {payload['count']} elementos")
+                logger.info(f"Selección global: {payload['count']} elementos")
             
             MatrixLayout.on_global('select', log_selection)
         """
+        # Validación de parámetros
+        if not isinstance(event, str) or not event:
+            raise ValueError(f"event debe ser str no vacío, recibido: {event!r}")
+        if not callable(func):
+            raise TypeError(f"func debe ser callable, recibido: {type(func).__name__}")
+        
         cls._global_handlers[event] = func
     
     @classmethod
@@ -265,7 +277,7 @@ class MatrixLayout:
             from .core.comm import CommManager
             if CommManager._comm_registered:
                 if cls._debug:
-                    print("ℹ️ [MatrixLayout Legacy] CommManager ya está registrado, usando sistema modular")
+                    logger.info("[MatrixLayout Legacy] CommManager ya está registrado, usando sistema modular")
                 cls._comm_registered = True  # Marcar como registrado para evitar re-registro
                 return True
         except (ImportError, AttributeError):
@@ -273,7 +285,7 @@ class MatrixLayout:
         
         if cls._comm_registered and not force:
             if cls._debug:
-                print("ℹ️ [MatrixLayout] Comm ya estaba registrado")
+                logger.info("[MatrixLayout] Comm ya estaba registrado")
             return True
         
         if force:
@@ -298,7 +310,7 @@ class MatrixLayout:
             ip = get_ipython()
             if not ip or not hasattr(ip, "kernel"):
                 if cls._debug:
-                    print("⚠️ [MatrixLayout] No hay kernel de IPython disponible")
+                    logger.warning("[MatrixLayout] No hay kernel de IPython disponible")
                 return False
             
             km = ip.kernel.comm_manager
@@ -308,7 +320,7 @@ class MatrixLayout:
                 div_id = open_msg['content']['data'].get('div_id', 'unknown')
                 
                 if cls._debug:
-                    print(f"🔗 [MatrixLayout] Comm abierto para div_id: {div_id}")
+                    logger.debug(f"[MatrixLayout] Comm abierto para div_id: {div_id}")
                 
                 @comm.on_msg
                 def _recv(msg):
@@ -319,10 +331,10 @@ class MatrixLayout:
                         payload = data.get("payload")
                         
                         if cls._debug:
-                            print(f"📩 [MatrixLayout] Evento recibido:")
-                            print(f"   - Tipo: {event_type}")
-                            print(f"   - Div ID: {div_id}")
-                            print(f"   - Payload: {payload}")
+                            logger.debug(f"[MatrixLayout] Evento recibido:")
+                            logger.debug(f"   - Tipo: {event_type}")
+                            logger.debug(f"   - Div ID: {div_id}")
+                            logger.debug(f"   - Payload: {payload}")
                         
                         # Buscar instancia por div_id
                         inst_ref = cls._instances.get(div_id)
@@ -367,19 +379,22 @@ class MatrixLayout:
                         
                         # ✅ CORRECCIÓN CRÍTICA: Si la instancia tiene _event_manager (sistema modular), usarlo
                         if inst:
-                            if hasattr(inst, "_event_manager"):
-                                # Sistema modular: usar EventManager
-                                if cls._debug:
-                                    print(f"   ✅ Usando EventManager (sistema modular)")
-                                    print(f"   🔍 Tipo de instancia: {type(inst).__name__}")
-                                inst._event_manager.emit(event_type, payload)
-                                return  # ✅ IMPORTANTE: Salir después de emitir al EventManager
-                            elif cls._debug:
-                                print(f"   ⚠️ Instancia encontrada pero no tiene _event_manager")
+                            # TEMP FIX: EventManager disabled until full migration
+                            # Using legacy `_handlers` for all events to maintain compatibility
+                            # DO NOT use EventManager until migration is complete
+                            # if hasattr(inst, "_event_manager"):
+                            #     # Sistema modular: usar EventManager
+                            #     if cls._debug:
+                            #         print(f"   ✅ Usando EventManager (sistema modular)")
+                            #         print(f"   🔍 Tipo de instancia: {type(inst).__name__}")
+                            #     inst._event_manager.emit(event_type, payload)
+                            #     return
+                            
+                            if cls._debug:
                                 print(f"   🔍 Tipo de instancia: {type(inst).__name__}")
                                 print(f"   🔍 Atributos: {[a for a in dir(inst) if not a.startswith('__')][:10]}")
                         elif cls._debug:
-                            print(f"   ⚠️ No se encontró instancia en ningún sistema")
+                            logger.warning(f"   No se encontró instancia en ningún sistema")
                         
                         # Sistema legacy: buscar handlers en _handlers
                         handlers = []
@@ -455,6 +470,18 @@ class MatrixLayout:
                 traceback.print_exc()
             return False
     
+    def _ensure_handlers(self):
+        """
+        Asegura que _handlers esté inicializado.
+        Helper method para evitar duplicación de código.
+        
+        Returns:
+            dict: Diccionario de handlers
+        """
+        if not hasattr(self, "_handlers"):
+            self._handlers = {}
+        return self._handlers
+    
     def on(self, event, func):
         """
         Registra un callback específico para esta instancia.
@@ -462,17 +489,22 @@ class MatrixLayout:
         Nota: Si se registran múltiples handlers para el mismo evento,
         todos se ejecutarán (útil para LinkedViews con múltiples scatter plots).
         """
-        if not hasattr(self, "_handlers"):
-            self._handlers = {}
+        # Validación de parámetros
+        if not isinstance(event, str) or not event:
+            raise ValueError(f"event debe ser str no vacío, recibido: {event!r}")
+        if not callable(func):
+            raise TypeError(f"func debe ser callable, recibido: {type(func).__name__}")
+        
+        handlers = self._ensure_handlers()
         
         # Permitir múltiples handlers para el mismo evento
-        if event not in self._handlers:
-            self._handlers[event] = []
-        elif not isinstance(self._handlers[event], list):
+        if event not in handlers:
+            handlers[event] = []
+        elif not isinstance(handlers[event], list):
             # Convertir handler único a lista
-            self._handlers[event] = [self._handlers[event]]
+            handlers[event] = [handlers[event]]
         
-        self._handlers[event].append(func)
+        handlers[event].append(func)
         # Si se registra un handler personalizado para 'select', marcar que hay uno personalizado
         if event == 'select':
             self._has_custom_select_handler = True
@@ -528,11 +560,10 @@ class MatrixLayout:
             print(f"\n💡 Tip: Usa layout.on('select', tu_funcion) para personalizar el manejo de selecciones")
         
         # Registrar el handler por defecto (pero no marcar como personalizado)
-        if not hasattr(self, "_handlers"):
-            self._handlers = {}
-        if 'select' not in self._handlers:
-            self._handlers['select'] = []
-        self._handlers['select'].append(default_select_handler)
+        handlers = self._ensure_handlers()
+        if 'select' not in handlers:
+            handlers['select'] = []
+        handlers['select'].append(default_select_handler)
     
     def get_selected_data(self, as_dataframe=True):
         """
@@ -621,7 +652,7 @@ class MatrixLayout:
                     if self._debug:
                         print(f"⚠️ [MatrixLayout] No se pudo convertir a DataFrame: {e}")
                     return self._selected_data
-            return pd.DataFrame() if HAS_PANDAS else []
+            return get_pandas().DataFrame() if has_pandas() else []
         else:
             return self._selected_data
     
@@ -642,6 +673,9 @@ class MatrixLayout:
 
     @classmethod
     def map(cls, mapping):
+        """Mapea gráficos a letras del layout"""
+        if not isinstance(mapping, dict):
+            raise TypeError(f"mapping debe ser dict, recibido: {type(mapping).__name__}")
         cls._map = mapping
     
     @classmethod
@@ -667,9 +701,17 @@ class MatrixLayout:
             MatrixLayout.map_scatter('S', df, x_col='edad', y_col='salario', category_col='dept', interactive=True)
             layout = MatrixLayout("S")
         """
+        # Validación de parámetros básicos
+        if not isinstance(letter, str) or not letter:
+            raise ValueError(f"letter debe ser str no vacío, recibido: {letter!r}")
+        if data is None:
+            raise ValueError("data no puede ser None")
+        if isinstance(data, (list, tuple)) and len(data) == 0:
+            raise ValueError("data no puede estar vacío")
+        
         # Validar datos con mensajes de error más descriptivos
         try:
-            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if has_pandas() and isinstance(data, get_pandas().DataFrame):
                 required_cols = []
                 if x_col:
                     required_cols.append(x_col)
@@ -697,7 +739,7 @@ class MatrixLayout:
         processed_data, original_data = cls._prepare_data(data, x_col=x_col, y_col=y_col, category_col=category_col, value_col=size_col)
 
         # OPTIMIZACIÓN: Enriquecer con tamaño y color usando operaciones vectorizadas
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+        if has_pandas() and isinstance(data, get_pandas().DataFrame):
             if size_col and size_col in data.columns:
                 # Vectorizado: asignar directamente desde la columna
                 size_values = data[size_col].astype(float, errors='ignore')
@@ -737,7 +779,7 @@ class MatrixLayout:
         max_points = kwargs.get('maxPoints', None)
         if max_points and isinstance(max_points, int) and max_points > 0 and len(processed_data) > max_points:
             # Sampling uniforme para mantener distribución (más rápido que aleatorio)
-            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if has_pandas() and isinstance(data, get_pandas().DataFrame):
                 # Usar pandas para sampling más eficiente (uniforme)
                 step = len(data) / max_points
                 sample_indices = [int(i * step) for i in range(max_points)]
@@ -782,11 +824,19 @@ class MatrixLayout:
             MatrixLayout.map_barchart('B', df, category_col='dept', value_col='ventas', interactive=True)
             layout = MatrixLayout("B")
         """
+        # Validación de parámetros básicos
+        if not isinstance(letter, str) or not letter:
+            raise ValueError(f"letter debe ser str no vacío, recibido: {letter!r}")
+        if data is None:
+            raise ValueError("data no puede ser None")
+        if isinstance(data, (list, tuple)) and len(data) == 0:
+            raise ValueError("data no puede estar vacío")
+        
         from collections import Counter
         
         # Validar datos
         try:
-            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if has_pandas() and isinstance(data, get_pandas().DataFrame):
                 if category_col and category_col not in data.columns:
                     raise ValueError(f"Columna '{category_col}' no existe en el DataFrame. Columnas disponibles: {list(data.columns)}")
                 if value_col and value_col not in data.columns:
@@ -798,7 +848,7 @@ class MatrixLayout:
         except Exception as e:
             raise ValueError(f"Error inesperado validando datos para bar chart '{letter}': {e}")
         
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+        if has_pandas() and isinstance(data, get_pandas().DataFrame):
             # Si hay value_col, agrupar y sumar
             if value_col and value_col in data.columns:
                 bar_data = data.groupby(category_col)[value_col].sum().reset_index()
@@ -868,7 +918,7 @@ class MatrixLayout:
         if main_col is None or sub_col is None:
             raise ValueError("Se requieren main_col y sub_col para grouped barplot")
         rows = []
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+        if has_pandas() and isinstance(data, get_pandas().DataFrame):
             if value_col and value_col in data.columns:
                 agg = data.groupby([main_col, sub_col])[value_col].sum().reset_index()
                 for _, r in agg.iterrows():
@@ -937,7 +987,7 @@ class MatrixLayout:
         import math
         import itertools
         values = []
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+        if has_pandas() and isinstance(data, get_pandas().DataFrame):
             if not value_col or value_col not in data.columns:
                 raise ValueError("Debe especificar value_col para histograma con DataFrame")
             # Extraer valores numéricos limpiando NaN
@@ -976,7 +1026,7 @@ class MatrixLayout:
             # Esto permite que las vistas enlazadas reciban los datos correctos
             bin_rows = [[] for _ in range(len(edges) - 1)]  # Lista de listas para cada bin
             
-            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if has_pandas() and isinstance(data, get_pandas().DataFrame):
                 # Para DataFrame: almacenar todas las filas originales que caen en cada bin
                 original_data = data.to_dict('records')
                 for row in original_data:
@@ -1090,7 +1140,7 @@ class MatrixLayout:
                 'upper': float(upper_whisker)
             }
         box_data = []
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+        if has_pandas() and isinstance(data, get_pandas().DataFrame):
             if value_col is None or value_col not in data.columns:
                 raise ValueError("Debe especificar value_col para boxplot con DataFrame")
             if category_col and category_col in data.columns:
@@ -1151,7 +1201,7 @@ class MatrixLayout:
         """
         cells = []
         x_labels, y_labels = [], []
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+        if has_pandas() and isinstance(data, get_pandas().DataFrame):
             if value_col and x_col and y_col:
                 # Tabla larga → celdas directas
                 df = data[[x_col, y_col, value_col]].dropna()
@@ -1170,22 +1220,24 @@ class MatrixLayout:
                 if len(index_list) == len(cols_list) and set(index_list) == set(cols_list):
                     # Matriz cuadrada (como matriz de correlación)
                     # Ordenar para consistencia
+                    pd = get_pandas()
                     cols = sorted(cols_list)
                     x_labels = cols
                     y_labels = cols
                     for i, xi in enumerate(cols):
                         for j, yj in enumerate(cols):
                             val = data.loc[yj, xi]  # Usar loc para acceso por etiqueta
-                            if pd.notna(val):
+                            if pd and pd.notna(val):
                                 cells.append({'x': str(xi), 'y': str(yj), 'value': float(val)})
                 else:
                     # Matriz rectangular: usar índices como y, columnas como x
+                    pd = get_pandas()
                     x_labels = cols_list
                     y_labels = index_list
                     for i, y_val in enumerate(data.index):
                         for j, x_val in enumerate(data.columns):
                             val = data.iloc[i, j]
-                            if pd.notna(val):
+                            if pd and pd.notna(val):
                                 cells.append({'x': str(x_val), 'y': str(y_val), 'value': float(val)})
             else:
                 raise ValueError("Especifique x_col, y_col y value_col para heatmap, o pase una matriz sin especificar columnas")
@@ -1228,7 +1280,7 @@ class MatrixLayout:
         Calcula matriz de correlación (pearson) para columnas numéricas del DataFrame.
         Las etiquetas X e Y están ordenadas de la misma manera para mantener consistencia.
         """
-        if not (HAS_PANDAS and isinstance(data, pd.DataFrame)):
+        if not (has_pandas() and isinstance(data, get_pandas().DataFrame)):
             raise ValueError("map_correlation_heatmap requiere DataFrame de pandas")
         num_df = data.select_dtypes(include=['number'])
         if num_df.shape[1] == 0:
@@ -1270,7 +1322,7 @@ class MatrixLayout:
         """
         Crea line chart. Si series_col está definido, múltiples series.
         """
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+        if has_pandas() and isinstance(data, get_pandas().DataFrame):
             if x_col is None or y_col is None:
                 raise ValueError("x_col e y_col son requeridos para line plot")
             df = data[[x_col, y_col] + ([series_col] if series_col else [])].dropna()
@@ -1322,7 +1374,7 @@ class MatrixLayout:
         """
         from collections import Counter, defaultdict
         slices = []
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+        if has_pandas() and isinstance(data, get_pandas().DataFrame):
             if category_col is None:
                 raise ValueError("category_col requerido para pie")
             
@@ -1451,7 +1503,7 @@ class MatrixLayout:
                 profile = [{'y': float(c), 'w': float(max(d, 0.01))} for c, d in zip(centers, dens)]
                 return profile
         violins = []
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+        if has_pandas() and isinstance(data, get_pandas().DataFrame):
             if category_col and category_col in data.columns:
                 for cat, sub in data.groupby(category_col):
                     prof = build_profile(sub[value_col].dropna().tolist())
@@ -1496,7 +1548,7 @@ class MatrixLayout:
         Returns:
             spec con type='radviz' y datos preparados
         """
-        if not (HAS_PANDAS and isinstance(data, pd.DataFrame)):
+        if not (has_pandas() and isinstance(data, get_pandas().DataFrame)):
             raise ValueError("map_radviz requiere DataFrame")
         import math
         
@@ -1602,7 +1654,7 @@ class MatrixLayout:
         Returns:
             spec con type='star_coordinates' y datos preparados
         """
-        if not (HAS_PANDAS and isinstance(data, pd.DataFrame)):
+        if not (has_pandas() and isinstance(data, get_pandas().DataFrame)):
             raise ValueError("map_star_coordinates requiere DataFrame")
         import math
         
@@ -1732,7 +1784,7 @@ class MatrixLayout:
         Returns:
             spec con type='parallel_coordinates' y datos preparados
         """
-        if not (HAS_PANDAS and isinstance(data, pd.DataFrame)):
+        if not (has_pandas() and isinstance(data, get_pandas().DataFrame)):
             raise ValueError("map_parallel_coordinates requiere DataFrame")
         
         import math
@@ -1862,7 +1914,7 @@ class MatrixLayout:
             spec = chart.get_spec(data, category_col=category_col, value_col=value_col, **kwargs)
         except Exception:
             # Fallback a implementación directa
-            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if has_pandas() and isinstance(data, get_pandas().DataFrame):
                 if category_col is None:
                     raise ValueError("category_col requerido para horizontal bar")
                 if value_col:
@@ -1943,15 +1995,17 @@ class MatrixLayout:
             # Fallback a implementación directa
             processed_data, _ = cls._prepare_data(data, x_col=x_col, y_col=y_col)
             # Agregar errores si existen
-            if HAS_PANDAS and isinstance(data, pd.DataFrame):
-                if yerr and yerr in data.columns:
-                    for idx, val in enumerate(data[yerr]):
-                        if idx < len(processed_data):
-                            processed_data[idx]['yerr'] = float(val) if pd.notna(val) else 0
-                if xerr and xerr in data.columns:
-                    for idx, val in enumerate(data[xerr]):
-                        if idx < len(processed_data):
-                            processed_data[idx]['xerr'] = float(val) if pd.notna(val) else 0
+            if has_pandas():
+                pd = get_pandas()
+                if pd and isinstance(data, pd.DataFrame):
+                    if yerr and yerr in data.columns:
+                        for idx, val in enumerate(data[yerr]):
+                            if idx < len(processed_data):
+                                processed_data[idx]['yerr'] = float(val) if pd.notna(val) else 0
+                    if xerr and xerr in data.columns:
+                        for idx, val in enumerate(data[xerr]):
+                            if idx < len(processed_data):
+                                processed_data[idx]['xerr'] = float(val) if pd.notna(val) else 0
             spec = {'type': 'errorbars', 'data': processed_data, **kwargs}
         
         if not hasattr(cls, '_map') or cls._map is None:
@@ -1981,7 +2035,7 @@ class MatrixLayout:
             spec = chart.get_spec(data, x_col=x_col, y1=y1, y2=y2, **kwargs)
         except Exception:
             # Fallback a implementación directa
-            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            if has_pandas() and isinstance(data, get_pandas().DataFrame):
                 if x_col is None or y1 is None or y2 is None:
                     raise ValueError("x_col, y1 e y2 son requeridos para fill_between")
                 df = data[[x_col, y1, y2]].dropna()

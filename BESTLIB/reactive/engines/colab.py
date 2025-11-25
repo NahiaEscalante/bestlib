@@ -21,7 +21,15 @@ class ColabEngine(CommEngineBase):
             # Por ahora retornamos False desde Python
             # La detección real se hace en JS
             return False  # Se detecta desde JS
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError) as e:
+            # Errores esperados al verificar Colab
+            return False
+        except Exception as e:
+            # Error inesperado - registrar pero no fallar
+            import logging
+            logging.getLogger('BESTLIB').warning(
+                f"Error inesperado al verificar Colab: {e}"
+            )
             return False
     
     def register_comm(self, comm_target="bestlib_matrix"):

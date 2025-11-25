@@ -1,36 +1,17 @@
 """
 Preparadores de datos para diferentes tipos de gráficos
 """
-# Import de pandas de forma defensiva para evitar errores de importación circular
-HAS_PANDAS = False
-pd = None
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    import sys
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in sys.modules.keys() if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    import pandas as pd
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
+from ..utils.imports import has_pandas, get_pandas
+from typing import Any, Dict, List, Optional, Tuple
 
 from .validators import validate_scatter_data, validate_bar_data, validate_data_structure
 from ..core.exceptions import DataError
+from ..core.validation import validate_dataframe, safe_dataframe
 
 
-def prepare_scatter_data(data, x_col=None, y_col=None, category_col=None, size_col=None, color_col=None):
+def prepare_scatter_data(data: Any, x_col: Optional[str] = None, y_col: Optional[str] = None, 
+                         category_col: Optional[str] = None, size_col: Optional[str] = None, 
+                         color_col: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     Prepara datos para scatter plot.
     
@@ -44,47 +25,77 @@ def prepare_scatter_data(data, x_col=None, y_col=None, category_col=None, size_c
     
     Returns:
         tuple: (datos_procesados, datos_originales)
+    
+    Raises:
+        DataError: Si los datos son inválidos o los parámetros no son strings válidos.
     """
+    if data is None:
+        raise DataError("data cannot be None")
+    if x_col is not None and (not isinstance(x_col, str) or not x_col):
+        raise DataError("x_col must be None or non-empty str")
+    if y_col is not None and (not isinstance(y_col, str) or not y_col):
+        raise DataError("y_col must be None or non-empty str")
+    if category_col is not None and (not isinstance(category_col, str) or not category_col):
+        raise DataError("category_col must be None or non-empty str")
+    if size_col is not None and (not isinstance(size_col, str) or not size_col):
+        raise DataError("size_col must be None or non-empty str")
+    if color_col is not None and (not isinstance(color_col, str) or not color_col):
+        raise DataError("color_col must be None or non-empty str")
     # Validar datos
     if x_col and y_col:
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            validate_scatter_data(data, x_col, y_col)
-        else:
-            validate_scatter_data(data, x_col, y_col)
+        validate_scatter_data(data, x_col, y_col)
     
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
-        original_data = data.to_dict('records')
-        df_work = pd.DataFrame(index=data.index)
-        
-        # Mapear columnas según especificación (vectorizado)
-        if x_col and x_col in data.columns:
-            df_work['x'] = data[x_col]
-        elif 'x' in data.columns:
-            df_work['x'] = data['x']
-        
-        if y_col and y_col in data.columns:
-            df_work['y'] = data[y_col]
-        elif 'y' in data.columns:
-            df_work['y'] = data['y']
-        
-        if category_col and category_col in data.columns:
-            df_work['category'] = data[category_col]
-        elif 'category' in data.columns:
-            df_work['category'] = data['category']
-        
-        if size_col and size_col in data.columns:
-            df_work['size'] = data[size_col]
-        if color_col and color_col in data.columns:
-            df_work['color'] = data[color_col]
-        
-        processed_data = df_work.to_dict('records')
-        
-        # Agregar referencias a filas originales e índices
-        for idx, item in enumerate(processed_data):
-            item['_original_row'] = original_data[idx]
-            item['_original_index'] = int(data.index[idx])
-        
-        return processed_data, original_data
+    if has_pandas():
+        pd = get_pandas()
+        if pd is not None:
+            try:
+                # ✅ CRIT-001, CRIT-007: Usar validate_dataframe() para validar DataFrame y columnas
+                if isinstance(data, pd.DataFrame):
+                    validate_dataframe(data, allow_empty=True)
+                    
+                    original_data = data.to_dict('records')
+                    df_work = pd.DataFrame(index=data.index)
+                
+                    # Mapear columnas según especificación (vectorizado)
+                    if x_col and x_col in data.columns:
+                        df_work['x'] = data[x_col]
+                    elif 'x' in data.columns:
+                        df_work['x'] = data['x']
+                    
+                    if y_col and y_col in data.columns:
+                        df_work['y'] = data[y_col]
+                    elif 'y' in data.columns:
+                        df_work['y'] = data['y']
+                    
+                    if category_col and category_col in data.columns:
+                        df_work['category'] = data[category_col]
+                    elif 'category' in data.columns:
+                        df_work['category'] = data['category']
+                    
+                    if size_col and size_col in data.columns:
+                        df_work['size'] = data[size_col]
+                    if color_col and color_col in data.columns:
+                        df_work['color'] = data[color_col]
+                    
+                    processed_data = df_work.to_dict('records')
+                    
+                    # Agregar referencias a filas originales e índices
+                    for idx, item in enumerate(processed_data):
+                        if idx < len(original_data) and idx < len(data.index):
+                            item['_original_row'] = original_data[idx]
+                            item['_original_index'] = int(data.index[idx])
+                        else:
+                            # Fallback si hay desajuste
+                            item['_original_row'] = item.copy()
+                            item['_original_index'] = idx
+                    
+                    return processed_data, original_data
+            except (AttributeError, TypeError) as e:
+                # Fallback si hay problema accediendo DataFrame
+                raise DataError(f"Error accediendo DataFrame: {e}")
+            else:
+                # No es DataFrame, continuar con lógica de lista
+                pass
     else:
         if isinstance(data, list):
             processed_data = []
@@ -100,7 +111,7 @@ def prepare_scatter_data(data, x_col=None, y_col=None, category_col=None, size_c
             raise DataError("Los datos deben ser un DataFrame de pandas o una lista de diccionarios")
 
 
-def prepare_bar_data(data, category_col=None, value_col=None):
+def prepare_bar_data(data: Any, category_col: Optional[str] = None, value_col: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Prepara datos para bar chart.
     
@@ -111,27 +122,57 @@ def prepare_bar_data(data, category_col=None, value_col=None):
     
     Returns:
         list: Datos preparados para bar chart
+    
+    Raises:
+        DataError: Si los datos son inválidos o los parámetros no son strings válidos.
     """
+    if data is None:
+        raise DataError("data cannot be None")
+    if not isinstance(category_col, str) or not category_col:
+        raise DataError("category_col must be non-empty str")
+    if value_col is not None and (not isinstance(value_col, str) or not value_col):
+        raise DataError("value_col must be None or non-empty str")
     from collections import Counter
     
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
-        if value_col and value_col in data.columns:
-            bar_data = data.groupby(category_col)[value_col].sum().reset_index()
-            bar_data = bar_data.rename(columns={category_col: 'category', value_col: 'value'})
-            bar_data = bar_data.to_dict('records')
-        elif category_col and category_col in data.columns:
-            counts = data[category_col].value_counts()
-            bar_data = [{'category': cat, 'value': count} for cat, count in counts.items()]
-        else:
-            raise DataError("Debe especificar category_col")
-        
-        # Agregar datos originales para referencia
-        original_data = data.to_dict('records')
-        for i, bar_item in enumerate(bar_data):
-            matching_rows = [row for row in original_data if row.get(category_col) == bar_item['category']]
-            bar_item['_original_rows'] = matching_rows
-        
-        return bar_data
+    if has_pandas():
+        pd = get_pandas()
+        if pd is not None:
+            try:
+                if isinstance(data, pd.DataFrame):
+                    # ✅ CRIT-001, CRIT-007: Usar validación centralizada
+                    required_cols = []
+                    if category_col:
+                        required_cols.append(category_col)
+                    if value_col:
+                        required_cols.append(value_col)
+                    validate_dataframe(data, required_cols=required_cols if required_cols else None, allow_empty=False)
+                    
+                    if value_col and value_col in data.columns:
+                        bar_data = data.groupby(category_col)[value_col].sum().reset_index()
+                        bar_data = bar_data.rename(columns={category_col: 'category', value_col: 'value'})
+                        bar_data = bar_data.to_dict('records')
+                    elif category_col and category_col in data.columns:
+                        counts = data[category_col].value_counts()
+                        bar_data = [{'category': cat, 'value': count} for cat, count in counts.items()]
+                    else:
+                        raise DataError("Debe especificar category_col")
+                    
+                    # Agregar datos originales para referencia
+                    original_data = data.to_dict('records')
+                    for i, bar_item in enumerate(bar_data):
+                        matching_rows = [
+                            row for row in original_data 
+                            if row.get(category_col, None) == bar_item['category']
+                        ]
+                        bar_item['_original_rows'] = matching_rows
+                    
+                    return bar_data
+            except (AttributeError, TypeError) as e:
+                # Fallback si hay problema accediendo DataFrame
+                raise DataError(f"Error accediendo DataFrame: {e}")
+            else:
+                # No es DataFrame, continuar con lógica de lista
+                pass
     else:
         if isinstance(data, list):
             if value_col:
@@ -152,7 +193,14 @@ def prepare_bar_data(data, category_col=None, value_col=None):
             
             # Agregar datos originales
             for bar_item in bar_data:
-                matching_rows = [row for row in data if row.get(category_col or 'category') == bar_item['category']]
+                matching_rows = [
+                    row for row in data 
+                    if row.get(category_col or 'category', None) == bar_item['category']
+                ]
+                # Validación opcional: advertir si no se encuentran filas
+                if not matching_rows:
+                    # No imprimir advertencia aquí para evitar ruido, pero está validado
+                    pass
                 bar_item['_original_rows'] = matching_rows
             
             return bar_data
@@ -160,7 +208,7 @@ def prepare_bar_data(data, category_col=None, value_col=None):
             raise DataError("Los datos deben ser un DataFrame de pandas o una lista de diccionarios")
 
 
-def prepare_histogram_data(data, value_col=None, bins=10):
+def prepare_histogram_data(data: Any, value_col: Optional[str] = None, bins: int = 10) -> List[Dict[str, Any]]:
     """
     Prepara datos para histograma.
     
@@ -171,18 +219,43 @@ def prepare_histogram_data(data, value_col=None, bins=10):
     
     Returns:
         list: Datos preparados para histograma con _original_rows por bin
+    
+    Raises:
+        DataError: Si los datos son inválidos o los parámetros no son válidos.
     """
+    if data is None:
+        raise DataError("data cannot be None")
+    if value_col is not None and (not isinstance(value_col, str) or not value_col):
+        raise DataError("value_col must be None or non-empty str")
+    if not isinstance(bins, int) or bins <= 0:
+        raise DataError(f"bins must be positive int, received: {bins!r}")
     import math
     
     values = []
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
-        if not value_col or value_col not in data.columns:
-            raise DataError("Debe especificar value_col para histograma con DataFrame")
-        series = data[value_col].dropna()
-        try:
-            values = series.astype(float).tolist()
-        except Exception:
-            values = [float(v) for v in series.tolist()]
+    if has_pandas():
+        pd = get_pandas()
+        if pd is not None:
+            try:
+                if isinstance(data, pd.DataFrame):
+                    # ✅ CRIT-001, CRIT-007: Usar validación centralizada
+                    required_cols = [value_col] if value_col else None
+                    validate_dataframe(data, required_cols=required_cols, allow_empty=False)
+                    
+                    if not value_col or not isinstance(value_col, str) or not value_col.strip():
+                        raise DataError("value_col debe ser un string no vacío para histograma con DataFrame")
+                    if value_col not in data.columns:
+                        raise DataError(
+                            f"Columna '{value_col}' no existe en el DataFrame. "
+                            f"Columnas disponibles: {list(data.columns)}"
+                        )
+                    
+                    series = data[value_col].dropna()
+                    try:
+                        values = series.astype(float).tolist()
+                    except (ValueError, TypeError):
+                        values = [float(v) for v in series.tolist()]
+            except (AttributeError, TypeError) as e:
+                raise DataError(f"Error accediendo DataFrame: {e}")
     else:
         if not isinstance(data, list):
             raise DataError("Datos inválidos para histograma")
@@ -203,8 +276,12 @@ def prepare_histogram_data(data, value_col=None, bins=10):
     if isinstance(bins, int):
         if bins <= 0:
             bins = 10
-        step = (vmax - vmin) / bins if vmax > vmin else 1.0
+        if vmax > vmin:
+            step = (vmax - vmin) / bins
         edges = [vmin + i * step for i in range(bins + 1)]
+        else:
+            # Todos los valores son iguales - crear un solo bin
+            edges = [vmin - 0.5, vmax + 0.5]
     else:
         edges = list(bins)
         edges.sort()
@@ -212,9 +289,15 @@ def prepare_histogram_data(data, value_col=None, bins=10):
     # Almacenar filas originales para cada bin
     bin_rows = [[] for _ in range(len(edges) - 1)]
     
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
-        original_data = data.to_dict('records')
-        for row in original_data:
+    if has_pandas():
+        pd = get_pandas()
+        if pd is not None:
+            try:
+                if isinstance(data, pd.DataFrame):
+                    # ✅ CRIT-001, CRIT-007: Validar DataFrame antes de acceder
+                    validate_dataframe(data, allow_empty=False)
+            original_data = data.to_dict('records')
+            for row in original_data:
             v = row.get(value_col)
             if v is not None:
                 try:
@@ -227,8 +310,28 @@ def prepare_histogram_data(data, value_col=None, bins=10):
                             break
                     if idx is not None:
                         bin_rows[idx].append(row)
-                except Exception:
+                            except (ValueError, TypeError):
                     continue
+            except (AttributeError, TypeError) as e:
+                raise DataError(f"Error accediendo DataFrame: {e}")
+        else:
+            # Si no es DataFrame, tratar como lista
+            items = data if isinstance(data, list) else []
+            for item in items:
+                v = item.get(value_col or 'value')
+                if v is not None:
+                    try:
+                        v_float = float(v)
+                        idx = None
+                        for i in range(len(edges) - 1):
+                            left, right = edges[i], edges[i + 1]
+                            if (v_float >= left and v_float < right) or (i == len(edges) - 2 and v_float == right):
+                                idx = i
+                                break
+                        if idx is not None:
+                            bin_rows[idx].append(item)
+                    except Exception:
+                        continue
     else:
         items = data if isinstance(data, list) else []
         for item in items:
@@ -259,7 +362,7 @@ def prepare_histogram_data(data, value_col=None, bins=10):
     return hist_data
 
 
-def prepare_boxplot_data(data, category_col=None, value_col=None):
+def prepare_boxplot_data(data: Any, category_col: Optional[str] = None, value_col: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Prepara datos para boxplot.
     
@@ -270,7 +373,16 @@ def prepare_boxplot_data(data, category_col=None, value_col=None):
     
     Returns:
         list: Datos preparados para boxplot
+    
+    Raises:
+        DataError: Si los datos son inválidos o los parámetros no son strings válidos.
     """
+    if data is None:
+        raise DataError("data cannot be None")
+    if category_col is not None and (not isinstance(category_col, str) or not category_col):
+        raise DataError("category_col must be None or non-empty str")
+    if value_col is not None and (not isinstance(value_col, str) or not value_col):
+        raise DataError("value_col must be None or non-empty str")
     import statistics
     
     def five_num_summary(values_list):
@@ -300,19 +412,38 @@ def prepare_boxplot_data(data, category_col=None, value_col=None):
         }
     
     box_data = []
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
-        if value_col is None or value_col not in data.columns:
-            raise DataError("Debe especificar value_col para boxplot con DataFrame")
-        if category_col and category_col in data.columns:
-            grouped = data.groupby(category_col)
-            for cat, subdf in grouped:
-                summary = five_num_summary(subdf[value_col].dropna().tolist())
+    if has_pandas():
+        pd = get_pandas()
+        if pd is not None:
+            try:
+                if isinstance(data, pd.DataFrame):
+                    # ✅ CRIT-001, CRIT-007: Usar validación centralizada
+                    required_cols = []
+                    if category_col:
+                        required_cols.append(category_col)
+                    if value_col:
+                        required_cols.append(value_col)
+                    validate_dataframe(data, required_cols=required_cols if required_cols else None, allow_empty=False)
+                    
+                    if value_col is None or value_col not in data.columns:
+                        raise DataError("Debe especificar value_col para boxplot con DataFrame")
+                    if category_col and category_col in data.columns:
+                        grouped = data.groupby(category_col)
+                        for cat, subdf in grouped:
+                            summary = five_num_summary(subdf[value_col].dropna().tolist())
+                            if summary:
+                                box_data.append({'category': cat, **summary})
+            else:
+                summary = five_num_summary(data[value_col].dropna().tolist())
                 if summary:
-                    box_data.append({'category': cat, **summary})
-        else:
-            summary = five_num_summary(data[value_col].dropna().tolist())
-            if summary:
-                box_data.append({'category': 'All', **summary})
+                    box_data.append({'category': 'All', **summary})
+                    return box_data
+                except (AttributeError, TypeError) as e:
+                    # Fallback si hay problema accediendo DataFrame
+                    raise DataError(f"Error accediendo DataFrame: {e}")
+            else:
+                # No es DataFrame, continuar con lógica de lista
+                pass
     else:
         if not isinstance(data, list):
             raise DataError("Datos inválidos para boxplot")
@@ -334,7 +465,8 @@ def prepare_boxplot_data(data, category_col=None, value_col=None):
     return box_data
 
 
-def prepare_heatmap_data(data, x_col=None, y_col=None, value_col=None):
+def prepare_heatmap_data(data: Any, x_col: Optional[str] = None, y_col: Optional[str] = None, 
+                         value_col: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[str], List[str]]:
     """
     Prepara datos para heatmap.
     
@@ -346,43 +478,66 @@ def prepare_heatmap_data(data, x_col=None, y_col=None, value_col=None):
     
     Returns:
         tuple: (cells, x_labels, y_labels)
+    
+    Raises:
+        DataError: Si los datos son inválidos o los parámetros no son strings válidos.
     """
+    if data is None:
+        raise DataError("data cannot be None")
+    if x_col is not None and (not isinstance(x_col, str) or not x_col):
+        raise DataError("x_col must be None or non-empty str")
+    if y_col is not None and (not isinstance(y_col, str) or not y_col):
+        raise DataError("y_col must be None or non-empty str")
+    if value_col is not None and (not isinstance(value_col, str) or not value_col):
+        raise DataError("value_col must be None or non-empty str")
     cells = []
     x_labels, y_labels = [], []
     
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
-        if value_col and x_col and y_col:
-            df = data[[x_col, y_col, value_col]].dropna()
-            x_labels = df[x_col].astype(str).unique().tolist()
-            y_labels = df[y_col].astype(str).unique().tolist()
-            cells = [
-                {'x': str(r[x_col]), 'y': str(r[y_col]), 'value': float(r[value_col])}
-                for _, r in df.iterrows()
-            ]
-        elif x_col is None and y_col is None and value_col is None:
-            # Matriz: usar índices y columnas automáticamente
-            index_list = data.index.tolist()
-            cols_list = data.columns.tolist()
-            
-            if len(index_list) == len(cols_list) and set(index_list) == set(cols_list):
-                cols = sorted(cols_list)
-                x_labels = cols
-                y_labels = cols
-                for i, xi in enumerate(cols):
-                    for j, yj in enumerate(cols):
-                        val = data.loc[yj, xi]
-                        if pd.notna(val):
-                            cells.append({'x': str(xi), 'y': str(yj), 'value': float(val)})
+    if has_pandas():
+        pd = get_pandas()
+        if pd is not None:
+            try:
+                if isinstance(data, pd.DataFrame):
+                    # ✅ CRIT-001, CRIT-007: Validar DataFrame antes de acceder
+                    required_cols = []
+                    if value_col and x_col and y_col:
+                        required_cols = [x_col, y_col, value_col]
+                    validate_dataframe(data, required_cols=required_cols if required_cols else None, allow_empty=False)
+                    
+                    if value_col and x_col and y_col:
+                        df = data[[x_col, y_col, value_col]].dropna()
+                        x_labels = df[x_col].astype(str).unique().tolist()
+                        y_labels = df[y_col].astype(str).unique().tolist()
+                        cells = [
+                            {'x': str(r[x_col]), 'y': str(r[y_col]), 'value': float(r[value_col])}
+                            for _, r in df.iterrows()
+                        ]
+                    elif x_col is None and y_col is None and value_col is None:
+                        # Matriz: usar índices y columnas automáticamente
+                        index_list = data.index.tolist()
+                        cols_list = data.columns.tolist()
+                
+                if len(index_list) == len(cols_list) and set(index_list) == set(cols_list):
+                    cols = sorted(cols_list)
+                    x_labels = cols
+                    y_labels = cols
+                    for i, xi in enumerate(cols):
+                        for j, yj in enumerate(cols):
+                            val = data.loc[yj, xi]
+                            if pd.notna(val):
+                                cells.append({'x': str(xi), 'y': str(yj), 'value': float(val)})
+                else:
+                    x_labels = cols_list
+                    y_labels = index_list
+                    for i, y_val in enumerate(data.index):
+                        for j, x_val in enumerate(data.columns):
+                            val = data.iloc[i, j]
+                            if pd.notna(val):
+                                cells.append({'x': str(x_val), 'y': str(y_val), 'value': float(val)})
             else:
-                x_labels = cols_list
-                y_labels = index_list
-                for i, y_val in enumerate(data.index):
-                    for j, x_val in enumerate(data.columns):
-                        val = data.iloc[i, j]
-                        if pd.notna(val):
-                            cells.append({'x': str(x_val), 'y': str(y_val), 'value': float(val)})
-        else:
-            raise DataError("Especifique x_col, y_col y value_col para heatmap, o pase una matriz sin especificar columnas")
+                raise DataError("Especifique x_col, y_col y value_col para heatmap, o pase una matriz sin especificar columnas")
+            except (AttributeError, TypeError) as e:
+                raise DataError(f"Error accediendo DataFrame: {e}")
     else:
         if not isinstance(data, list):
             raise DataError("Datos inválidos para heatmap")
@@ -397,7 +552,8 @@ def prepare_heatmap_data(data, x_col=None, y_col=None, value_col=None):
     return cells, x_labels, y_labels
 
 
-def prepare_line_data(data, x_col=None, y_col=None, series_col=None):
+def prepare_line_data(data: Any, x_col: Optional[str] = None, y_col: Optional[str] = None, 
+                      series_col: Optional[str] = None) -> Dict[str, Any]:
     """
     Prepara datos para line chart.
     
@@ -409,21 +565,42 @@ def prepare_line_data(data, x_col=None, y_col=None, series_col=None):
     
     Returns:
         dict: Datos preparados con 'series'
+    
+    Raises:
+        DataError: Si los datos son inválidos o los parámetros no son strings válidos.
     """
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
-        if x_col is None or y_col is None:
-            raise DataError("x_col e y_col son requeridos para line plot")
-        df = data[[x_col, y_col] + ([series_col] if series_col else [])].dropna()
-        if series_col:
-            series_names = df[series_col].unique().tolist()
-            series = {}
-            for name in series_names:
-                sdf = df[df[series_col] == name].sort_values(by=x_col)
-                series[name] = [{'x': float(x), 'y': float(y), 'series': str(name)} for x, y in zip(sdf[x_col], sdf[y_col])]
-            return {'series': series}
-        else:
-            sdf = df.sort_values(by=x_col)
-            return {'series': {'default': [{'x': float(x), 'y': float(y)} for x, y in zip(sdf[x_col], sdf[y_col])]}}
+    if data is None:
+        raise DataError("data cannot be None")
+    if not isinstance(x_col, str) or not x_col:
+        raise DataError("x_col must be non-empty str")
+    if not isinstance(y_col, str) or not y_col:
+        raise DataError("y_col must be non-empty str")
+    if series_col is not None and (not isinstance(series_col, str) or not series_col):
+        raise DataError("series_col must be None or non-empty str")
+    if has_pandas():
+        pd = get_pandas()
+        if pd is not None:
+            try:
+                if isinstance(data, pd.DataFrame):
+                    # ✅ CRIT-001, CRIT-007: Validar DataFrame antes de acceder
+                    required_cols = [x_col, y_col] + ([series_col] if series_col else [])
+                    validate_dataframe(data, required_cols=required_cols, allow_empty=False)
+                    
+                    if x_col is None or y_col is None:
+                        raise DataError("x_col e y_col son requeridos para line plot")
+                    df = data[[x_col, y_col] + ([series_col] if series_col else [])].dropna()
+                    if series_col:
+                        series_names = df[series_col].unique().tolist()
+                        series = {}
+                        for name in series_names:
+                            sdf = df[df[series_col] == name].sort_values(by=x_col)
+                            series[name] = [{'x': float(x), 'y': float(y), 'series': str(name)} for x, y in zip(sdf[x_col], sdf[y_col])]
+                        return {'series': series}
+                    else:
+                        sdf = df.sort_values(by=x_col)
+                        return {'series': {'default': [{'x': float(x), 'y': float(y)} for x, y in zip(sdf[x_col], sdf[y_col])]}}
+            except (AttributeError, TypeError) as e:
+                raise DataError(f"Error accediendo DataFrame: {e}")
     else:
         items = [d for d in (data or []) if x_col in d and y_col in d]
         if series_col:
@@ -439,7 +616,7 @@ def prepare_line_data(data, x_col=None, y_col=None, series_col=None):
             return {'series': {'default': pts}}
 
 
-def prepare_pie_data(data, category_col=None, value_col=None):
+def prepare_pie_data(data: Any, category_col: Optional[str] = None, value_col: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Prepara datos para pie chart.
     
@@ -450,42 +627,61 @@ def prepare_pie_data(data, category_col=None, value_col=None):
     
     Returns:
         list: Datos preparados para pie chart con _original_rows
+    
+    Raises:
+        DataError: Si los datos son inválidos o category_col no es string válido.
     """
+    if data is None:
+        raise DataError("data cannot be None")
+    if not isinstance(category_col, str) or not category_col:
+        raise DataError("category_col must be non-empty str")
+    if value_col is not None and (not isinstance(value_col, str) or not value_col):
+        raise DataError("value_col must be None or non-empty str")
     from collections import Counter, defaultdict
     
     slices = []
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
-        if category_col is None:
-            raise DataError("category_col requerido para pie")
-        
-        original_data = data.to_dict('records')
-        category_rows = defaultdict(list)
-        
-        for row in original_data:
-            cat = row.get(category_col)
-            if cat is not None:
-                category_rows[str(cat)].append(row)
-        
-        if value_col and value_col in data.columns:
-            agg = data.groupby(category_col)[value_col].sum().reset_index()
-            slices = [
-                {
-                    'category': str(r[category_col]),
-                    'value': float(r[value_col]),
-                    '_original_rows': category_rows.get(str(r[category_col]), [])
-                }
-                for _, r in agg.iterrows()
-            ]
-        else:
-            counts = data[category_col].value_counts()
-            slices = [
-                {
-                    'category': str(cat),
-                    'value': int(cnt),
-                    '_original_rows': category_rows.get(str(cat), [])
-                }
-                for cat, cnt in counts.items()
-            ]
+    if has_pandas():
+        pd = get_pandas()
+        if pd is not None:
+            try:
+                if isinstance(data, pd.DataFrame):
+                    # ✅ CRIT-001, CRIT-007: Validar DataFrame antes de acceder
+                    required_cols = [category_col] + ([value_col] if value_col else [])
+                    validate_dataframe(data, required_cols=required_cols, allow_empty=False)
+                    
+                    if category_col is None:
+                        raise DataError("category_col requerido para pie")
+                    
+                    original_data = data.to_dict('records')
+                    category_rows = defaultdict(list)
+                    
+                    for row in original_data:
+                        cat = row.get(category_col)
+                        if cat is not None:
+                            category_rows[str(cat)].append(row)
+                    
+                    if value_col and value_col in data.columns:
+                agg = data.groupby(category_col)[value_col].sum().reset_index()
+                slices = [
+                    {
+                        'category': str(r[category_col]),
+                        'value': float(r[value_col]),
+                        '_original_rows': category_rows.get(str(r[category_col]), [])
+                    }
+                    for _, r in agg.iterrows()
+                ]
+            else:
+                counts = data[category_col].value_counts()
+                slices = [
+                    {
+                        'category': str(cat),
+                        'value': int(cnt),
+                        '_original_rows': category_rows.get(str(cat), [])
+                    }
+                    for cat, cnt in counts.items()
+                ]
+            except (AttributeError, TypeError) as e:
+                raise DataError(f"Error accediendo DataFrame: {e}")
     else:
         items = data or []
         category_rows = defaultdict(list)
@@ -526,7 +722,8 @@ def prepare_pie_data(data, category_col=None, value_col=None):
     return slices
 
 
-def prepare_grouped_bar_data(data, main_col=None, sub_col=None, value_col=None):
+def prepare_grouped_bar_data(data: Any, main_col: Optional[str] = None, sub_col: Optional[str] = None, 
+                            value_col: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[str], List[str]]:
     """
     Prepara datos para grouped bar chart.
     
@@ -538,19 +735,42 @@ def prepare_grouped_bar_data(data, main_col=None, sub_col=None, value_col=None):
     
     Returns:
         tuple: (rows, groups, series)
+    
+    Raises:
+        DataError: Si los datos son inválidos o los parámetros no son strings válidos.
     """
+    if data is None:
+        raise DataError("data cannot be None")
+    if not isinstance(main_col, str) or not main_col:
+        raise DataError("main_col must be non-empty str")
+    if not isinstance(sub_col, str) or not sub_col:
+        raise DataError("sub_col must be non-empty str")
+    if value_col is not None and (not isinstance(value_col, str) or not value_col):
+        raise DataError("value_col must be None or non-empty str")
     rows = []
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
-        if value_col and value_col in data.columns:
-            agg = data.groupby([main_col, sub_col])[value_col].sum().reset_index()
-            for _, r in agg.iterrows():
-                rows.append({'group': r[main_col], 'series': r[sub_col], 'value': float(r[value_col])})
-        else:
-            counts = data.groupby([main_col, sub_col]).size().reset_index(name='value')
-            for _, r in counts.iterrows():
-                rows.append({'group': r[main_col], 'series': r[sub_col], 'value': float(r['value'])})
-        groups = agg[main_col].unique().tolist() if 'agg' in locals() else counts[main_col].unique().tolist()
-        series = agg[sub_col].unique().tolist() if 'agg' in locals() else counts[sub_col].unique().tolist()
+    if has_pandas():
+        pd = get_pandas()
+        if pd is not None:
+            try:
+                if isinstance(data, pd.DataFrame):
+                    # ✅ CRIT-001, CRIT-007: Validar DataFrame antes de acceder
+                    required_cols = [main_col, sub_col] + ([value_col] if value_col else [])
+                    validate_dataframe(data, required_cols=required_cols, allow_empty=False)
+                    
+                    if value_col and value_col in data.columns:
+                        agg = data.groupby([main_col, sub_col])[value_col].sum().reset_index()
+                        for _, r in agg.iterrows():
+                            rows.append({'group': r[main_col], 'series': r[sub_col], 'value': float(r[value_col])})
+                        groups = agg[main_col].unique().tolist()
+                        series = agg[sub_col].unique().tolist()
+                    else:
+                        counts = data.groupby([main_col, sub_col]).size().reset_index(name='value')
+                        for _, r in counts.iterrows():
+                            rows.append({'group': r[main_col], 'series': r[sub_col], 'value': float(r['value'])})
+                        groups = counts[main_col].unique().tolist()
+                        series = counts[sub_col].unique().tolist()
+            except (AttributeError, TypeError) as e:
+                raise DataError(f"Error accediendo DataFrame: {e}")
     else:
         from collections import defaultdict
         if not isinstance(data, list):

@@ -1,31 +1,8 @@
 """
 Agregadores de datos para BESTLIB
 """
-# Import de pandas de forma defensiva para evitar errores de importación circular
-HAS_PANDAS = False
-pd = None
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    import sys
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in sys.modules.keys() if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    import pandas as pd
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
-
+# ✅ MED-003: Eliminado HAS_PANDAS - usar has_pandas() y get_pandas() siempre
+from ..utils.imports import has_pandas, get_pandas
 from collections import defaultdict
 
 
@@ -42,7 +19,10 @@ def group_by_category(data, category_col, value_col=None, agg_func='sum'):
     Returns:
         list: Datos agrupados
     """
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
+    # ✅ MED-003: Usar has_pandas() y get_pandas()
+    if has_pandas():
+        pd = get_pandas()
+        if pd is not None and isinstance(data, pd.DataFrame):
         if value_col and value_col in data.columns:
             if agg_func == 'sum':
                 grouped = data.groupby(category_col)[value_col].sum().reset_index()
@@ -89,11 +69,14 @@ def bin_numeric_data(data, column, bins=10):
     import math
     
     values = []
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
+    # ✅ MED-003: Usar has_pandas() y get_pandas()
+    if has_pandas():
+        pd = get_pandas()
+        if pd is not None and isinstance(data, pd.DataFrame):
         series = data[column].dropna()
         try:
             values = series.astype(float).tolist()
-        except Exception:
+            except (ValueError, TypeError):
             values = [float(v) for v in series.tolist()]
     else:
         for item in data:
@@ -150,7 +133,10 @@ def calculate_statistics(data, column):
     import statistics
     
     values = []
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
+    # ✅ MED-003: Usar has_pandas() y get_pandas()
+    if has_pandas():
+        pd = get_pandas()
+        if pd is not None and isinstance(data, pd.DataFrame):
         series = data[column].dropna()
         values = series.astype(float).tolist()
     else:

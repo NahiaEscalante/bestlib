@@ -6,6 +6,7 @@ from ..data.preparators import prepare_bar_data
 from ..data.validators import validate_bar_data
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
+from typing import Any, Dict, List, Optional
 
 
 class BarChart(ChartBase):
@@ -15,22 +16,61 @@ class BarChart(ChartBase):
     def chart_type(self):
         return 'bar'
     
-    def validate_data(self, data, category_col=None, **kwargs):
-        """Valida datos para bar chart"""
-        if not category_col:
-            raise ChartError("category_col es requerido para bar chart")
+    def validate_data(self, data: Any, category_col: Optional[str] = None, **kwargs) -> None:
+        """
+        Valida datos para bar chart.
+        
+        Args:
+            data: DataFrame o lista de diccionarios
+            category_col: Nombre de columna para categorías
+            **kwargs: Otros parámetros
+        
+        Raises:
+            ChartError: Si los datos no son válidos o los parámetros son inválidos.
+        """
+        if data is None:
+            raise ChartError("data cannot be None")
+        if not isinstance(category_col, str) or not category_col:
+            raise ChartError("category_col must be non-empty str")
         
         try:
             validate_bar_data(data, category_col, value_col=kwargs.get('value_col'))
         except DataError as e:
             raise ChartError(f"Datos inválidos para bar chart: {e}")
     
-    def prepare_data(self, data, category_col=None, value_col=None, **kwargs):
-        """Prepara datos para bar chart"""
+    def prepare_data(self, data: Any, category_col: Optional[str] = None, value_col: Optional[str] = None, **kwargs) -> List[Dict[str, Any]]:
+        """
+        Prepara datos para bar chart.
+        
+        Args:
+            data: DataFrame o lista de diccionarios
+            category_col: Nombre de columna para categorías
+            value_col: Nombre de columna para valores (opcional)
+            **kwargs: Otros parámetros
+        
+        Returns:
+            list: Datos preparados para bar chart
+        """
         return prepare_bar_data(data, category_col=category_col, value_col=value_col)
     
-    def get_spec(self, data, category_col=None, value_col=None, **kwargs):
-        """Genera spec para bar chart"""
+    def get_spec(self, data: Any, category_col: Optional[str] = None, value_col: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+        """
+        Genera spec para bar chart.
+        
+        Args:
+            data: DataFrame o lista de diccionarios
+            category_col: Nombre de columna para categorías
+            value_col: Nombre de columna para valores (opcional)
+            **kwargs: Opciones adicionales
+        
+        Returns:
+            dict: Spec conforme a BESTLIB Visualization Spec
+        
+        Raises:
+            ChartError: Si los datos o parámetros son inválidos.
+        """
+        if data is None:
+            raise ChartError("data cannot be None")
         self.validate_data(data, category_col=category_col, **kwargs)
         bar_data = self.prepare_data(data, category_col=category_col, value_col=value_col, **kwargs)
         

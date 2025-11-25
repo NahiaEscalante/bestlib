@@ -7,42 +7,13 @@ from ..data.validators import validate_scatter_data
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
 
-# Import de pandas y numpy de forma defensiva para evitar errores de importación circular
-import sys  # sys siempre está disponible, importarlo fuera del try
-HAS_PANDAS = False
-HAS_NUMPY = False
-pd = None
-np = None
+# ✅ MED-003: Eliminado HAS_PANDAS - usar has_pandas() y get_pandas() siempre
+from ...utils.imports import has_pandas, get_pandas
 
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            # Pandas está corrupto, limpiarlo
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    # Intentar importar pandas limpio
-    import pandas as pd
-    # Verificar que pandas esté completamente inicializado
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
-
+# Import numpy directamente (no hay función helper para numpy)
 try:
     import numpy as np
-    HAS_NUMPY = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_NUMPY = False
+except (ImportError, AttributeError, ModuleNotFoundError):
     np = None
 
 
@@ -88,12 +59,18 @@ class Hist2dChart(ChartBase):
         Returns:
             dict: Datos preparados con bins y conteos
         """
-        if not HAS_NUMPY:
+        if np is None:
             raise ChartError("numpy es requerido para hist2d")
         
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            x_values = data[x_col].dropna().values
-            y_values = data[y_col].dropna().values
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                x_values = data[x_col].dropna().values
+                y_values = data[y_col].dropna().values
+            else:
+                x_values = np.array([d[x_col] for d in data if x_col in d and d[x_col] is not None])
+                y_values = np.array([d[y_col] for d in data if y_col in d and d[y_col] is not None])
         else:
             x_values = np.array([d[x_col] for d in data if x_col in d and d[x_col] is not None])
             y_values = np.array([d[y_col] for d in data if y_col in d and d[y_col] is not None])

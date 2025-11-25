@@ -1,22 +1,27 @@
 # ============================================================================
 # BESTLIB - Modularized Version
 # ============================================================================
-# Mantener compatibilidad hacia atrás con API original
-# Intentar usar versión refactorizada, fallback a original
+# Importar MatrixLayout desde la versión modular (preferida)
 try:
     from .layouts.matrix import MatrixLayout
-except (ImportError, ModuleNotFoundError, AttributeError):
+except (ImportError, ModuleNotFoundError, AttributeError) as e:
+    # Si falla la importación modular, intentar legacy como último recurso
+    import warnings
+    warnings.warn(
+        f"No se pudo importar MatrixLayout desde layouts.matrix: {e}. "
+        "Intentando versión legacy...",
+        ImportWarning,
+        stacklevel=2
+    )
     try:
-        # Intentar importar desde layouts directamente
-        from . import layouts
-        MatrixLayout = layouts.MatrixLayout
-    except (ImportError, ModuleNotFoundError, AttributeError):
-        # Fallback a versión legacy (siempre disponible)
-        try:
-            from .matrix import MatrixLayout
-        except ImportError:
-            # Si incluso esto falla, crear un stub para evitar errores
-            MatrixLayout = None
+        from .matrix import MatrixLayout
+    except ImportError:
+        # Si incluso esto falla, crear un stub para evitar errores
+        MatrixLayout = None
+        raise ImportError(
+            "No se pudo importar MatrixLayout. "
+            "Verifica que todas las dependencias estén instaladas."
+        ) from e
 
 # Intentar importar módulo reactivo (opcional)
 # Estructura modular: reactive/ (SelectionModel, ReactiveEngine, etc.) y layouts/reactive.py (ReactiveMatrixLayout)

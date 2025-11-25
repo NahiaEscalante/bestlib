@@ -4,6 +4,7 @@ Asset Manager - Gestión de assets JS y CSS
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 
 class AssetManager:
@@ -16,12 +17,12 @@ class AssetManager:
     _d3_cache = None
     
     @classmethod
-    def get_base_path(cls):
+    def get_base_path(cls) -> Path:
         """Retorna la ruta base del paquete BESTLIB"""
         return Path(__file__).parent.parent
     
     @classmethod
-    def load_js(cls, force_reload=False):
+    def load_js(cls, force_reload: bool = False) -> str:
         """
         Carga y cachea el archivo matrix.js.
         
@@ -30,19 +31,33 @@ class AssetManager:
         
         Returns:
             str: Contenido del archivo JS
+        
+        Raises:
+            TypeError: Si force_reload no es bool
         """
+        if not isinstance(force_reload, bool):
+            raise TypeError(f"force_reload debe ser bool, recibido: {type(force_reload).__name__}")
+        
         if cls._js_cache is None or force_reload:
             js_path = cls.get_base_path() / "matrix.js"
             if js_path.exists():
-                with open(js_path, "r", encoding="utf-8") as f:
-                    cls._js_cache = f.read()
+                try:
+                    with open(js_path, "r", encoding="utf-8") as f:
+                        cls._js_cache = f.read()
+                except (FileNotFoundError, PermissionError) as e:
+                    print(f"⚠️ [AssetManager] Error al leer {js_path}: {e}")
+                    cls._js_cache = ""
+                except UnicodeDecodeError as e:
+                    print(f"⚠️ [AssetManager] Error de encoding en {js_path}: {e}")
+                    cls._js_cache = ""
             else:
+                print(f"⚠️ [AssetManager] matrix.js no encontrado en: {js_path}")
                 cls._js_cache = ""
         
         return cls._js_cache
     
     @classmethod
-    def load_css(cls, force_reload=False):
+    def load_css(cls, force_reload: bool = False) -> str:
         """
         Carga y cachea el archivo style.css.
         
@@ -51,19 +66,33 @@ class AssetManager:
         
         Returns:
             str: Contenido del archivo CSS
+        
+        Raises:
+            TypeError: Si force_reload no es bool
         """
+        if not isinstance(force_reload, bool):
+            raise TypeError(f"force_reload debe ser bool, recibido: {type(force_reload).__name__}")
+        
         if cls._css_cache is None or force_reload:
             css_path = cls.get_base_path() / "style.css"
             if css_path.exists():
-                with open(css_path, "r", encoding="utf-8") as f:
-                    cls._css_cache = f.read()
+                try:
+                    with open(css_path, "r", encoding="utf-8") as f:
+                        cls._css_cache = f.read()
+                except (FileNotFoundError, PermissionError) as e:
+                    print(f"⚠️ [AssetManager] Error al leer {css_path}: {e}")
+                    cls._css_cache = ""
+                except UnicodeDecodeError as e:
+                    print(f"⚠️ [AssetManager] Error de encoding en {css_path}: {e}")
+                    cls._css_cache = ""
             else:
+                print(f"⚠️ [AssetManager] style.css no encontrado en: {css_path}")
                 cls._css_cache = ""
         
         return cls._css_cache
     
     @classmethod
-    def load_d3(cls, force_reload=False):
+    def load_d3(cls, force_reload: bool = False) -> str:
         """
         Carga y cachea el archivo d3.min.js.
         
@@ -72,26 +101,40 @@ class AssetManager:
         
         Returns:
             str: Contenido del archivo D3.js
+        
+        Raises:
+            TypeError: Si force_reload no es bool
         """
+        if not isinstance(force_reload, bool):
+            raise TypeError(f"force_reload debe ser bool, recibido: {type(force_reload).__name__}")
+        
         if cls._d3_cache is None or force_reload:
             d3_path = cls.get_base_path() / "d3.min.js"
             if d3_path.exists():
-                with open(d3_path, "r", encoding="utf-8") as f:
-                    cls._d3_cache = f.read()
+                try:
+                    with open(d3_path, "r", encoding="utf-8") as f:
+                        cls._d3_cache = f.read()
+                except (FileNotFoundError, PermissionError) as e:
+                    print(f"⚠️ [AssetManager] Error al leer {d3_path}: {e}")
+                    cls._d3_cache = ""
+                except UnicodeDecodeError as e:
+                    print(f"⚠️ [AssetManager] Error de encoding en {d3_path}: {e}")
+                    cls._d3_cache = ""
             else:
+                print(f"⚠️ [AssetManager] d3.min.js no encontrado en: {d3_path}")
                 cls._d3_cache = ""
         
         return cls._d3_cache
     
     @classmethod
-    def clear_cache(cls):
+    def clear_cache(cls) -> None:
         """Limpia el cache de assets"""
         cls._js_cache = None
         cls._css_cache = None
         cls._d3_cache = None
     
     @classmethod
-    def get_all_assets(cls):
+    def get_all_assets(cls) -> dict:
         """
         Retorna todos los assets como diccionario.
         
@@ -105,7 +148,7 @@ class AssetManager:
         }
     
     @classmethod
-    def is_colab(cls):
+    def is_colab(cls) -> bool:
         """
         Detecta si el código se está ejecutando en Google Colab.
         
@@ -115,12 +158,15 @@ class AssetManager:
         return "google.colab" in sys.modules
     
     @classmethod
-    def ensure_colab_assets_loaded(cls):
+    def ensure_colab_assets_loaded(cls) -> bool:
         """
         Carga automáticamente los assets (d3.min.js, style.css) en Google Colab.
         matrix.js se incluye directamente en el JS generado, no se carga por separado.
         
         Solo se ejecuta si está en Colab y si los assets no han sido cargados previamente.
+        
+        Returns:
+            bool: True si los assets se cargaron exitosamente, False en caso contrario
         """
         if not cls.is_colab():
             return False

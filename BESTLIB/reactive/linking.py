@@ -73,8 +73,14 @@ class LinkManager:
                     if link_id in self._link_callbacks:
                         try:
                             self._link_callbacks[link_id](linked_view_id, selected_items)
+                        except (TypeError, ValueError, AttributeError) as e:
+                            print(f"⚠️ Error en callback de enlace '{link_id}': {e}")
                         except Exception as e:
-                            print(f"Error en callback de enlace '{link_id}': {e}")
+                            # Error inesperado - registrar y re-raise
+                            print(f"❌ Error inesperado en callback de enlace '{link_id}': {e}")
+                            import traceback
+                            traceback.print_exc()
+                            raise
     
     def register_link_callback(self, view_id1, view_id2, callback):
         """

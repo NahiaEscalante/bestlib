@@ -1,31 +1,8 @@
 """
 Transformadores de datos para BESTLIB
 """
-# Import de pandas de forma defensiva para evitar errores de importación circular
-HAS_PANDAS = False
-pd = None
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    import sys
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in sys.modules.keys() if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    import pandas as pd
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
-
+# ✅ MED-003: Eliminado HAS_PANDAS - usar has_pandas() y get_pandas() siempre
+from ..utils.imports import has_pandas, get_pandas
 from ..utils.json import sanitize_for_json
 
 
@@ -39,7 +16,11 @@ def dataframe_to_dicts(df):
     Returns:
         list: Lista de diccionarios
     """
-    if not HAS_PANDAS or not isinstance(df, pd.DataFrame):
+    # ✅ MED-003: Usar has_pandas() y get_pandas()
+    if not has_pandas():
+        raise ValueError("pandas no está instalado")
+    pd = get_pandas()
+    if pd is None or not isinstance(df, pd.DataFrame):
         raise ValueError("Requiere DataFrame de pandas")
     return df.to_dict('records')
 
@@ -54,8 +35,12 @@ def dicts_to_dataframe(dicts):
     Returns:
         DataFrame: DataFrame de pandas
     """
-    if not HAS_PANDAS:
+    # ✅ MED-003: Usar has_pandas() y get_pandas()
+    if not has_pandas():
         raise ValueError("pandas no está instalado")
+    pd = get_pandas()
+    if pd is None:
+        raise ValueError("pandas no está disponible")
     if not isinstance(dicts, list):
         raise ValueError("Requiere lista de diccionarios")
     return pd.DataFrame(dicts)

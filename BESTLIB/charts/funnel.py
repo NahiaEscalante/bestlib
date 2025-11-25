@@ -7,43 +7,8 @@ from ..data.validators import validate_scatter_data
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
 
-# Import de pandas y numpy de forma defensiva para evitar errores de importación circular
-import sys  # sys siempre está disponible, importarlo fuera del try
-HAS_PANDAS = False
-HAS_NUMPY = False
-pd = None
-np = None
-
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            # Pandas está corrupto, limpiarlo
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    # Intentar importar pandas limpio
-    import pandas as pd
-    # Verificar que pandas esté completamente inicializado
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
-
-try:
-    import numpy as np
-    HAS_NUMPY = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_NUMPY = False
-    np = None
+# ✅ MED-003: Eliminado HAS_PANDAS - usar has_pandas() y get_pandas() siempre
+from ...utils.imports import has_pandas, get_pandas
 
 
 class FunnelChart(ChartBase):
@@ -69,13 +34,16 @@ class FunnelChart(ChartBase):
         if not stage_col or not value_col:
             raise ChartError("stage_col y value_col son requeridos para funnel plot")
         
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            if stage_col not in data.columns:
-                raise ChartError(f"Columna '{stage_col}' no encontrada")
-            if value_col not in data.columns:
-                raise ChartError(f"Columna '{value_col}' no encontrada")
-            if not pd.api.types.is_numeric_dtype(data[value_col]):
-                raise ChartError(f"Columna '{value_col}' debe ser numérica")
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                if stage_col not in data.columns:
+                    raise ChartError(f"Columna '{stage_col}' no encontrada")
+                if value_col not in data.columns:
+                    raise ChartError(f"Columna '{value_col}' no encontrada")
+                if not pd.api.types.is_numeric_dtype(data[value_col]):
+                    raise ChartError(f"Columna '{value_col}' debe ser numérica")
         else:
             if isinstance(data, list) and len(data) > 0:
                 if stage_col not in data[0] or value_col not in data[0]:
@@ -96,26 +64,30 @@ class FunnelChart(ChartBase):
         Returns:
             dict: Datos preparados con etapas y valores
         """
-        if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            # Ordenar por valor descendente (típico en funnel)
-            data_sorted = data.sort_values(by=value_col, ascending=False).copy()
-            funnel_data = []
-            for idx, row in data_sorted.iterrows():
-                funnel_data.append({
-                    'stage': str(row[stage_col]),
-                    'value': float(row[value_col]),
-                    'index': idx
-                })
+        # ✅ MED-003: Usar has_pandas() y get_pandas()
+        if has_pandas():
+            pd = get_pandas()
+            if pd is not None and isinstance(data, pd.DataFrame):
+                # Ordenar por valor descendente (típico en funnel)
+                data_sorted = data.sort_values(by=value_col, ascending=False).copy()
+                funnel_data = []
+                for idx, row in data_sorted.iterrows():
+                    funnel_data.append({
+                        'stage': str(row[stage_col]),
+                        'value': float(row[value_col]),
+                        'index': idx
+                    })
+            else:
+                # Para listas
+                data_sorted = sorted(data, key=lambda d: d.get(value_col, 0), reverse=True)
+                funnel_data = []
+                for idx, d in enumerate(data_sorted):
+                    funnel_data.append({
+                        'stage': str(d[stage_col]),
+                        'value': float(d[value_col]),
+                        'index': idx
+                    })
         else:
-            # Para listas
-            data_sorted = sorted(data, key=lambda d: d.get(value_col, 0), reverse=True)
-            funnel_data = []
-            for idx, d in enumerate(data_sorted):
-                funnel_data.append({
-                    'stage': str(d[stage_col]),
-                    'value': float(d[value_col]),
-                    'index': idx
-                })
         
         return {'data': funnel_data}
     

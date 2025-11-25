@@ -64,14 +64,19 @@ class ChartBase(ABC):
         """
         pass
     
-    def get_js_renderer(self):
+    def get_js_renderer(self) -> str:
         """
         Retorna el nombre de la función JS que renderiza este gráfico.
         
         Returns:
             str: Nombre de función JS (ej: 'renderScatter')
+        
+        Raises:
+            ChartError: Si chart_type no es str no vacío.
         """
         chart_type = self.chart_type
+        if not isinstance(chart_type, str) or not chart_type:
+            raise ChartError(f"chart_type must be non-empty str, received: {chart_type!r}")
         # Convertir snake_case a PascalCase
         parts = chart_type.split('_')
         pascal_case = ''.join(part.capitalize() for part in parts)

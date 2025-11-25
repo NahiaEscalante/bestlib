@@ -9,12 +9,8 @@ except ImportError:
     HAS_WIDGETS = False
     widgets = None
 
-try:
-    import pandas as pd
-    HAS_PANDAS = True
-except ImportError:
-    HAS_PANDAS = False
-    pd = None
+from ..utils.imports import has_pandas, get_pandas
+from ..core.exceptions import get_logger
 
 
 def _items_to_dataframe(items):
@@ -29,31 +25,50 @@ def _items_to_dataframe(items):
         DataFrame de pandas si items no está vacío, DataFrame vacío si items está vacío,
         o None si pandas no está disponible
     """
-    if not HAS_PANDAS:
+    logger = get_logger()
+    if not has_pandas():
         if items:
-            print("⚠️ Advertencia: pandas no está disponible. Los datos no se pueden convertir a DataFrame.")
+            logger.warning("⚠️ Advertencia: pandas no está disponible. Los datos no se pueden convertir a DataFrame.")
         return None
     
     # Si ya es un DataFrame, retornar copia
-    if HAS_PANDAS and isinstance(items, pd.DataFrame):
-        return items.copy()
+    if has_pandas():
+        pd = get_pandas()
+        if pd and isinstance(items, pd.DataFrame):
+            return items.copy()
     
     # Si es None o vacío, retornar DataFrame vacío
     if not items:
-        return pd.DataFrame()
+        if has_pandas():
+            pd = get_pandas()
+            if pd:
+                return pd.DataFrame()
+        return []
     
     # ✅ CORRECCIÓN: Validar que items sea una lista
     if not isinstance(items, list):
-        print(f"⚠️ Error: items debe ser lista, recibido: {type(items)}")
+        logger.warning(f"⚠️ Error: items debe ser lista, recibido: {type(items)}")
         # Intentar convertir de todas formas
         try:
             items = list(items) if hasattr(items, '__iter__') else [items]
+        except (TypeError, ValueError) as e:
+            logger.warning(f"⚠️ Error al convertir items a lista: {e}")
+            if has_pandas():
+                pd = get_pandas()
+                if pd:
+                    return pd.DataFrame()
+            return []
         except Exception as e:
-            print(f"⚠️ Error al convertir items a lista: {e}")
-            return pd.DataFrame()
+            # Error inesperado - registrar y re-raise
+            logger.error(f"❌ Error inesperado al convertir items a lista: {e}", exc_info=True)
+            raise
     
     if len(items) == 0:
-        return pd.DataFrame()
+        if has_pandas():
+            pd = get_pandas()
+            if pd:
+                return pd.DataFrame()
+        return []
     
     # ✅ CORRECCIÓN: Validar que todos los items sean diccionarios
     # Si algunos no lo son, intentar convertirlos o filtrarlos
@@ -64,9 +79,9 @@ def _items_to_dataframe(items):
             if item and len(item) > 0:
                 valid_items.append(item)
             else:
-                print(f"⚠️ Advertencia: Item {i} es un diccionario vacío, omitiendo")
+                logger.warning(f"⚠️ Advertencia: Item {i} es un diccionario vacío, omitiendo")
         elif item is None:
-            print(f"⚠️ Advertencia: Item {i} es None, omitiendo")
+            logger.warning(f"⚠️ Advertencia: Item {i} es None, omitiendo")
         else:
             # Intentar convertir a dict si es posible
             try:
@@ -75,40 +90,59 @@ def _items_to_dataframe(items):
                 elif hasattr(item, '_asdict'):  # namedtuple
                     valid_items.append(item._asdict())
                 else:
-                    print(f"⚠️ Advertencia: Item {i} no es diccionario (tipo: {type(item)}), omitiendo")
+                    logger.warning(f"⚠️ Advertencia: Item {i} no es diccionario (tipo: {type(item)}), omitiendo")
+            except (AttributeError, TypeError) as e:
+                logger.warning(f"⚠️ Error al convertir item {i} a diccionario: {e}")
             except Exception as e:
-                print(f"⚠️ Error al convertir item {i} a diccionario: {e}")
+                # Error inesperado - registrar y re-raise
+                logger.error(f"❌ Error inesperado al convertir item {i} a diccionario: {e}", exc_info=True)
+                raise
     
     if len(valid_items) == 0:
-        print("⚠️ Advertencia: No hay items válidos para convertir a DataFrame")
-        return pd.DataFrame()
+        logger.warning("⚠️ Advertencia: No hay items válidos para convertir a DataFrame")
+        if has_pandas():
+            pd = get_pandas()
+            if pd:
+                return pd.DataFrame()
+        return []
     
     # ✅ CORRECCIÓN: Intentar conversión con mejor manejo de errores
+    if not has_pandas():
+        logger.warning("⚠️ Advertencia: pandas no está disponible para convertir items a DataFrame")
+        return []
+    
+    pd = get_pandas()
+    if pd is None:
+        logger.warning("⚠️ Advertencia: pandas no está disponible para convertir items a DataFrame")
+        return []
+    
     try:
         df = pd.DataFrame(valid_items)
         
         # Validar que el DataFrame no esté vacío si había items válidos
         if df.empty and len(valid_items) > 0:
-            print(f"⚠️ Advertencia: DataFrame resultante está vacío aunque había {len(valid_items)} items válidos")
+            logger.warning(f"⚠️ Advertencia: DataFrame resultante está vacío aunque había {len(valid_items)} items válidos")
             # Intentar debug: mostrar primer item
             if len(valid_items) > 0:
-                print(f"   Primer item válido: {list(valid_items[0].keys())[:5]}...")
+                logger.debug(f"   Primer item válido: {list(valid_items[0].keys())[:5]}...")
         
         return df
-    except Exception as e:
-        print(f"⚠️ Error al convertir items a DataFrame: {e}")
-        print(f"   Items tipo: {type(items)}, Longitud: {len(items)}")
+    except (ValueError, TypeError, KeyError) as e:
+        logger.warning(f"⚠️ Error al convertir items a DataFrame: {e}")
+        logger.debug(f"   Items tipo: {type(items)}, Longitud: {len(items)}")
         if len(valid_items) > 0:
-            print(f"   Primer item válido tipo: {type(valid_items[0])}")
+            logger.debug(f"   Primer item válido tipo: {type(valid_items[0])}")
             if isinstance(valid_items[0], dict):
-                print(f"   Primer item keys: {list(valid_items[0].keys())[:10]}")
-        
-        # ✅ MEJORADO: Re-raise en modo debug para facilitar debugging
-        import sys
-        if hasattr(sys, '_getframe') and '--debug' in sys.argv:
-            raise
-        
-        return pd.DataFrame()
+                logger.debug(f"   Primer item keys: {list(valid_items[0].keys())[:10]}")
+        if has_pandas():
+            pd = get_pandas()
+            if pd:
+                return pd.DataFrame()
+        return []
+    except Exception as e:
+        # Error inesperado - registrar con más contexto
+        logger.error(f"❌ Error inesperado al convertir items a DataFrame: {e}", exc_info=True)
+        raise
 
 
 class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
@@ -119,7 +153,8 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
         data = ReactiveData()
         
         # En cualquier celda, puedes observar cambios:
-        data.on_change(lambda items, count: print(f"Nuevos datos: {count} items"))
+        logger = get_logger()
+        data.on_change(lambda items, count: logger.debug(f"Nuevos datos: {count} items"))
         
         # Desde JavaScript (vía comm):
         data.items = [{'x': 1, 'y': 2}, ...]
@@ -141,13 +176,18 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
             self.count = kwargs.get('count', 0)
         self._callbacks = []
     
-    def on_change(self, callback):
+    def on_change(self, callback: Any) -> None:
         """
         Registra un callback que se ejecuta cuando los datos cambian.
         
         Args:
             callback: Función que recibe (items, count) como argumentos
+        
+        Raises:
+            TypeError: Si callback no es invocable.
         """
+        if not callable(callback):
+            raise TypeError(f"callback must be callable, received: {type(callback).__name__}")
         # Verificar que el callback no esté ya registrado para evitar duplicados
         callback_id = id(callback)
         for existing_callback in self._callbacks:
@@ -155,8 +195,13 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
                 return
         self._callbacks.append(callback)
     
-    def _items_changed(self, change):
-        """Se ejecuta automáticamente cuando items cambia"""
+    def _items_changed(self, change: Any) -> None:
+        """
+        Se ejecuta automáticamente cuando items cambia.
+        
+        Args:
+            change: Objeto de cambio de traitlets o diccionario con 'new' key.
+        """
         if isinstance(change, dict):
             new_items = change.get('new', [])
         else:
@@ -170,7 +215,8 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
             try:
                 callback(new_items, self.count)
             except Exception as e:
-                print(f"Error en callback: {e}")
+                logger = get_logger()
+                logger.error(f"Error en callback: {e}", exc_info=True)
     
     if HAS_WIDGETS:
         @observe('items')
@@ -178,13 +224,16 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
             """Wrapper para traitlets observe"""
             self._items_changed(change)
     
-    def update(self, items):
+    def update(self, items: Any) -> None:
         """
         Actualiza los items manualmente desde Python.
         ✅ CORRECCIÓN: Ahora maneja DataFrames correctamente.
         
         Args:
             items: Lista de diccionarios, DataFrame de pandas, o None
+        
+        Raises:
+            Exception: Si ocurre un error inesperado durante la actualización.
         """
         # Flag para evitar actualizaciones múltiples simultáneas
         if hasattr(self, '_updating') and self._updating:
@@ -195,22 +244,28 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
         try:
             if items is None:
                 items_list = []
-            elif HAS_PANDAS and isinstance(items, pd.DataFrame):
-                # ✅ CORRECCIÓN CRÍTICA: Convertir DataFrame a lista de diccionarios
-                # traitlets.List(Dict()) espera lista de dicts, no DataFrame
-                if items.empty:
-                    items_list = []
+            elif has_pandas():
+                pd = get_pandas()
+                if pd and isinstance(items, pd.DataFrame):
+                    # ✅ CORRECCIÓN CRÍTICA: Convertir DataFrame a lista de diccionarios
+                    # traitlets.List(Dict()) espera lista de dicts, no DataFrame
+                    if items.empty:
+                        items_list = []
+                    else:
+                        items_list = items.to_dict('records')
                 else:
-                    items_list = items.to_dict('records')
+                    items_list = []
             elif isinstance(items, list):
                 # ✅ CORRECCIÓN: Validar que todos los elementos sean diccionarios
                 items_list = []
                 for item in items:
                     if isinstance(item, dict):
                         items_list.append(item)
-                    elif HAS_PANDAS and isinstance(item, pd.Series):
-                        # Convertir Series a dict
-                        items_list.append(item.to_dict())
+                    elif has_pandas():
+                        pd = get_pandas()
+                        if pd and isinstance(item, pd.Series):
+                            # Convertir Series a dict
+                            items_list.append(item.to_dict())
                     else:
                         # Intentar convertir a dict
                         try:
@@ -222,7 +277,8 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
                                 # Último recurso: crear dict con el item
                                 items_list.append({'value': item})
                         except Exception as e:
-                            print(f"⚠️ [SelectionModel] Error convirtiendo item a dict: {e}")
+                            logger = get_logger()
+                            logger.warning(f"⚠️ [SelectionModel] Error convirtiendo item a dict: {e}")
                             continue
             else:
                 # Intentar convertir a lista
@@ -242,8 +298,10 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
                 else:
                     # Intentar convertir a dict
                     try:
-                        if HAS_PANDAS and isinstance(item, pd.Series):
-                            valid_items.append(item.to_dict())
+                        if has_pandas():
+                            pd = get_pandas()
+                            if pd and isinstance(item, pd.Series):
+                                valid_items.append(item.to_dict())
                         elif hasattr(item, '__dict__'):
                             valid_items.append(item.__dict__)
                         elif hasattr(item, '_asdict'):
@@ -290,7 +348,8 @@ class SelectionModel(ReactiveData):
         
         # Registrar callback
         def on_select(items, count):
-            print(f"✅ {count} puntos seleccionados")
+            logger = get_logger()
+            logger.debug(f"✅ {count} puntos seleccionados")
             
         selection.on_change(on_select)
         
