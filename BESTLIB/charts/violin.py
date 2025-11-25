@@ -145,7 +145,7 @@ class ViolinChart(ChartBase):
             category: Nombre de la categoría
         
         Returns:
-            dict: Información del violín
+            dict: Información del violín con estructura {category, profile: [{y, w}]}
         """
         if HAS_NUMPY and not isinstance(values, np.ndarray):
             values = np.array(values)
@@ -153,53 +153,42 @@ class ViolinChart(ChartBase):
         if len(values) == 0:
             return None
         
-        # Calcular estadísticas tipo boxplot
+        # Calcular KDE para la forma del violín
+        profile = []
         try:
-            if HAS_PANDAS and hasattr(values, 'quantile'):
-                q1 = float(values.quantile(0.25))
-                median = float(values.quantile(0.5))
-                q3 = float(values.quantile(0.75))
+            from scipy.stats import gaussian_kde
+            
+            # Obtener rango de valores
+            if HAS_PANDAS and hasattr(values, 'min'):
                 min_val = float(values.min())
                 max_val = float(values.max())
             elif HAS_NUMPY:
-                q1 = float(np.percentile(values, 25))
-                median = float(np.percentile(values, 50))
-                q3 = float(np.percentile(values, 75))
                 min_val = float(np.min(values))
                 max_val = float(np.max(values))
             else:
-                sorted_vals = sorted(values)
-                n = len(sorted_vals)
-                q1 = float(sorted_vals[int(n * 0.25)])
-                median = float(sorted_vals[int(n * 0.5)])
-                q3 = float(sorted_vals[int(n * 0.75)])
                 min_val = float(min(values))
                 max_val = float(max(values))
-        except (ValueError, TypeError, OverflowError):
-            return None
-        
-        # Calcular KDE para la forma del violín
-        kde_points = []
-        try:
-            from scipy.stats import gaussian_kde
             
             kde = gaussian_kde(values)
             x_range = max_val - min_val
             if x_range == 0:
                 x_range = 1.0
+            
+            # Generar puntos para el perfil
             x_eval = np.linspace(min_val - x_range * 0.1, max_val + x_range * 0.1, 100)
             density = kde(x_eval)
             
-            # Normalizar densidad para que el ancho máximo sea razonable
+            # Normalizar densidad
             max_density = np.max(density)
             if max_density > 0:
                 density = density / max_density
             
-            for x, d in zip(x_eval, density):
+            # Crear profile con estructura {y: valor, w: ancho/densidad}
+            for y_val, w_val in zip(x_eval, density):
                 try:
-                    kde_points.append({
-                        'value': float(x),
-                        'density': float(d)
+                    profile.append({
+                        'y': float(y_val),
+                        'w': float(w_val)
                     })
                 except (ValueError, TypeError, OverflowError):
                     pass
@@ -210,28 +199,44 @@ class ViolinChart(ChartBase):
                 bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
                 max_hist = np.max(hist) if np.max(hist) > 0 else 1.0
                 
-                for x, h in zip(bin_centers, hist):
+                for y_val, h in zip(bin_centers, hist):
                     try:
-                        kde_points.append({
-                            'value': float(x),
-                            'density': float(h / max_hist)
+                        profile.append({
+                            'y': float(y_val),
+                            'w': float(h / max_hist)
                         })
                     except (ValueError, TypeError, OverflowError):
                         pass
         except Exception:
-            # Si falla KDE, crear una aproximación simple
-            pass
+            # Si falla KDE, crear perfil simple con los valores
+            if len(values) > 0:
+                try:
+                    if HAS_PANDAS and hasattr(values, 'min'):
+                        min_val = float(values.min())
+                        max_val = float(values.max())
+                    elif HAS_NUMPY:
+                        min_val = float(np.min(values))
+                        max_val = float(np.max(values))
+                    else:
+                        min_val = float(min(values))
+                        max_val = float(max(values))
+                    
+                    # Crear perfil simple con 3 puntos
+                    mid = (min_val + max_val) / 2
+                    profile = [
+                        {'y': float(min_val), 'w': 0.1},
+                        {'y': float(mid), 'w': 1.0},
+                        {'y': float(max_val), 'w': 0.1}
+                    ]
+                except:
+                    pass
+        
+        if len(profile) == 0:
+            return None
         
         return {
             'category': category,
-            'stats': {
-                'min': min_val,
-                'q1': q1,
-                'median': median,
-                'q3': q3,
-                'max': max_val
-            },
-            'density': kde_points
+            'profile': profile
         }
     
     def get_spec(self, data, category_col=None, value_col=None, **kwargs):
