@@ -12,13 +12,21 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.8"
 # Dependencias requeridas para funcionalidad básica
-# Compatible con Google Colab (versiones específicas)
-# NOTA: ipywidgets limitado a <7.8 para evitar conflictos con Colab
+# Compatible con Google Colab y Jupyter Notebooks
+# NOTA: 
+#   - ipywidgets>=7.6,!=7.8.5,<8.0: Evita la versión 7.8.5 problemática en Colab
+#     Funciona perfectamente en ambos entornos (Colab y Jupyter Notebooks)
+#     Para Jupyter Notebooks que necesiten 8.x, pueden actualizar manualmente después
+#   - numpy>=1.20,<2.1: Compatible con TensorFlow (<2.2) y numba (<2.1) en Colab
+#     Jupyter Notebooks puede usar versiones más nuevas si están disponibles
+#   - pandas>=1.3,<3.0: Permite usar versiones 2.x que ambos entornos ya tienen
+#   - ipython>=7.0: Funciona en ambos entornos (Colab usa 7.x, Jupyter puede usar 8.x)
+#   - El código maneja la ausencia de estas dependencias con try/except
 dependencies = [
-    "ipython>=7.34.0,<8.0",
-    "ipywidgets>=7.7.0,<7.8",
-    "pandas>=1.3,<2.3",
-    "numpy>=1.20,<2.2",
+    "ipython>=7.0",
+    "ipywidgets>=7.6,!=7.8.5,<8.0",
+    "pandas>=1.3,<3.0",
+    "numpy>=1.20,<2.1",
     "python-dateutil>=2.8.2",
     "pytz>=2020.1",
     "traitlets>=5.0",
