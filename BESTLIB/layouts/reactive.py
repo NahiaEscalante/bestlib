@@ -1978,11 +1978,47 @@ class ReactiveMatrixLayout:
                 # Preparar datos para boxplot
                 # ✅ CORRECCIÓN: pd_module ya está definido al principio de la función
                 if HAS_PANDAS and pd_module is not None and isinstance(data_to_use, pd_module.DataFrame):
-                        # ✅ CORRECCIÓN CRÍTICA: Verificar que las columnas necesarias existen
+                    # ✅ CORRECCIÓN CRÍTICA: Verificar que las columnas necesarias existen
+                    if column not in data_to_use.columns:
+                        if self._debug or MatrixLayout._debug:
+                            print(f"⚠️ Error actualizando boxplot: '{column}' no está en datos. Columnas disponibles: {list(data_to_use.columns)[:10]}")
+                        # Intentar usar todos los datos
+                        data_to_use = self._data
+                        if column not in data_to_use.columns:
+                            if self._debug or MatrixLayout._debug:
+                                print(f"❌ Error crítico: '{column}' no está en datos originales")
+                            update_boxplot._executing = False
+                            return
+                    
+                    if category_col and category_col in data_to_use.columns:
+                        # Boxplot por categoría
+                        box_data = []
+                        for cat in data_to_use[category_col].unique():
+                            cat_data = data_to_use[data_to_use[category_col] == cat][column].dropna()
+                            if len(cat_data) > 0:
+                                q1 = cat_data.quantile(0.25)
+                                median = cat_data.quantile(0.5)
+                                q3 = cat_data.quantile(0.75)
+                                iqr = q3 - q1
+                                lower = max(q1 - 1.5 * iqr, cat_data.min())
+                                upper = min(q3 + 1.5 * iqr, cat_data.max())
+                                box_data.append({
+                                    'category': cat,
+                                    'q1': float(q1),
+                                    'median': float(median),
+                                    'q3': float(q3),
+                                    'lower': float(lower),
+                                    'upper': float(upper),
+                                    'min': float(cat_data.min()),
+                                    'max': float(cat_data.max())
+                                })
+                    else:
+                        # Boxplot simple
+                        # ✅ CORRECCIÓN CRÍTICA: Verificar que la columna existe antes de acceder
                         if column not in data_to_use.columns:
                             if self._debug or MatrixLayout._debug:
                                 print(f"⚠️ Error actualizando boxplot: '{column}' no está en datos. Columnas disponibles: {list(data_to_use.columns)[:10]}")
-                            # Intentar usar todos los datos
+                            # Usar todos los datos si la columna no está en los datos filtrados
                             data_to_use = self._data
                             if column not in data_to_use.columns:
                                 if self._debug or MatrixLayout._debug:
@@ -1990,63 +2026,27 @@ class ReactiveMatrixLayout:
                                 update_boxplot._executing = False
                                 return
                         
-                        if category_col and category_col in data_to_use.columns:
-                            # Boxplot por categoría
-                            box_data = []
-                            for cat in data_to_use[category_col].unique():
-                                cat_data = data_to_use[data_to_use[category_col] == cat][column].dropna()
-                                if len(cat_data) > 0:
-                                    q1 = cat_data.quantile(0.25)
-                                    median = cat_data.quantile(0.5)
-                                    q3 = cat_data.quantile(0.75)
-                                    iqr = q3 - q1
-                                    lower = max(q1 - 1.5 * iqr, cat_data.min())
-                                    upper = min(q3 + 1.5 * iqr, cat_data.max())
-                                    box_data.append({
-                                        'category': cat,
-                                        'q1': float(q1),
-                                        'median': float(median),
-                                        'q3': float(q3),
-                                        'lower': float(lower),
-                                        'upper': float(upper),
-                                        'min': float(cat_data.min()),
-                                        'max': float(cat_data.max())
-                                    })
+                        values = data_to_use[column].dropna()
+                        if len(values) > 0:
+                            q1 = values.quantile(0.25)
+                            median = values.quantile(0.5)
+                            q3 = values.quantile(0.75)
+                            iqr = q3 - q1
+                            lower = max(q1 - 1.5 * iqr, values.min())
+                            upper = min(q3 + 1.5 * iqr, values.max())
+                            box_data = [{
+                                'category': 'All',
+                                'q1': float(q1),
+                                'median': float(median),
+                                'q3': float(q3),
+                                'lower': float(lower),
+                                'upper': float(upper),
+                                'min': float(values.min()),
+                                'max': float(values.max())
+                            }]
                         else:
-                            # Boxplot simple
-                            # ✅ CORRECCIÓN CRÍTICA: Verificar que la columna existe antes de acceder
-                            if column not in data_to_use.columns:
-                                if self._debug or MatrixLayout._debug:
-                                    print(f"⚠️ Error actualizando boxplot: '{column}' no está en datos. Columnas disponibles: {list(data_to_use.columns)[:10]}")
-                                # Usar todos los datos si la columna no está en los datos filtrados
-                                data_to_use = self._data
-                                if column not in data_to_use.columns:
-                                    if self._debug or MatrixLayout._debug:
-                                        print(f"❌ Error crítico: '{column}' no está en datos originales")
-                                    update_boxplot._executing = False
-                                    return
-                            
-                            values = data_to_use[column].dropna()
-                            if len(values) > 0:
-                                q1 = values.quantile(0.25)
-                                median = values.quantile(0.5)
-                                q3 = values.quantile(0.75)
-                                iqr = q3 - q1
-                                lower = max(q1 - 1.5 * iqr, values.min())
-                                upper = min(q3 + 1.5 * iqr, values.max())
-                                box_data = [{
-                                    'category': 'All',
-                                    'q1': float(q1),
-                                    'median': float(median),
-                                    'q3': float(q3),
-                                    'lower': float(lower),
-                                    'upper': float(upper),
-                                    'min': float(values.min()),
-                                    'max': float(values.max())
-                                }]
-                            else:
-                                box_data = []
-                    else:
+                            box_data = []
+                else:
                         # Fallback para listas de diccionarios
                         values = [item.get(column, 0) for item in data_to_use if column in item]
                         if values:
