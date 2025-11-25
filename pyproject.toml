@@ -12,11 +12,16 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.8"
 # Dependencias requeridas para funcionalidad básica
+# Compatible con Google Colab (versiones específicas)
 dependencies = [
-    "ipython>=8.0",      # Requerido para Jupyter Notebook/Lab
-    "ipywidgets>=8.0",   # Requerido para widgets interactivos y comunicación bidireccional
-    "pandas>=1.3.0",     # Requerido para trabajar con DataFrames
-    "numpy>=1.20.0",    # Requerido para histogramas, violines, y operaciones numéricas
+    "ipython>=7.34.0,<8.0",
+    "ipywidgets>=7.7.0,<8.0",
+    "pandas>=1.3,<2.3",
+    "numpy>=1.20,<2.3",
+    "python-dateutil>=2.8.2",
+    "pytz>=2020.1",
+    "traitlets>=5.0",
+    "matplotlib-inline>=0.1.5",
 ]
 
 # Dependencias opcionales (solo para funcionalidades específicas)
