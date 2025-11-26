@@ -680,6 +680,11 @@ class ReactiveMatrixLayout:
                     default_color = barchart_params['kwargs'].get('color', '#4a90e2')
                     show_axes = barchart_params['kwargs'].get('axes', True)
                     
+                    # Debug en Python
+                    if self._debug or MatrixLayout._debug:
+                        print(f"📊 [Barchart {letter}] Datos preparados: {bar_data}")
+                        print(f"📊 [Barchart {letter}] Count: {count}, Items: {len(items) if items else 0}")
+                    
                     js_update = f"""
                 (function() {{
                     // Flag para evitar actualizaciones múltiples simultáneas
@@ -790,6 +795,11 @@ class ReactiveMatrixLayout:
                         
                         const data = {bar_data_json};
                         const colorMap = {color_map_json};
+                        
+                        // Debug: Mostrar datos recibidos
+                        console.log('📊 [Barchart {letter}] Actualizando con datos:', data);
+                        console.log('📊 [Barchart {letter}] Items seleccionados: {count}');
+                        console.log('📊 [Barchart {letter}] Valores por categoría:', data.map(d => `${{d.category}}: ${{d.value}}`));
                         
                         if (data.length === 0) {{
                             if (existingBars.length === 0) {{
