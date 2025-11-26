@@ -189,8 +189,8 @@ class ViolinChart(ChartBase):
             if x_range == 0:
                 x_range = 1.0
             
-            # Generar puntos para el perfil
-            x_eval = np.linspace(min_val - x_range * 0.1, max_val + x_range * 0.1, 100)
+            # Generar puntos para el perfil (más puntos = curvas más detalladas)
+            x_eval = np.linspace(min_val - x_range * 0.1, max_val + x_range * 0.1, 200)
             density = kde(x_eval)
             
             # Normalizar densidad
