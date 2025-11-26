@@ -5889,12 +5889,26 @@
    * Grouped Bar Chart con D3.js
    */
   function renderGroupedBarD3(container, spec, d3, divId) {
+    console.log('[BESTLIB] renderGroupedBarD3 called', {
+      spec: spec,
+      hasRows: 'rows' in spec,
+      hasGroups: 'groups' in spec,
+      hasSeries: 'series' in spec,
+      rowsLength: spec.rows ? spec.rows.length : 0,
+      groupsLength: spec.groups ? spec.groups.length : 0,
+      seriesLength: spec.series ? spec.series.length : 0
+    });
+    
     const rows = spec.rows || [];
     const groups = spec.groups || [];
     const series = spec.series || [];
     
     if (rows.length === 0 || groups.length === 0 || series.length === 0) {
-      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No hay datos para mostrar</div>';
+      console.error('[BESTLIB] renderGroupedBarD3: Datos vacíos', { rows, groups, series });
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px;">' +
+        '<strong>Error: No hay datos para mostrar</strong><br/>' +
+        '<small>rows: ' + rows.length + ', groups: ' + groups.length + ', series: ' + series.length + '</small>' +
+        '</div>';
       return;
     }
     
