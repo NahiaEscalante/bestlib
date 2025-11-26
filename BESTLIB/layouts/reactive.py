@@ -2413,22 +2413,69 @@ class ReactiveMatrixLayout:
                         
                         if ({str(show_axes).lower()}) {{
                             const xAxis = g.append('g')
+                                .attr('class', 'x-axis')
                                 .attr('transform', `translate(0,${{chartHeight}})`)
                                 .call(window.d3.axisBottom(x));
                             
+                            // Estilos para eje X
+                            xAxis.selectAll('text')
+                                .style('font-size', '12px')
+                                .style('font-weight', '600')
+                                .style('fill', '#000000')
+                                .style('font-family', 'Arial, sans-serif');
+                            
+                            xAxis.selectAll('line, path')
+                                .style('stroke', '#000000')
+                                .style('stroke-width', '1.5px');
+                            
                             const yAxis = g.append('g')
+                                .attr('class', 'y-axis')
                                 .call(window.d3.axisLeft(y));
+                            
+                            // Estilos para eje Y
+                            yAxis.selectAll('text')
+                                .style('font-size', '12px')
+                                .style('font-weight', '600')
+                                .style('fill', '#000000')
+                                .style('font-family', 'Arial, sans-serif');
+                            
+                            yAxis.selectAll('line, path')
+                                .style('stroke', '#000000')
+                                .style('stroke-width', '1.5px');
+                            
+                            // Agregar labels de ejes si están especificados
+                            const xLabel = '{kwargs.get("xLabel", "")}';
+                            const yLabel = '{kwargs.get("yLabel", "")}';
+                            
+                            if (xLabel) {{
+                                svg.append('text')
+                                    .attr('class', 'x-label')
+                                    .attr('text-anchor', 'middle')
+                                    .attr('x', margin.left + chartWidth / 2)
+                                    .attr('y', height - 5)
+                                    .style('font-size', '14px')
+                                    .style('font-weight', '600')
+                                    .style('fill', '#000000')
+                                    .style('font-family', 'Arial, sans-serif')
+                                    .text(xLabel);
+                            }}
+                            
+                            if (yLabel) {{
+                                svg.append('text')
+                                    .attr('class', 'y-label')
+                                    .attr('text-anchor', 'middle')
+                                    .attr('transform', 'rotate(-90)')
+                                    .attr('x', -(margin.top + chartHeight / 2))
+                                    .attr('y', 15)
+                                    .style('font-size', '14px')
+                                    .style('font-weight', '600')
+                                    .style('fill', '#000000')
+                                    .style('font-family', 'Arial, sans-serif')
+                                    .text(yLabel);
+                            }}
                         }}
                         
                         console.log('[Boxplot {letter}] Rendering completado exitosamente');
-                        
-                        // CRÍTICO: Forzar repaint del navegador
-                        // Esto asegura que los cambios visuales se apliquen inmediatamente
-                        targetCell.style.display = 'none';
-                        targetCell.offsetHeight; // Trigger reflow
-                        targetCell.style.display = 'block';
-                        
-                        console.log('[Boxplot {letter}] Repaint forzado');
                         
                         // IMPORTANTE: Marcar que esta celda ya no necesita ResizeObserver
                         // porque se está actualizando manualmente
@@ -2436,11 +2483,7 @@ class ReactiveMatrixLayout:
                         targetCell._chartDivId = null;
                         
                         // Resetear flag después de completar la actualización
-                        // Usar setTimeout para asegurar que el repaint se complete
-                        setTimeout(() => {{
-                            window._bestlib_updating_boxplot_{letter} = false;
-                            console.log('[Boxplot {letter}] Flag reseteado');
-                        }}, 50);
+                        window._bestlib_updating_boxplot_{letter} = false;
                     }}
                     
                     updateBoxplot();
