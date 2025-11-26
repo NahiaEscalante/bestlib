@@ -1781,6 +1781,78 @@ class ReactiveMatrixLayout:
         
         return self
     
+    def add_kde(self, letter, column=None, linked_to=None, **kwargs):
+        """
+        Agrega un KDE (Kernel Density Estimation) que puede ser enlazado.
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el KDE
+            column: Nombre de columna numérica para el KDE
+            linked_to: Letra de la vista principal que debe actualizar este KDE (opcional)
+            **kwargs: Argumentos adicionales (rug, bandwidth, color, fill, opacity, etc.)
+        
+        Returns:
+            self para encadenamiento
+        
+        Ejemplos:
+            # KDE enlazado a scatter
+            layout.add_scatter('S', x_col='x', y_col='y', interactive=True)
+            layout.add_kde('K', column='x', linked_to='S', rug=True)
+        """
+        from .matrix import MatrixLayout
+        
+        if self._data is None:
+            raise ValueError("Debe usar set_data() o add_scatter() primero para establecer los datos")
+        
+        if column is None:
+            raise ValueError("Debe especificar 'column' para el KDE")
+        
+        # Determinar datos iniciales
+        initial_data = self._data
+        
+        # Si hay linked_to, verificar si hay selección activa
+        if linked_to is not None:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
+            
+            # Si hay selección activa, usar esos datos para inicializar
+            current_selected = sel.get_selected_items()
+            if current_selected:
+                if HAS_PANDAS:
+                    import pandas as pd
+                    try:
+                        if isinstance(current_selected[0], dict):
+                            initial_data = pd.DataFrame(current_selected)
+                        else:
+                            initial_data = pd.DataFrame(current_selected)
+                    except Exception:
+                        initial_data = self._data
+                else:
+                    initial_data = current_selected
+        
+        # Crear KDE inicial
+        MatrixLayout.map_kde(letter, initial_data, column=column, **kwargs)
+        
+        # Si hay linked_to, registrar callback para actualizaciones
+        if linked_to is not None:
+            def update(items, count):
+                data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+                try:
+                    MatrixLayout.map_kde(letter, data_to_use, column=column, **kwargs)
+                except Exception:
+                    pass
+            sel.on_change(update)
+            
+            # Asegurar que __linked_to__ esté en el spec guardado
+            if letter in MatrixLayout._map:
+                MatrixLayout._map[letter]['__linked_to__'] = linked_to
+        
+        return self
+    
     def add_boxplot(self, letter, column=None, category_col=None, linked_to=None, **kwargs):
         """
         Agrega un boxplot enlazado que se actualiza automáticamente cuando se selecciona en scatter.
