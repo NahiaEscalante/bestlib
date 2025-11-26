@@ -1,6 +1,8 @@
 """
 Selection Model - Modelo reactivo para selecciones
 """
+from typing import Any
+
 try:
     import ipywidgets as widgets
     from traitlets import List, Dict, Int, observe
