@@ -542,11 +542,11 @@ def prepare_grouped_bar_data(data, main_col=None, sub_col=None, value_col=None):
     rows = []
     if HAS_PANDAS and isinstance(data, pd.DataFrame):
         if value_col and value_col in data.columns:
-            agg = data.groupby([main_col, sub_col])[value_col].sum().reset_index()
+            agg = data.groupby([main_col, sub_col], observed=True)[value_col].sum().reset_index()
             for _, r in agg.iterrows():
                 rows.append({'group': r[main_col], 'series': r[sub_col], 'value': float(r[value_col])})
         else:
-            counts = data.groupby([main_col, sub_col]).size().reset_index(name='value')
+            counts = data.groupby([main_col, sub_col], observed=True).size().reset_index(name='value')
             for _, r in counts.iterrows():
                 rows.append({'group': r[main_col], 'series': r[sub_col], 'value': float(r['value'])})
         groups = agg[main_col].unique().tolist() if 'agg' in locals() else counts[main_col].unique().tolist()

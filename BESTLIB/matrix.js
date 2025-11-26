@@ -423,6 +423,7 @@
         value.type === 'bar' || 
         value.type === 'scatter' || 
         value.type === 'histogram' ||
+        value.type === 'grouped_bar' ||
         value.type === 'pie' ||
         value.type === 'boxplot' ||
         value.type === 'heatmap' ||
