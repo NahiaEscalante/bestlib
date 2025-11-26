@@ -2712,7 +2712,7 @@
     // Asegurar que maxWidth no sea 0
     const finalMaxWidth = maxWidth > 0 ? maxWidth : 1;
     const bandwidth = x.bandwidth() || 40;
-    const maxViolinWidth = bandwidth / 2 - 5; // Dejar espacio para el borde
+    const maxViolinWidth = (bandwidth * 0.35) - 5; // Reducir ancho para violines más estrechos
     
     const wScale = d3.scaleLinear()
       .domain([0, finalMaxWidth])
@@ -2940,6 +2940,18 @@
       
       // Renderizar etiquetas de ejes usando función helper
       renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+    }
+    
+    // Renderizar título si existe
+    if (spec.title) {
+      svg.append('text')
+        .attr('x', width / 2)
+        .attr('y', margin.top / 2)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '16px')
+        .style('font-weight', 'bold')
+        .style('fill', '#000')
+        .text(spec.title);
     }
   }
 
