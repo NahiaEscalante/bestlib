@@ -7267,6 +7267,24 @@
         .domain([0, maxCount]);
     }
     
+    // Crear tooltip
+    const tooltipId = `hexbin-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '8px 12px')
+        .style('border-radius', '4px')
+        .style('font-size', '12px')
+        .style('pointer-events', 'none')
+        .style('z-index', '10000')
+        .style('box-shadow', '0 2px 4px rgba(0,0,0,0.2)')
+        .style('opacity', 0);
+    }
+    
     // Dibujar hexágonos
     g.selectAll('.hexagon')
       .data(bins_data)
@@ -7277,7 +7295,29 @@
       .attr('transform', d => `translate(${d.x},${d.y})`)
       .attr('fill', d => color(d.count))
       .attr('stroke', '#fff')
-      .attr('stroke-width', 0.5);
+      .attr('stroke-width', 0.5)
+      .on('mouseenter', function(event, d) {
+        d3.select(this)
+          .attr('stroke', '#000')
+          .attr('stroke-width', 2);
+        
+        tooltip
+          .style('opacity', 1)
+          .html(`
+            <div><strong>Hexbin</strong></div>
+            <div>Puntos: ${d.count}</div>
+            <div>Densidad: ${((d.count / data.length) * 100).toFixed(1)}%</div>
+          `)
+          .style('left', `${event.pageX + 10}px`)
+          .style('top', `${event.pageY - 10}px`);
+      })
+      .on('mouseleave', function() {
+        d3.select(this)
+          .attr('stroke', '#fff')
+          .attr('stroke-width', 0.5);
+        
+        tooltip.style('opacity', 0);
+      });
     
     // Ejes
     if (axes !== false) {
@@ -7370,6 +7410,24 @@
     const xLabel = options.xLabel || spec.xLabel;
     const yLabel = options.yLabel || spec.yLabel;
     
+    // Crear tooltip
+    const tooltipId = `errorbars-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '8px 12px')
+        .style('border-radius', '4px')
+        .style('font-size', '12px')
+        .style('pointer-events', 'none')
+        .style('z-index', '10000')
+        .style('box-shadow', '0 2px 4px rgba(0,0,0,0.2)')
+        .style('opacity', 0);
+    }
+    
     // Dibujar errorbars
     data.forEach(d => {
       const xPos = x(d.x);
@@ -7446,7 +7504,32 @@
         .attr('cx', xPos)
         .attr('cy', yPos)
         .attr('r', 3)
-        .attr('fill', color);
+        .attr('fill', color)
+        .style('cursor', 'pointer')
+        .on('mouseenter', function(event) {
+          d3.select(this)
+            .attr('r', 5)
+            .attr('fill', d3.color(color).darker(0.5));
+          
+          tooltip
+            .style('opacity', 1)
+            .html(`
+              <div><strong>Error Bars</strong></div>
+              <div>X: ${d.x.toFixed(3)}</div>
+              <div>Y: ${d.y.toFixed(3)}</div>
+              ${d.yerr ? `<div>Y Error: ±${d.yerr.toFixed(3)}</div>` : ''}
+              ${d.xerr ? `<div>X Error: ±${d.xerr.toFixed(3)}</div>` : ''}
+            `)
+            .style('left', `${event.pageX + 10}px`)
+            .style('top', `${event.pageY - 10}px`);
+        })
+        .on('mouseleave', function() {
+          d3.select(this)
+            .attr('r', 3)
+            .attr('fill', color);
+          
+          tooltip.style('opacity', 0);
+        });
     });
     
     // Ejes
@@ -8364,6 +8447,24 @@
         .attr('opacity', 0.5);
     }
     
+    // Crear tooltip
+    const tooltipId = `qqplot-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '8px 12px')
+        .style('border-radius', '4px')
+        .style('font-size', '12px')
+        .style('pointer-events', 'none')
+        .style('z-index', '10000')
+        .style('box-shadow', '0 2px 4px rgba(0,0,0,0.2)')
+        .style('opacity', 0);
+    }
+    
     // Puntos
     g.selectAll('.point')
       .data(data)
@@ -8374,7 +8475,29 @@
       .attr('cy', d => y(d.y))
       .attr('r', 3)
       .attr('fill', color)
-      .attr('opacity', 0.6);
+      .attr('opacity', 0.6)
+      .on('mouseenter', function(event, d) {
+        d3.select(this)
+          .attr('r', 5)
+          .attr('opacity', 1);
+        
+        tooltip
+          .style('opacity', 1)
+          .html(`
+            <div><strong>Q-Q Plot</strong></div>
+            <div>Teórico: ${d.x.toFixed(3)}</div>
+            <div>Observado: ${d.y.toFixed(3)}</div>
+          `)
+          .style('left', `${event.pageX + 10}px`)
+          .style('top', `${event.pageY - 10}px`);
+      })
+      .on('mouseleave', function() {
+        d3.select(this)
+          .attr('r', 3)
+          .attr('opacity', 0.6);
+        
+        tooltip.style('opacity', 0);
+      });
     
     // Ejes - usar funciones reutilizables para evitar duplicación de labels
     if (spec.axes !== false) {
@@ -8441,6 +8564,24 @@
       .domain([0, 1])
       .range([chartHeight, 0]);
     
+    // Crear tooltip
+    const tooltipId = `ecdf-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '8px 12px')
+        .style('border-radius', '4px')
+        .style('font-size', '12px')
+        .style('pointer-events', 'none')
+        .style('z-index', '10000')
+        .style('box-shadow', '0 2px 4px rgba(0,0,0,0.2)')
+        .style('opacity', 0);
+    }
+    
     // Línea ECDF
     let line;
     if (step) {
@@ -8462,6 +8603,40 @@
       .attr('stroke-width', strokeWidth)
       .attr('d', line)
       .attr('class', 'bestlib-line');
+    
+    // Overlay para tooltip con bisector
+    const bisect = d3.bisector(d => d.x).left;
+    
+    g.append('rect')
+      .attr('class', 'overlay')
+      .attr('fill', 'none')
+      .attr('pointer-events', 'all')
+      .attr('width', chartWidth)
+      .attr('height', chartHeight)
+      .on('mousemove', function(event) {
+        const [mouseX] = d3.pointer(event, this);
+        const x0 = x.invert(mouseX);
+        const i = bisect(data, x0, 1);
+        const d0 = data[i - 1];
+        const d1 = data[i];
+        
+        if (!d0 && !d1) return;
+        
+        const d = (!d1 || (d0 && (x0 - d0.x < d1.x - x0))) ? d0 : d1;
+        
+        tooltip
+          .style('opacity', 1)
+          .html(`
+            <div><strong>ECDF</strong></div>
+            <div>Valor: ${d.x.toFixed(3)}</div>
+            <div>Probabilidad: ${d.y.toFixed(3)}</div>
+          `)
+          .style('left', `${event.pageX + 10}px`)
+          .style('top', `${event.pageY - 10}px`);
+      })
+      .on('mouseleave', function() {
+        tooltip.style('opacity', 0);
+      });
     
     // Ejes usando funciones reutilizables para evitar duplicación y asegurar labels
     if (spec.axes !== false) {
@@ -8568,6 +8743,24 @@
       .domain(categories)
       .range(d3.schemeCategory10);
     
+    // Crear tooltip
+    const tooltipId = `ridgeline-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '8px 12px')
+        .style('border-radius', '4px')
+        .style('font-size', '12px')
+        .style('pointer-events', 'none')
+        .style('z-index', '10000')
+        .style('box-shadow', '0 2px 4px rgba(0,0,0,0.2)')
+        .style('opacity', 0);
+    }
+    
     // Dibujar cada serie
     categories.forEach((cat, idx) => {
       const serie = series[cat];
@@ -8597,6 +8790,17 @@
       
       const color = colorMap[cat] || colorScale(cat);
       
+      // Línea base para anclar las curvas
+      gSeries.append('line')
+        .attr('x1', 0)
+        .attr('x2', chartWidth)
+        .attr('y1', spacing)
+        .attr('y2', spacing)
+        .attr('stroke', '#999')
+        .attr('stroke-width', 1)
+        .attr('stroke-dasharray', '2,2')
+        .attr('opacity', 0.3);
+      
       // Área
       gSeries.append('path')
         .datum(serie)
@@ -8612,6 +8816,40 @@
         .attr('stroke-width', 2)
         .attr('d', line)
         .attr('class', 'bestlib-line');
+      
+      // Overlay para tooltip con bisector
+      const bisect = d3.bisector(d => d.x).left;
+      
+      gSeries.append('rect')
+        .attr('class', 'overlay')
+        .attr('fill', 'none')
+        .attr('pointer-events', 'all')
+        .attr('width', chartWidth)
+        .attr('height', spacing)
+        .on('mousemove', function(event) {
+          const [mouseX] = d3.pointer(event, this);
+          const x0 = x.invert(mouseX);
+          const i = bisect(serie, x0, 1);
+          const d0 = serie[i - 1];
+          const d1 = serie[i];
+          
+          if (!d0 && !d1) return;
+          
+          const d = (!d1 || (d0 && (x0 - d0.x < d1.x - x0))) ? d0 : d1;
+          
+          tooltip
+            .style('opacity', 1)
+            .html(`
+              <div><strong>${cat}</strong></div>
+              <div>X: ${d.x.toFixed(3)}</div>
+              <div>Densidad: ${d.y.toFixed(3)}</div>
+            `)
+            .style('left', `${event.pageX + 10}px`)
+            .style('top', `${event.pageY - 10}px`);
+        })
+        .on('mouseleave', function() {
+          tooltip.style('opacity', 0);
+        });
       
       // Etiqueta de categoría
       gSeries.append('text')
@@ -8716,6 +8954,24 @@
       .nice()
       .range([chartHeight, 0]);
     
+    // Crear tooltip
+    const tooltipId = `ribbon-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '8px 12px')
+        .style('border-radius', '4px')
+        .style('font-size', '12px')
+        .style('pointer-events', 'none')
+        .style('z-index', '10000')
+        .style('box-shadow', '0 2px 4px rgba(0,0,0,0.2)')
+        .style('opacity', 0);
+    }
+    
     // Gradiente si está habilitado
     if (gradient) {
       const gradientId = `ribbon-gradient-${divId}`;
@@ -8763,6 +9019,42 @@
         .attr('d', area)
         .attr('class', 'bestlib-area');
     }
+    
+    // Overlay para tooltip con bisector
+    const bisect = d3.bisector(d => d.x).left;
+    
+    g.append('rect')
+      .attr('class', 'overlay')
+      .attr('fill', 'none')
+      .attr('pointer-events', 'all')
+      .attr('width', chartWidth)
+      .attr('height', chartHeight)
+      .on('mousemove', function(event) {
+        const [mouseX] = d3.pointer(event, this);
+        const x0 = x.invert(mouseX);
+        const i = bisect(data, x0, 1);
+        const d0 = data[i - 1];
+        const d1 = data[i];
+        
+        if (!d0 && !d1) return;
+        
+        const d = (!d1 || (d0 && (x0 - d0.x < d1.x - x0))) ? d0 : d1;
+        
+        tooltip
+          .style('opacity', 1)
+          .html(`
+            <div><strong>Ribbon</strong></div>
+            <div>X: ${d.x.toFixed(3)}</div>
+            <div>Y1: ${d.y1.toFixed(3)}</div>
+            <div>Y2: ${d.y2.toFixed(3)}</div>
+            <div>Rango: ${Math.abs(d.y2 - d.y1).toFixed(3)}</div>
+          `)
+          .style('left', `${event.pageX + 10}px`)
+          .style('top', `${event.pageY - 10}px`);
+      })
+      .on('mouseleave', function() {
+        tooltip.style('opacity', 0);
+      });
     
     // Líneas opcionales
     if (showLines) {
@@ -8874,6 +9166,24 @@
     const color = d3.scaleSequential(d3.interpolateBlues)
       .domain([0, maxValue]);
     
+    // Crear tooltip
+    const tooltipId = `hist2d-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '8px 12px')
+        .style('border-radius', '4px')
+        .style('font-size', '12px')
+        .style('pointer-events', 'none')
+        .style('z-index', '10000')
+        .style('box-shadow', '0 2px 4px rgba(0,0,0,0.2)')
+        .style('opacity', 0);
+    }
+    
     // Celdas del heatmap - asegurar que los bins estén bien alineados
     g.selectAll('.cell')
       .data(data)
@@ -8902,7 +9212,30 @@
       })
       .attr('fill', d => color(d.value))
       .attr('stroke', '#fff')
-      .attr('stroke-width', 0.5);
+      .attr('stroke-width', 0.5)
+      .on('mouseenter', function(event, d) {
+        d3.select(this)
+          .attr('stroke', '#000')
+          .attr('stroke-width', 2);
+        
+        tooltip
+          .style('opacity', 1)
+          .html(`
+            <div><strong>Hist2D</strong></div>
+            <div>X: [${d.x_bin_start.toFixed(2)}, ${d.x_bin_end.toFixed(2)}]</div>
+            <div>Y: [${d.y_bin_start.toFixed(2)}, ${d.y_bin_end.toFixed(2)}]</div>
+            <div>Conteo: ${d.value}</div>
+          `)
+          .style('left', `${event.pageX + 10}px`)
+          .style('top', `${event.pageY - 10}px`);
+      })
+      .on('mouseleave', function() {
+        d3.select(this)
+          .attr('stroke', '#fff')
+          .attr('stroke-width', 0.5);
+        
+        tooltip.style('opacity', 0);
+      });
     
     // Ejes usando funciones reutilizables
     if (spec.axes !== false) {
@@ -8965,6 +9298,24 @@
       .domain([0, maxRadius])
       .range([0, radius]);
     
+    // Crear tooltip
+    const tooltipId = `polar-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '8px 12px')
+        .style('border-radius', '4px')
+        .style('font-size', '12px')
+        .style('pointer-events', 'none')
+        .style('z-index', '10000')
+        .style('box-shadow', '0 2px 4px rgba(0,0,0,0.2)')
+        .style('opacity', 0);
+    }
+    
     // Grid circular
     if (showGrid) {
       const gridCircles = [0.25, 0.5, 0.75, 1.0];
@@ -9012,7 +9363,34 @@
       })
       .attr('r', 3)
       .attr('fill', color)
-      .attr('opacity', 0.6);
+      .attr('opacity', 0.6)
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(event, d) {
+        d3.select(this)
+          .attr('r', 5)
+          .attr('opacity', 1);
+        
+        const angle = d.angle !== undefined ? d.angle : Math.atan2(d.y, d.x);
+        const rad = d.radius !== undefined ? d.radius : Math.sqrt(d.x*d.x + d.y*d.y);
+        const angleDeg = (angle * 180 / Math.PI + 360) % 360;
+        
+        tooltip
+          .style('opacity', 1)
+          .html(`
+            <div><strong>Polar</strong></div>
+            <div>Ángulo: ${angleDeg.toFixed(1)}°</div>
+            <div>Radio: ${rad.toFixed(3)}</div>
+          `)
+          .style('left', `${event.pageX + 10}px`)
+          .style('top', `${event.pageY - 10}px`);
+      })
+      .on('mouseleave', function() {
+        d3.select(this)
+          .attr('r', 3)
+          .attr('opacity', 0.6);
+        
+        tooltip.style('opacity', 0);
+      });
     
     // Líneas desde el centro
     g.selectAll('.line')
