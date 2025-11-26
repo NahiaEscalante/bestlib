@@ -113,9 +113,9 @@ class CommManager:
             # Crear copia para iterar de forma segura (evita race condition)
             instances_copy = dict(cls._instances)
             dead = [k for k, ref in instances_copy.items() if ref() is None]
-        for k in dead:
+            for k in dead:
                 if k in cls._instances:  # Verificar que aún existe
-            del cls._instances[k]
+                    del cls._instances[k]
         return len(dead)
     
     @classmethod
