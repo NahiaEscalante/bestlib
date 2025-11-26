@@ -93,8 +93,8 @@ class CommManager:
             ValueError: Si div_id no es str no vacío
         """
         with cls._instances_lock:
-        if div_id in cls._instances:
-            del cls._instances[div_id]
+            if div_id in cls._instances:
+                del cls._instances[div_id]
     
     @classmethod
     def _cleanup_dead_instances(cls) -> int:
