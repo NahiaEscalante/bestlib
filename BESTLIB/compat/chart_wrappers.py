@@ -1,14 +1,18 @@
 """
-Wrappers de compatibilidad hacia atrás para métodos map_*
+Thin wrappers de compatibilidad hacia atrás para métodos map_*
+
+DEPRECATED: Estos wrappers existen solo para compatibilidad hacia atrás.
+Usa directamente: from BESTLIB import MatrixLayout y luego MatrixLayout.map_*()
+
+Estos wrappers NO duplican lógica, solo delegan a la implementación modular.
 """
 import warnings
-from ..charts.registry import ChartRegistry
 
 
 def _deprecation_warning(old_method, new_method):
     """Genera warning de deprecación"""
     warnings.warn(
-        f"{old_method} está deprecado. Use {new_method} en su lugar.",
+        f"{old_method} está deprecated. Use {new_method} en su lugar.",
         DeprecationWarning,
         stacklevel=3
     )

@@ -1,3 +1,29 @@
+# ==============================================================================
+# ⚠️ LEGACY CODE - DO NOT USE DIRECTLY ⚠️
+# ==============================================================================
+# Este módulo (BESTLIB/matrix.py) es código LEGACY y será eliminado en v0.2.0
+#
+# NO IMPORTAR DIRECTAMENTE. Usar en su lugar:
+#   from BESTLIB import MatrixLayout
+#
+# La versión oficial está en: BESTLIB/layouts/matrix.py
+#
+# Este archivo solo se mantiene para compatibilidad hacia atrás con código
+# que importaba directamente desde BESTLIB.matrix
+#
+# IMPORTANTE: NO agregar nuevas funcionalidades aquí. TODO el desarrollo
+# debe hacerse en los módulos modulares bajo layouts/, charts/, data/, etc.
+# ==============================================================================
+import warnings
+
+# Emitir warning al importar directamente este módulo
+warnings.warn(
+    "BESTLIB.matrix es código legacy y será eliminado en v0.2.0. "
+    "Usa 'from BESTLIB import MatrixLayout' en su lugar.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import uuid
 import json
 import os

@@ -1,10 +1,35 @@
-﻿"""
+﻿# ==============================================================================
+# ⚠️ DEPRECATED - DO NOT USE ⚠️
+# ==============================================================================
+# Este módulo (BESTLIB/linked.py) está DEPRECATED y será eliminado en v0.2.0
+#
+# NO USAR. Migrar a ReactiveMatrixLayout:
+#   from BESTLIB import ReactiveMatrixLayout, SelectionModel
+#   
+#   layout = ReactiveMatrixLayout("SB", selection_model=SelectionModel())
+#   layout.set_data(df)
+#   layout.add_scatter('S', x_col='x', y_col='y', interactive=True)
+#   layout.add_barchart('B', category_col='category', linked_to='S')
+#   layout.display()
+#
+# Ver docs/API_PUBLICA.md para ejemplos completos de migración.
+# ==============================================================================
+"""
 Sistema de Vistas Enlazadas (Linked Views) para BESTLIB
 Permite que múltiples visualizaciones se actualicen automáticamente
 
 NOTA: Este módulo está siendo reemplazado por ReactiveMatrixLayout que integra
 LinkedViews dentro de la matriz ASCII. Se mantiene por compatibilidad.
 """
+import warnings
+
+# Emitir warning al importar este módulo
+warnings.warn(
+    "LinkedViews está deprecated y será eliminado en v0.2.0. "
+    "Usa ReactiveMatrixLayout en su lugar. Ver docs/API_PUBLICA.md para ejemplos.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 from .matrix import MatrixLayout
 from collections import Counter

@@ -1,12 +1,18 @@
 """
 Wrapper de compatibilidad para MatrixLayout
+
+DEPRECATED: Este wrapper existe solo para compatibilidad hacia atrás.
+Usa directamente: from BESTLIB import MatrixLayout
 """
 import warnings
-from ..matrix import MatrixLayout as _MatrixLayout
+
+# Importar desde versión modular, NO desde legacy
+from ..layouts.matrix import MatrixLayout as _MatrixLayout
 
 warnings.warn(
-    "BESTLIB está siendo modularizado. MatrixLayout ahora usa nuevos módulos internamente.",
-    FutureWarning,
+    "BESTLIB.compat.matrix_wrapper está deprecated. "
+    "Use 'from BESTLIB import MatrixLayout' en su lugar.",
+    DeprecationWarning,
     stacklevel=2
 )
 

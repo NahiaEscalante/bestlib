@@ -2,15 +2,18 @@
 
 **BESTLIB** es una librería de visualización interactiva para Jupyter Notebooks que permite crear dashboards con layouts ASCII y gráficos D3.js.
 
+> **✨ Versión 0.1.0** - Arquitectura modular estable con compatibilidad hacia atrás
+
 ## ✨ Características
 
-- 🎨 **11+ tipos de gráficos** (scatter, bar, histogram, boxplot, heatmap, line, pie, violin, radviz, etc.)
+- 🎨 **30+ tipos de gráficos** (scatter, bar, histogram, boxplot, heatmap, line, pie, violin, kde, etc.)
 - 🔗 **Vistas enlazadas** - Sincronización automática entre gráficos
 - ⚡ **Sistema reactivo** - Actualización automática sin re-ejecutar celdas
 - 🖱️ **Interactividad** - Brush selection, click events, tooltips
 - 📐 **Layouts ASCII** - Define la disposición de gráficos con texto
 - 🐼 **Soporte pandas** - Trabaja directamente con DataFrames
 - 🎯 **Comunicación bidireccional** - Python ↔ JavaScript en tiempo real
+- 🏗️ **Arquitectura modular** - Código limpio y extensible
 
 ## 📦 Instalación
 
@@ -50,6 +53,8 @@ BESTLIB requiere las siguientes dependencias (deben instalarse manualmente si no
 
 ## 🚀 Inicio Rápido
 
+### Layout Estático Simple
+
 ```python
 from BESTLIB import MatrixLayout
 import pandas as pd
@@ -68,23 +73,84 @@ layout = MatrixLayout("S")
 layout.display()
 ```
 
+### Layout Reactivo con Vistas Enlazadas
+
+```python
+from BESTLIB import ReactiveMatrixLayout, SelectionModel
+import pandas as pd
+
+# Crear modelo de selección compartido
+selection = SelectionModel()
+
+# Crear layout reactivo
+layout = ReactiveMatrixLayout("SB", selection_model=selection)
+df = pd.read_csv('examples/iris.csv')
+layout.set_data(df)
+
+# Scatter interactivo
+layout.add_scatter('S', x_col='sepal_length', y_col='petal_length', 
+                  category_col='species', interactive=True)
+
+# Bar chart enlazado (se actualiza automáticamente al seleccionar en scatter)
+layout.add_barchart('B', category_col='species', linked_to='S')
+
+layout.display()
+```
+
 ## 📚 Documentación
 
+### Documentación Principal
+
+- **[docs/API_PUBLICA.md](docs/API_PUBLICA.md)** - 📖 **API Pública Oficial** (LEER PRIMERO)
 - **[COLAB_INSTALL.md](COLAB_INSTALL.md)** - Guía de instalación para Google Colab
 - **[CHANGELOG.md](CHANGELOG.md)** - Historial de cambios
-- **[ANALISIS_ERRORES_Y_SOLUCION.md](ANALISIS_ERRORES_Y_SOLUCION.md)** - Análisis técnico
+- **[ARQUITECTURA.md](ARQUITECTURA.md)** - Arquitectura del proyecto
+
+### Ejemplos
+
 - **[examples/demo_completo_bestlib.ipynb](examples/demo_completo_bestlib.ipynb)** - Demo completo con Iris
 - **[examples/COLAB_INSTALLATION.ipynb](examples/COLAB_INSTALLATION.ipynb)** - Guía de instalación en Colab
 - **[examples/test_completo_iris.ipynb](examples/test_completo_iris.ipynb)** - Tests completos
 
+### ⚠️ Código Legacy (NO USAR)
+
+Los siguientes módulos son **legacy** y serán eliminados en v0.2.0:
+
+- ❌ `BESTLIB.matrix` - Usar `from BESTLIB import MatrixLayout` en su lugar
+- ❌ `BESTLIB.reactive` - Usar `from BESTLIB import ReactiveMatrixLayout, SelectionModel`
+- ❌ `BESTLIB.linked.LinkedViews` - Usar `ReactiveMatrixLayout`
+- ❌ `BESTLIB.compat.*` - Usar API pública directamente
+
+**Ver [AUDITORIA_LEGACY.md](AUDITORIA_LEGACY.md) para guía de migración.**
+
 ## ✅ Estado del Proyecto
 
 - ✅ Sintaxis correcta en todos los módulos
-- ✅ 11+ tipos de gráficos funcionando
+- ✅ 30+ tipos de gráficos funcionando
 - ✅ Sistema de vistas enlazadas operativo
 - ✅ Sistema reactivo implementado
 - ✅ Dataset de prueba incluido (iris.csv)
-- ✅ Tests completos disponibles
+- ✅ Arquitectura modular estable
+- ✅ API pública bien definida
+- ✅ Compatibilidad hacia atrás mantenida
+
+### Arquitectura
+
+```
+BESTLIB/
+├── layouts/          # ✅ MatrixLayout y ReactiveMatrixLayout (MODULAR)
+├── charts/           # ✅ 30+ tipos de gráficos (MODULAR)
+├── data/             # ✅ Preparación y validación (MODULAR)
+├── reactive/         # ✅ Sistema reactivo (MODULAR)
+├── core/             # ✅ Comunicación y eventos (MODULAR)
+├── render/           # ✅ Renderizado HTML/JS (MODULAR)
+├── utils/            # ✅ Utilidades (MODULAR)
+│
+├── matrix.py         # ⚠️ LEGACY - Será eliminado en v0.2.0
+├── reactive.py       # ⚠️ LEGACY - Será eliminado en v0.2.0
+├── linked.py         # ⚠️ DEPRECATED - Usar ReactiveMatrixLayout
+└── compat/           # ⚠️ DEPRECATED - Thin wrappers temporales
+```
 
 ## 🤝 Contribuciones
 
