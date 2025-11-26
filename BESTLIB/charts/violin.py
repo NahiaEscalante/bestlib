@@ -352,6 +352,12 @@ class ViolinChart(ChartBase):
         if options:
             spec['options'] = options
         
+        # Copiar labels al nivel superior para compatibilidad con renderAxisLabels
+        if 'xLabel' in options:
+            spec['xLabel'] = options['xLabel']
+        if 'yLabel' in options:
+            spec['yLabel'] = options['yLabel']
+        
         # Agregar cualquier otro kwargs restante
         spec.update(kwargs)
         
