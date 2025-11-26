@@ -11,19 +11,20 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.8"
-# Dependencias mínimas requeridas
-# El código maneja la ausencia de dependencias opcionales con try/except
-dependencies = [
-    "python-dateutil>=2.8.2",
-    "pytz>=2020.1",
-    "traitlets>=5.0",
-    "matplotlib-inline>=0.1.5",
-]
+# Sin dependencias obligatorias - el código maneja todo con try/except
+# Esto evita que pip toque cualquier paquete existente
+dependencies = []
 
 # Dependencias opcionales (solo para funcionalidades específicas)
 # Estas NO se instalan automáticamente - el código funciona sin ellas
-# Si las necesitas, instálalas manualmente o usa: pip install bestlib[jupyter,pandas]
+# Si las necesitas, instálalas manualmente o usa: pip install bestlib[all]
 [project.optional-dependencies]
+core = [
+    "python-dateutil>=2.8.0",
+    "pytz>=2020.0",
+    "traitlets>=5.0",
+    "matplotlib-inline>=0.1.0",
+]
 jupyter = [
     "ipython>=7.0",
     "ipywidgets>=7.6,!=7.8.5",
@@ -34,6 +35,10 @@ pandas = [
 ]
 confusion_matrix = ["scikit-learn>=1.0.0"]  # Solo necesario para add_confusion_matrix()
 all = [
+    "python-dateutil>=2.8.0",
+    "pytz>=2020.0",
+    "traitlets>=5.0",
+    "matplotlib-inline>=0.1.0",
     "ipython>=7.0",
     "ipywidgets>=7.6,!=7.8.5",
     "pandas>=1.3",
