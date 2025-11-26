@@ -2241,32 +2241,39 @@ class ReactiveMatrixLayout:
                     print(f"📊 [Boxplot {letter}] Datos preparados: {box_data}")
                     print(f"📊 [Boxplot {letter}] Count: {count}, Items: {len(items) if items else 0}")
                 
-                js_update = f"""
+                    js_update = f"""
                 (function() {{
                     // Flag para evitar actualizaciones múltiples simultáneas
                     if (window._bestlib_updating_boxplot_{letter}) {{
+                        console.warn('[Boxplot {letter}] Ya hay una actualización en progreso, ignorando');
                         return;
                     }}
                     window._bestlib_updating_boxplot_{letter} = true;
                     
+                    // CRÍTICO: Auto-resetear el flag después de un timeout por si algo falla
+                    const safetyTimeout = setTimeout(() => {{
+                        console.warn('[Boxplot {letter}] Timeout de seguridad activado, reseteando flag');
+                        window._bestlib_updating_boxplot_{letter} = false;
+                    }}, 2000);
+                    
                     function updateBoxplot() {{
-                        if (!window.d3) {{
-                            setTimeout(updateBoxplot, 100);
-                            return;
-                        }}
-                        
-                        const boxData = {box_data_json};
-                        console.log('📊 [Boxplot {letter}] Actualizando con datos:', boxData);
-                        console.log('📊 [Boxplot {letter}] Items seleccionados: {count}');
-                        
-                        const container = document.getElementById('{div_id}');
-                        if (!container) {{
-                            console.warn('[Boxplot {letter}] Contenedor no encontrado');
-                            window._bestlib_updating_boxplot_{letter} = false;
-                            return;
-                        }}
-                        
-                        const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
+                        try {{
+                            if (!window.d3) {{
+                                setTimeout(updateBoxplot, 100);
+                                return;
+                            }}
+                            
+                            const boxData = {box_data_json};
+                            console.log('📊 [Boxplot {letter}] Actualizando con datos:', boxData);
+                            console.log('📊 [Boxplot {letter}] Items seleccionados: {count}');
+                            
+                            const container = document.getElementById('{div_id}');
+                            if (!container) {{
+                                console.warn('[Boxplot {letter}] Contenedor no encontrado');
+                                clearTimeout(safetyTimeout);
+                                window._bestlib_updating_boxplot_{letter} = false;
+                                return;
+                            }}                        const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
                         let targetCell = null;
                         
                         console.log('[Boxplot {letter}] Celdas encontradas:', cells.length);
@@ -2482,8 +2489,18 @@ class ReactiveMatrixLayout:
                         targetCell._chartSpec = null;
                         targetCell._chartDivId = null;
                         
+                        // Limpiar el timeout de seguridad
+                        clearTimeout(safetyTimeout);
+                        
                         // Resetear flag después de completar la actualización
                         window._bestlib_updating_boxplot_{letter} = false;
+                        console.log('[Boxplot {letter}] Flag reseteado correctamente');
+                        
+                        }} catch (error) {{
+                            console.error('[Boxplot {letter}] Error durante actualización:', error);
+                            clearTimeout(safetyTimeout);
+                            window._bestlib_updating_boxplot_{letter} = false;
+                        }}
                     }}
                     
                     updateBoxplot();
