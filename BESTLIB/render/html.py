@@ -1,7 +1,7 @@
 """
 HTML Generator - Generador de HTML para BESTLIB
 """
-from typing import Optional
+from typing import Optional, Any
 import html as html_module
 from ..utils.json import sanitize_for_json
 import json
