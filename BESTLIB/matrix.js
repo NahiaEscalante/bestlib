@@ -7665,6 +7665,18 @@
   function renderStepPlotD3(container, spec, d3, divId) {
     const data = spec.data || [];
     
+    // Validar que haya datos
+    if (!data || data.length === 0) {
+      console.error('[BESTLIB] renderStepPlotD3: No hay datos', { 
+        spec, 
+        hasData: 'data' in spec,
+        dataType: typeof spec.data,
+        specKeys: Object.keys(spec)
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para Step Plot</div>';
+      return;
+    }
+    
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
