@@ -1,4 +1,4 @@
-﻿"""
+"""
 Sistema de Variables Reactivas para BESTLIB
 Permite que los datos se actualicen automáticamente sin re-ejecutar celdas
 """
@@ -1527,8 +1527,6 @@ class ReactiveMatrixLayout:
                                         data_to_use = processed_items
                                 else:
                                     data_to_use = processed_items
-                                else:
-                                    data_to_use = processed_items
                             else:
                                 data_to_use = processed_items
                         else:
@@ -2221,9 +2219,9 @@ class ReactiveMatrixLayout:
                 if has_pandas():
                     pd = get_pandas()
                     if pd is not None and isinstance(data_to_use, pd.DataFrame):
-                    if category_col and category_col in data_to_use.columns:
-                        # Boxplot por categoría
-                        box_data = []
+                        if category_col and category_col in data_to_use.columns:
+                            # Boxplot por categoría
+                            box_data = []
                         for cat in data_to_use[category_col].unique():
                             cat_data = data_to_use[data_to_use[category_col] == cat][column].dropna()
                             if len(cat_data) > 0:
@@ -2731,8 +2729,8 @@ class ReactiveMatrixLayout:
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(self._data, pd.DataFrame):
-            if category_col and category_col in self._data.columns:
-                box_data = []
+                if category_col and category_col in self._data.columns:
+                    box_data = []
                 for cat in self._data[category_col].unique():
                     cat_data = self._data[self._data[category_col] == cat][column].dropna()
                     if len(cat_data) > 0:
@@ -2871,7 +2869,6 @@ class ReactiveMatrixLayout:
             logger = get_logger()
             error_msg = f"Error inesperado preparando datos del bar chart: {e}"
             logger.error(error_msg, exc_info=True)
-                traceback.print_exc()
             raise
     
     def map(self, mapping):
@@ -3181,8 +3178,6 @@ class ReactiveMatrixLayout:
                                         data_to_use = df_result
                                     else:
                                         data_to_use = processed_items
-                                else:
-                                    data_to_use = processed_items
                                 else:
                                     data_to_use = processed_items
                             else:
@@ -3843,7 +3838,7 @@ class ReactiveMatrixLayout:
                 # ✅ CRIT-002: Usar get_pandas() en lugar de pd directo
                 pd = get_pandas()
                 if pd is not None:
-            cm_df = pd.DataFrame(cm, index=labels, columns=labels)
+                    cm_df = pd.DataFrame(cm, index=labels, columns=labels)
                 else:
                     raise ImportError("pandas es requerido para confusion matrix")
             else:
@@ -3904,8 +3899,9 @@ class ReactiveMatrixLayout:
                 return self
             def update(items, count):
                 # ✅ CORRECCIÓN: Validar items antes de acceder a items[0]
-            if not items:
-                df = self._data
+                if not items:
+                    df = self._data
+                    return
             elif has_pandas() and isinstance(items, list) and len(items) > 0:
                 if isinstance(items[0], dict):
                     pd = get_pandas()

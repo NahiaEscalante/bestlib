@@ -1,4 +1,4 @@
-﻿"""
+"""
 Sistema de Vistas Enlazadas (Linked Views) para BESTLIB
 Permite que múltiples visualizaciones se actualicen automáticamente
 
@@ -265,9 +265,9 @@ class LinkedViews:
         if has_pandas():
             pd = get_pandas()
             if isinstance(data, pd.DataFrame):
-            if value_field and value_field in data.columns:
-                # Agrupar y sumar
-                bar_data = data.groupby(cat_field)[value_field].sum().reset_index()
+                if value_field and value_field in data.columns:
+                    # Agrupar y sumar
+                    bar_data = data.groupby(cat_field)[value_field].sum().reset_index()
                 bar_data = bar_data.rename(columns={cat_field: 'category', value_field: 'value'})
                 bar_data = bar_data.to_dict('records')
             elif cat_field and cat_field in data.columns:

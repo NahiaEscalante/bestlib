@@ -38,8 +38,8 @@ class FunnelChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-            if stage_col not in data.columns:
-                raise ChartError(f"Columna '{stage_col}' no encontrada")
+                if stage_col not in data.columns:
+                    raise ChartError(f"Columna '{stage_col}' no encontrada")
             if value_col not in data.columns:
                 raise ChartError(f"Columna '{value_col}' no encontrada")
             if not pd.api.types.is_numeric_dtype(data[value_col]):
@@ -68,8 +68,8 @@ class FunnelChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-            # Ordenar por valor descendente (típico en funnel)
-            data_sorted = data.sort_values(by=value_col, ascending=False).copy()
+                # Ordenar por valor descendente (típico en funnel)
+                data_sorted = data.sort_values(by=value_col, ascending=False).copy()
             funnel_data = []
             for idx, row in data_sorted.iterrows():
                 funnel_data.append({
@@ -87,7 +87,6 @@ class FunnelChart(ChartBase):
                     'value': float(d[value_col]),
                     'index': idx
                 })
-        else:
         
         return {'data': funnel_data}
     

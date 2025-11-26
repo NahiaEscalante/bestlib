@@ -63,8 +63,8 @@ class PolarChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-            angles = data[angle_col].values
-            radii = data[radius_col].values
+                angles = data[angle_col].values
+                radii = data[radius_col].values
             else:
                 angles = [d[angle_col] for d in data if angle_col in d]
                 radii = [d[radius_col] for d in data if radius_col in d]

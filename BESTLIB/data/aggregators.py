@@ -23,9 +23,9 @@ def group_by_category(data, category_col, value_col=None, agg_func='sum'):
     if has_pandas():
         pd = get_pandas()
         if pd is not None and isinstance(data, pd.DataFrame):
-        if value_col and value_col in data.columns:
-            if agg_func == 'sum':
-                grouped = data.groupby(category_col)[value_col].sum().reset_index()
+            if value_col and value_col in data.columns:
+                if agg_func == 'sum':
+                    grouped = data.groupby(category_col)[value_col].sum().reset_index()
             elif agg_func == 'mean':
                 grouped = data.groupby(category_col)[value_col].mean().reset_index()
             elif agg_func == 'count':
@@ -73,11 +73,11 @@ def bin_numeric_data(data, column, bins=10):
     if has_pandas():
         pd = get_pandas()
         if pd is not None and isinstance(data, pd.DataFrame):
-        series = data[column].dropna()
-        try:
-            values = series.astype(float).tolist()
+            series = data[column].dropna()
+            try:
+                values = series.astype(float).tolist()
             except (ValueError, TypeError):
-            values = [float(v) for v in series.tolist()]
+                values = [float(v) for v in series.tolist()]
     else:
         for item in data:
             v = item.get(column)
@@ -137,7 +137,7 @@ def calculate_statistics(data, column):
     if has_pandas():
         pd = get_pandas()
         if pd is not None and isinstance(data, pd.DataFrame):
-        series = data[column].dropna()
+            series = data[column].dropna()
         values = series.astype(float).tolist()
     else:
         for item in data:

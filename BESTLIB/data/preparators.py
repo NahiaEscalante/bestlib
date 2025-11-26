@@ -53,43 +53,43 @@ def prepare_scatter_data(data: Any, x_col: Optional[str] = None, y_col: Optional
                 if isinstance(data, pd.DataFrame):
                     validate_dataframe(data, allow_empty=True)
                     
-            original_data = data.to_dict('records')
-            df_work = pd.DataFrame(index=data.index)
-        
-            # Mapear columnas según especificación (vectorizado)
-            if x_col and x_col in data.columns:
-                df_work['x'] = data[x_col]
-            elif 'x' in data.columns:
-                df_work['x'] = data['x']
-            
-            if y_col and y_col in data.columns:
-                df_work['y'] = data[y_col]
-            elif 'y' in data.columns:
-                df_work['y'] = data['y']
-            
-            if category_col and category_col in data.columns:
-                df_work['category'] = data[category_col]
-            elif 'category' in data.columns:
-                df_work['category'] = data['category']
-            
-            if size_col and size_col in data.columns:
-                df_work['size'] = data[size_col]
-            if color_col and color_col in data.columns:
-                df_work['color'] = data[color_col]
-            
-            processed_data = df_work.to_dict('records')
-            
-            # Agregar referencias a filas originales e índices
-            for idx, item in enumerate(processed_data):
+                    original_data = data.to_dict('records')
+                    df_work = pd.DataFrame(index=data.index)
+                    
+                    # Mapear columnas según especificación (vectorizado)
+                    if x_col and x_col in data.columns:
+                        df_work['x'] = data[x_col]
+                    elif 'x' in data.columns:
+                        df_work['x'] = data['x']
+                    
+                    if y_col and y_col in data.columns:
+                        df_work['y'] = data[y_col]
+                    elif 'y' in data.columns:
+                        df_work['y'] = data['y']
+                    
+                    if category_col and category_col in data.columns:
+                        df_work['category'] = data[category_col]
+                    elif 'category' in data.columns:
+                        df_work['category'] = data['category']
+                    
+                    if size_col and size_col in data.columns:
+                        df_work['size'] = data[size_col]
+                    if color_col and color_col in data.columns:
+                        df_work['color'] = data[color_col]
+                    
+                    processed_data = df_work.to_dict('records')
+                    
+                    # Agregar referencias a filas originales e índices
+                    for idx, item in enumerate(processed_data):
                         if idx < len(original_data) and idx < len(data.index):
-                item['_original_row'] = original_data[idx]
-                item['_original_index'] = int(data.index[idx])
+                            item['_original_row'] = original_data[idx]
+                            item['_original_index'] = int(data.index[idx])
                         else:
                             # Fallback si hay desajuste
                             item['_original_row'] = item.copy()
                             item['_original_index'] = idx
-            
-            return processed_data, original_data
+                    
+                    return processed_data, original_data
             except (AttributeError, TypeError) as e:
                 # Fallback si hay problema accediendo DataFrame
                 raise DataError(f"Error accediendo DataFrame: {e}")
@@ -147,13 +147,17 @@ def prepare_bar_data(data: Any, category_col: Optional[str] = None, value_col: O
                         required_cols.append(value_col)
                     validate_dataframe(data, required_cols=required_cols if required_cols else None, allow_empty=False)
                     
-            if value_col and value_col in data.columns:
-                bar_data = data.groupby(category_col)[value_col].sum().reset_index()
-                bar_data = bar_data.rename(columns={category_col: 'category', value_col: 'value'})
-                bar_data = bar_data.to_dict('records')
-            elif category_col and category_col in data.columns:
-                counts = data[category_col].value_counts()
-                bar_data = [{'category': cat, 'value': count} for cat, count in counts.items()]
+                    if value_col and value_col in data.columns:
+                        bar_data = data.groupby(category_col)[value_col].sum().reset_index()
+                        bar_data = bar_data.rename(columns={category_col: 'category', value_col: 'value'})
+                        bar_data = bar_data.to_dict('records')
+                    elif category_col and category_col in data.columns:
+                        counts = data[category_col].value_counts()
+                        bar_data = [{'category': cat, 'value': count} for cat, count in counts.items()]
+                    else:
+                        bar_data = []
+            except (AttributeError, TypeError, ValueError) as e:
+                raise DataError(f"Error en prepare_bar_data: {e}")
             else:
                 raise DataError("Debe especificar category_col")
             

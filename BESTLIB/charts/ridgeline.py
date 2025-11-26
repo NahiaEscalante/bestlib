@@ -46,8 +46,8 @@ class RidgelineChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-            if column not in data.columns:
-                raise ChartError(f"Columna '{column}' no encontrada")
+                if column not in data.columns:
+                    raise ChartError(f"Columna '{column}' no encontrada")
             if category_col not in data.columns:
                 raise ChartError(f"Columna '{category_col}' no encontrada")
             if not pd.api.types.is_numeric_dtype(data[column]):
@@ -71,7 +71,7 @@ class RidgelineChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-            categories = data[category_col].unique()
+                categories = data[category_col].unique()
             result = {}
             
             for cat in categories:
@@ -88,7 +88,7 @@ class RidgelineChart(ChartBase):
                         kde = gaussian_kde(cat_data)
                     
                         if np is not None:
-                    x_min, x_max = float(np.min(cat_data)), float(np.max(cat_data))
+                            x_min, x_max = float(np.min(cat_data)), float(np.max(cat_data))
                     x_range = x_max - x_min
                     x_padding = x_range * 0.1
                     x_eval = np.linspace(x_min - x_padding, x_max + x_padding, 200)
@@ -100,8 +100,8 @@ class RidgelineChart(ChartBase):
                     ]
                 except ImportError:
                     # Fallback: histograma
-                        if np is not None:
-                    hist, bin_edges = np.histogram(cat_data, bins=50, density=True)
+                    if np is not None:
+                        hist, bin_edges = np.histogram(cat_data, bins=50, density=True)
                     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
                     result[str(cat)] = [
                         {'x': float(x), 'y': float(y)} 

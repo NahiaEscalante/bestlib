@@ -86,8 +86,8 @@ class ScatterChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd and isinstance(data, pd.DataFrame):
-            if size_col and size_col in data.columns:
-                size_values = data[size_col].astype(float, errors='ignore')
+                if size_col and size_col in data.columns:
+                    size_values = data[size_col].astype(float, errors='ignore')
                 for idx in range(min(len(processed_data), len(size_values))):
                     try:
                         processed_data[idx]['size'] = float(size_values.iloc[idx])

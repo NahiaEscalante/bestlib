@@ -60,9 +60,9 @@ class RibbonChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-            # Ordenar por x_col
-            data_sorted = data.sort_values(by=x_col).copy()
-            ribbon_data = []
+                # Ordenar por x_col
+                data_sorted = data.sort_values(by=x_col).copy()
+                ribbon_data = []
             for _, row in data_sorted.iterrows():
                 ribbon_data.append({
                     'x': float(row[x_col]),
@@ -79,7 +79,8 @@ class RibbonChart(ChartBase):
                     'y1': float(d[y1_col]),
                     'y2': float(d[y2_col])
                 })
-        else:
+            else:
+                ribbon_data = []
         
         return {'data': ribbon_data}
     

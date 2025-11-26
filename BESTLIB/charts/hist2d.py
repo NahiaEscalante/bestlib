@@ -66,8 +66,8 @@ class Hist2dChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-            x_values = data[x_col].dropna().values
-            y_values = data[y_col].dropna().values
+                x_values = data[x_col].dropna().values
+                y_values = data[y_col].dropna().values
             else:
                 x_values = np.array([d[x_col] for d in data if x_col in d and d[x_col] is not None])
                 y_values = np.array([d[y_col] for d in data if y_col in d and d[y_col] is not None])

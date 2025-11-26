@@ -43,8 +43,8 @@ class FillBetweenChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-            if x_col not in data.columns:
-                raise ChartError(f"Columna '{x_col}' no encontrada")
+                if x_col not in data.columns:
+                    raise ChartError(f"Columna '{x_col}' no encontrada")
             if y1 not in data.columns:
                 raise ChartError(f"Columna '{y1}' no encontrada")
             if y2 not in data.columns:
@@ -83,8 +83,8 @@ class FillBetweenChart(ChartBase):
         if has_pandas():
             pd = get_pandas()
             if pd is not None and isinstance(data, pd.DataFrame):
-            if y2 in data.columns:
-                y2_values = data[y2].astype(float, errors='ignore')
+                if y2 in data.columns:
+                    y2_values = data[y2].astype(float, errors='ignore')
                 for idx in range(min(len(processed_data), len(y2_values))):
                     try:
                         processed_data[idx]['y2'] = float(y2_values.iloc[idx])
@@ -93,7 +93,7 @@ class FillBetweenChart(ChartBase):
                             processed_data[idx]['y1'] = processed_data[idx].pop('y')
                     except (ValueError, TypeError):
                         processed_data[idx]['y2'] = processed_data[idx].get('y', 0)
-        else:
+
             if isinstance(data, list):
                 for idx, item in enumerate(data):
                     if idx < len(processed_data):
@@ -102,9 +102,9 @@ class FillBetweenChart(ChartBase):
                                 processed_data[idx]['y2'] = float(item.get(y2, 0))
                                 if 'y' in processed_data[idx]:
                                     processed_data[idx]['y1'] = processed_data[idx].pop('y')
-                                except (ValueError, TypeError):
-                                    processed_data[idx]['y2'] = processed_data[idx].get('y', 0)
-        else:
+                            except (ValueError, TypeError):
+                                processed_data[idx]['y2'] = processed_data[idx].get('y', 0)
+
             if isinstance(data, list):
                 for idx, item in enumerate(data):
                     if idx < len(processed_data):
