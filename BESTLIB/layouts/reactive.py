@@ -837,8 +837,39 @@ class ReactiveMatrixLayout:
                             .attr('width', x.bandwidth())
                             .attr('height', 0)
                             .attr('fill', d => colorMap[d.category] || d.color || '{default_color}')
-                            .style('cursor', 'pointer')
-                            .on('click', function(event, d) {{
+                            .style('cursor', 'pointer');
+                        
+                        // Crear tooltip si no existe
+                        const tooltipId = `bar-tooltip-${{divId}}-{letter}`;
+                        let tooltip = window.d3.select(`#${{tooltipId}}`);
+                        if (tooltip.empty()) {{
+                            tooltip = window.d3.select('body').append('div')
+                                .attr('id', tooltipId)
+                                .attr('class', 'bar-chart-tooltip')
+                                .style('position', 'absolute')
+                                .style('background', 'rgba(0, 0, 0, 0.85)')
+                                .style('color', '#fff')
+                                .style('padding', '10px 12px')
+                                .style('border-radius', '6px')
+                                .style('pointer-events', 'none')
+                                .style('opacity', 0)
+                                .style('font-size', '12px')
+                                .style('z-index', 10000)
+                                .style('display', 'none')
+                                .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+                                .style('font-family', 'Arial, sans-serif');
+                        }}
+                        
+                        // Agregar eventos de tooltip y click a TODAS las barras (nuevas y existentes)
+                        const allBars = barsEnter.merge(bars);
+                        
+                        // Limpiar eventos anteriores
+                        allBars.on('click', null)
+                            .on('mouseenter', null)
+                            .on('mouseleave', null);
+                        
+                        // Agregar eventos de click
+                        allBars.on('click', function(event, d) {{
                                 // CRÍTICO: Prevenir eventos durante actualización
                                 // Verificar flag de actualización del bar chart
                                 if (window._bestlib_updating_{letter}) {{
@@ -899,8 +930,45 @@ class ReactiveMatrixLayout:
                                 return false;
                             }});
                         
-                        // Actualizar barras existentes y nuevas
-                        barsEnter.merge(bars)
+                        // Agregar eventos de tooltip
+                        allBars.on('mouseenter', function(event, d) {{
+                            // Resaltar barra
+                            window.d3.select(this)
+                                .attr('opacity', 0.7);
+                            
+                            // Mostrar tooltip
+                            const mouseX = event.pageX || event.clientX || 0;
+                            const mouseY = event.pageY || event.clientY || 0;
+                            
+                            const value = typeof d.value === 'number' ? d.value.toFixed(2) : d.value;
+                            const categoryLabel = '{kwargs.get("xLabel", "Category")}';
+                            const valueLabel = '{kwargs.get("yLabel", "Value")}';
+                            
+                            tooltip
+                                .style('left', (mouseX + 10) + 'px')
+                                .style('top', (mouseY - 10) + 'px')
+                                .style('display', 'block')
+                                .html(`<strong>${{categoryLabel}}:</strong> ${{d.category}}<br/><strong>${{valueLabel}}:</strong> ${{value}}`)
+                                .transition()
+                                .duration(200)
+                                .style('opacity', 1);
+                        }})
+                        .on('mouseleave', function(event, d) {{
+                            // Restaurar opacidad
+                            window.d3.select(this)
+                                .attr('opacity', 1);
+                            
+                            // Ocultar tooltip
+                            tooltip.transition()
+                                .duration(200)
+                                .style('opacity', 0)
+                                .on('end', function() {{
+                                    tooltip.style('display', 'none');
+                                }});
+                        }});
+                        
+                        // Actualizar barras existentes y nuevas (con transición)
+                        allBars
                             .transition()
                             .duration(300)  // Transición más rápida para evitar bucles
                             .ease(window.d3.easeCubicOut)
