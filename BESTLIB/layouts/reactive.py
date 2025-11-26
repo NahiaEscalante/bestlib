@@ -3641,6 +3641,7 @@ class ReactiveMatrixLayout:
         return self.selection_model.get_items()
     
     @property
+    @property
     def selected_data(self):
         """
         Retorna los datos seleccionados (alias para items).
