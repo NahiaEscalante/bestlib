@@ -2923,7 +2923,7 @@
         .style('stroke-width', '1.5px');
       
       const yAxis = g.append('g')
-        .call(d3.axisLeft(y).ticks(10));
+        .call(d3.axisLeft(y).ticks(10).tickFormat(d3.format('.1f')));
       
       yAxis.selectAll('text')
         .style('font-size', '11px')
