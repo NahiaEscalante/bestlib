@@ -758,32 +758,24 @@ class ReactiveMatrixLayout:
                         const width = dims.width;
                         const height = dims.height;
                         
-                        // CRÍTICO: NO limpiar toda la celda si no es necesario
-                        // Solo limpiar si es la primera renderización o si realmente es necesario
+                        // Usar SVG existente o crear uno nuevo
                         const existingSvg = targetCell.querySelector('svg.bar-chart');
-                        const existingBars = targetCell.querySelectorAll('.bar');
                         
                         let svg, g;
-                        if (existingSvg && existingBars.length > 0) {{
-                            // Usar SVG existente y actualizar solo los datos
+                        if (existingSvg) {{
+                            // Usar SVG existente y limpiar contenido
                             svg = window.d3.select(existingSvg);
-                            g = svg.select('g.chart-group');
-                            if (g.empty()) {{
-                                // Si no hay grupo, crear uno
-                                g = svg.append('g').attr('class', 'chart-group');
-                            }}
+                            svg.selectAll('*').remove();  // Limpiar todo el contenido
+                            g = svg.append('g').attr('class', 'chart-group');
                         }} else {{
-                            // Solo limpiar si no hay SVG existente
-                        targetCell.innerHTML = '';
-                        
+                            // Crear nuevo SVG
+                            targetCell.innerHTML = '';
                             svg = window.d3.select(targetCell)
                                 .append('svg')
                                 .attr('class', 'bar-chart')
                                 .attr('width', width)
                                 .attr('height', height);
-                            
-                            g = svg.append('g')
-                                .attr('class', 'chart-group');
+                            g = svg.append('g').attr('class', 'chart-group');
                         }}
                         const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
                         const chartWidth = width - margin.left - margin.right;
@@ -819,23 +811,17 @@ class ReactiveMatrixLayout:
                             .nice()
                             .range([chartHeight, 0]);
                         
-                        // Renderizar barras
-                        // IMPORTANTE: Preservar los event listeners existentes si es posible
-                        // Si las barras ya existen, usar update pattern en lugar de recrear
+                        // Renderizar barras - SIMPLIFICADO
+                        // Como limpiamos todo el SVG arriba, solo necesitamos crear las barras nuevas
                         const bars = g.selectAll('.bar')
-                            .data(data, d => d.category);  // Usar key function para mantener barras existentes
-                        
-                        // Remover barras que ya no existen
-                        bars.exit().remove();
-                        
-                        // Agregar nuevas barras
-                        const barsEnter = bars.enter()
+                            .data(data)
+                            .enter()
                             .append('rect')
                             .attr('class', 'bar')
                             .attr('x', d => x(d.category))
-                            .attr('y', chartHeight)
+                            .attr('y', d => y(d.value))
                             .attr('width', x.bandwidth())
-                            .attr('height', 0)
+                            .attr('height', d => chartHeight - y(d.value))
                             .attr('fill', d => colorMap[d.category] || d.color || '{default_color}')
                             .style('cursor', 'pointer');
                         
@@ -860,16 +846,8 @@ class ReactiveMatrixLayout:
                                 .style('font-family', 'Arial, sans-serif');
                         }}
                         
-                        // Agregar eventos de tooltip y click a TODAS las barras (nuevas y existentes)
-                        const allBars = barsEnter.merge(bars);
-                        
-                        // Limpiar eventos anteriores
-                        allBars.on('click', null)
-                            .on('mouseenter', null)
-                            .on('mouseleave', null);
-                        
-                        // Agregar eventos de click
-                        allBars.on('click', function(event, d) {{
+                        // Agregar eventos de tooltip y click
+                        bars.on('click', function(event, d) {{
                                 // CRÍTICO: Prevenir eventos durante actualización
                                 // Verificar flag de actualización del bar chart
                                 if (window._bestlib_updating_{letter}) {{
@@ -931,7 +909,7 @@ class ReactiveMatrixLayout:
                             }});
                         
                         // Agregar eventos de tooltip
-                        allBars.on('mouseenter', function(event, d) {{
+                        bars.on('mouseenter', function(event, d) {{
                             // Resaltar barra
                             window.d3.select(this)
                                 .attr('opacity', 0.7);
@@ -966,17 +944,6 @@ class ReactiveMatrixLayout:
                                     tooltip.style('display', 'none');
                                 }});
                         }});
-                        
-                        // Actualizar barras existentes y nuevas (con transición)
-                        allBars
-                            .transition()
-                            .duration(300)  // Transición más rápida para evitar bucles
-                            .ease(window.d3.easeCubicOut)
-                            .attr('x', d => x(d.category))
-                            .attr('width', x.bandwidth())
-                            .attr('y', d => y(d.value))
-                            .attr('height', d => chartHeight - y(d.value))
-                            .attr('fill', d => colorMap[d.category] || d.color || '{default_color}');
                         
                         // Renderizar ejes si se requiere (usar update pattern)
                         if ({str(show_axes).lower()}) {{
