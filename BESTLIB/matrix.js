@@ -7518,38 +7518,10 @@
         });
     });
     
-    // Ejes
+    // Ejes con estilo negro unificado
     if (axes !== false) {
-      const xAxis = d3.axisBottom(x);
-      const yAxis = d3.axisLeft(y);
-      
-      g.append('g')
-        .attr('transform', `translate(0,${chartHeight})`)
-        .call(xAxis)
-        .style('opacity', 1);
-      
-      g.append('g')
-        .call(yAxis)
-        .style('opacity', 1);
-      
-      // Etiquetas
-      if (xLabel) {
-        g.append('text')
-          .attr('transform', `translate(${chartWidth / 2}, ${chartHeight + margin.bottom - 5})`)
-          .style('text-anchor', 'middle')
-          .style('font-size', '12px')
-          .text(xLabel);
-      }
-      
-      if (yLabel) {
-        g.append('text')
-          .attr('transform', 'rotate(-90)')
-          .attr('y', -margin.left + 15)
-          .attr('x', -chartHeight / 2)
-          .style('text-anchor', 'middle')
-          .style('font-size', '12px')
-          .text(yLabel);
-      }
+      renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
+      renderYAxis(g, y, chartWidth, chartHeight, margin, yLabel, svg);
     }
   }
 
@@ -7741,6 +7713,24 @@
     const xLabel = options.xLabel || spec.xLabel;
     const yLabel = options.yLabel || spec.yLabel;
     
+    // Crear tooltip
+    const tooltipId = `step-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '8px 12px')
+        .style('border-radius', '4px')
+        .style('font-size', '12px')
+        .style('pointer-events', 'none')
+        .style('z-index', '10000')
+        .style('box-shadow', '0 2px 4px rgba(0,0,0,0.2)')
+        .style('opacity', 0);
+    }
+    
     // Crear línea escalonada
     let line;
     
@@ -7768,40 +7758,47 @@
       .attr('fill', 'none')
       .attr('stroke', color)
       .attr('stroke-width', strokeWidth)
-      .attr('d', line);
+      .attr('d', line)
+      .attr('class', 'bestlib-line');
     
-    // Ejes
+    // Overlay para tooltip con bisector
+    const bisect = d3.bisector(d => d.x).left;
+    
+    g.append('rect')
+      .attr('class', 'overlay')
+      .attr('fill', 'none')
+      .attr('pointer-events', 'all')
+      .attr('width', chartWidth)
+      .attr('height', chartHeight)
+      .on('mousemove', function(event) {
+        const [mouseX] = d3.pointer(event, this);
+        const x0 = x.invert(mouseX);
+        const i = bisect(sortedData, x0, 1);
+        const d0 = sortedData[i - 1];
+        const d1 = sortedData[i];
+        
+        if (!d0 && !d1) return;
+        
+        const d = (!d1 || (d0 && (x0 - d0.x < d1.x - x0))) ? d0 : d1;
+        
+        tooltip
+          .style('opacity', 1)
+          .html(`
+            <div><strong>Step Plot</strong></div>
+            <div>X: ${d.x.toFixed(3)}</div>
+            <div>Y: ${d.y.toFixed(3)}</div>
+          `)
+          .style('left', `${event.pageX + 10}px`)
+          .style('top', `${event.pageY - 10}px`);
+      })
+      .on('mouseleave', function() {
+        tooltip.style('opacity', 0);
+      });
+    
+    // Ejes con estilo negro unificado
     if (axes !== false) {
-      const xAxis = d3.axisBottom(x);
-      const yAxis = d3.axisLeft(y);
-      
-      g.append('g')
-        .attr('transform', `translate(0,${chartHeight})`)
-        .call(xAxis)
-        .style('opacity', 1);
-      
-      g.append('g')
-        .call(yAxis)
-        .style('opacity', 1);
-      
-      // Etiquetas
-      if (xLabel) {
-        g.append('text')
-          .attr('transform', `translate(${chartWidth / 2}, ${chartHeight + margin.bottom - 5})`)
-          .style('text-anchor', 'middle')
-          .style('font-size', '12px')
-          .text(xLabel);
-      }
-      
-      if (yLabel) {
-        g.append('text')
-          .attr('transform', 'rotate(-90)')
-          .attr('y', -margin.left + 15)
-          .attr('x', -chartHeight / 2)
-          .style('text-anchor', 'middle')
-          .style('font-size', '12px')
-          .text(yLabel);
-      }
+      renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
+      renderYAxis(g, y, chartWidth, chartHeight, margin, yLabel, svg);
     }
   }
 
