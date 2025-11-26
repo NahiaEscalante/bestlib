@@ -840,7 +840,7 @@ class ReactiveMatrixLayout:
                             .style('cursor', 'pointer');
                         
                         // Crear tooltip si no existe
-                        const tooltipId = `bar-tooltip-${{divId}}-{letter}`;
+                        const tooltipId = `bar-tooltip-{div_id}-{letter}`;
                         let tooltip = window.d3.select(`#${{tooltipId}}`);
                         if (tooltip.empty()) {{
                             tooltip = window.d3.select('body').append('div')
@@ -2295,22 +2295,30 @@ class ReactiveMatrixLayout:
                         
                         console.log('[Boxplot {letter}] Limpiando SVG existente...');
                         
-                        // CRÍTICO: Solo limpiar el contenido de la celda, NO tocar el contenedor principal
-                        // Esto evita que se dispare un re-render del layout completo
-                        // IMPORTANTE: Desconectar ResizeObserver temporalmente para evitar re-renders
-                        if (targetCell._resizeObserver) {{
-                            targetCell._resizeObserver.disconnect();
+                        // NUEVO ENFOQUE: En lugar de remover el SVG, vamos a actualizarlo usando update pattern de D3
+                        // Esto es más eficiente y evita problemas de rendering
+                        let svg = targetCell.querySelector('svg');
+                        let shouldRecreate = false;
+                        
+                        if (!svg) {{
+                            console.log('[Boxplot {letter}] No hay SVG, creando uno nuevo');
+                            shouldRecreate = true;
+                        }} else {{
+                            console.log('[Boxplot {letter}] SVG encontrado, intentando actualizar');
                         }}
                         
-                        // En lugar de usar innerHTML = '', removemos solo el SVG existente
-                        const existingSvg = targetCell.querySelector('svg');
-                        if (existingSvg) {{
-                            existingSvg.remove();
-                            console.log('[Boxplot {letter}] SVG existente removido');
+                        // Si no hay SVG o necesitamos recrear, limpiar todo
+                        if (shouldRecreate) {{
+                            // CRÍTICO: Solo limpiar el contenido de la celda, NO tocar el contenedor principal
+                            // Esto evita que se dispare un re-render del layout completo
+                            // IMPORTANTE: Desconectar ResizeObserver temporalmente para evitar re-renders
+                            if (targetCell._resizeObserver) {{
+                                targetCell._resizeObserver.disconnect();
+                            }}
+                            
+                            // Limpiar todo el contenido
+                            targetCell.innerHTML = '';
                         }}
-                        // Limpiar cualquier otro contenido visual (divs, etc.) pero mantener la estructura de la celda
-                        const otherContent = targetCell.querySelectorAll('div:not(.matrix-cell)');
-                        otherContent.forEach(el => el.remove());
                         
                         // NO reconectar el ResizeObserver aquí - se reconectará después de renderizar si es necesario
                         
@@ -2345,17 +2353,31 @@ class ReactiveMatrixLayout:
                         console.log('[Boxplot {letter}] Creando nuevo SVG...');
                         
                         // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
-                        const svg = window.d3.select(targetCell)
-                            .append('svg')
-                            .attr('width', width)
-                            .attr('height', height)
-                            .style('max-height', height + 'px')
-                            .style('overflow', 'hidden')
-                            .style('display', 'block');
+                        let svgSelection;
+                        if (shouldRecreate) {{
+                            svgSelection = window.d3.select(targetCell)
+                                .append('svg')
+                                .attr('width', width)
+                                .attr('height', height)
+                                .style('max-height', height + 'px')
+                                .style('overflow', 'hidden')
+                                .style('display', 'block');
+                        }} else {{
+                            // Usar SVG existente y actualizar dimensiones
+                            svgSelection = window.d3.select(svg)
+                                .attr('width', width)
+                                .attr('height', height)
+                                .style('max-height', height + 'px')
+                                .style('overflow', 'hidden')
+                                .style('display', 'block');
+                            
+                            // Limpiar contenido del SVG (todos los grupos)
+                            svgSelection.selectAll('*').remove();
+                        }}
                         
-                        console.log('[Boxplot {letter}] SVG creado, width:', width, 'height:', height);
+                        console.log('[Boxplot {letter}] SVG preparado, width:', width, 'height:', height);
                         
-                        const g = svg.append('g')
+                        const g = svgSelection.append('g')
                             .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
                         
                         const x = window.d3.scaleBand()
