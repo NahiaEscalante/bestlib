@@ -781,24 +781,25 @@ class ReactiveMatrixLayout:
             def update_barchart(items, count):
                 """Actualiza el bar chart cuando cambia la selección usando JavaScript"""
                 try:
-                    # Debug: verificar que el callback se está ejecutando
-                    if self._debug or MatrixLayout._debug:
-                        print(f"🔄 [ReactiveMatrixLayout] Callback ejecutado: Actualizando bar chart '{letter}' con {count} items seleccionados")
+                    # DEBUG COMPLETO
+                    print(f"🚨 [DEBUG BARCHART {letter}] Callback invocado con count={count}, items tipo={type(items)}, len={len(items) if items else 0}")
+                    if items and len(items) > 0:
+                        print(f"🚨 [DEBUG BARCHART {letter}] Primeros 2 items: {items[:2] if len(items) >= 2 else items}")
+                    
                     import json
                     from IPython.display import Javascript
                     import time
                     
-                    # Usar datos seleccionados o todos los datos
-                    data_to_use = self._data
-                    if items and len(items) > 0:
-                        # Convertir lista de dicts a DataFrame si es necesario
-                        if HAS_PANDAS and isinstance(items[0], dict):
-                            import pandas as pd
-                            data_to_use = pd.DataFrame(items)
-                        else:
-                            data_to_use = items
-                    else:
-                        data_to_use = self._data
+                    # CRÍTICO: Verificar que items sea válido antes de usar
+                    if not items or not isinstance(items, list) or len(items) == 0:
+                        print(f"⚠️ [BARCHART {letter}] Items vacío o inválido, ignorando actualización")
+                        return
+                    
+                    # Usar datos seleccionados
+                    data_to_use = items
+                    if HAS_PANDAS and isinstance(items[0], dict):
+                        import pandas as pd
+                        data_to_use = pd.DataFrame(items)
                     
                     # Preparar datos del bar chart
                     bar_data = self._prepare_barchart_data(
