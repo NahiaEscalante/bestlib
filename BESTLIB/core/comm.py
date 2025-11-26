@@ -140,7 +140,7 @@ class CommManager:
             cls._cleanup_dead_instances()
         
         with cls._instances_lock:
-        inst_ref = cls._instances.get(div_id)
+            inst_ref = cls._instances.get(div_id)
             if inst_ref is None:
                 return None
             
