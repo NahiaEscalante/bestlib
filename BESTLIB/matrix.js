@@ -5958,7 +5958,25 @@
       .range(colors);
     
     // Crear tooltip
-    const tooltip = createTooltip(divId, 'grouped_bar');
+    const tooltipId = `grouped-bar-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'grouped-bar-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
     
     // Agrupar datos por grupo principal
     const groupedData = groups.map(group => {
@@ -6006,14 +6024,30 @@
       })
       .on('mouseenter', function(event, d) {
         d3.select(this).attr('opacity', 0.8);
-        showTooltip(tooltip, event, container, {
-          Series: d.series,
-          Value: d.value.toFixed(2)
-        });
+        
+        // Mostrar tooltip
+        const mouseX = event.pageX || event.clientX || 0;
+        const mouseY = event.pageY || event.clientY || 0;
+        
+        tooltip
+          .style('left', (mouseX + 10) + 'px')
+          .style('top', (mouseY - 10) + 'px')
+          .style('display', 'block')
+          .html(`<strong>Series:</strong> ${d.series}<br/><strong>Value:</strong> ${d.value.toFixed(2)}`)
+          .transition()
+          .duration(200)
+          .style('opacity', 1);
       })
       .on('mouseleave', function() {
         d3.select(this).attr('opacity', 1);
-        hideTooltip(tooltip);
+        
+        // Ocultar tooltip
+        tooltip.transition()
+          .duration(200)
+          .style('opacity', 0)
+          .on('end', function() {
+            tooltip.style('display', 'none');
+          });
       })
       .transition()
       .duration(800)
