@@ -2471,12 +2471,11 @@ class ReactiveMatrixLayout:
                     # Generar un ID único para este script para evitar duplicaciones
                     script_id = f'boxplot-update-{letter}-{uuid.uuid4().hex[:8]}'
                     
-                    # IMPORTANTE: Usar display_id para que Jupyter reemplace el output anterior
-                    # en lugar de crear uno nuevo, lo que previene la duplicación
-                    display(Javascript(js_update), clear=False, display_id=f'boxplot-update-{letter}', update=True)
+                    # CAMBIO: Usar display normal sin update para forzar ejecución
+                    display(Javascript(js_update))
                     
                     if self._debug or MatrixLayout._debug:
-                        print(f"   📤 JavaScript del boxplot '{letter}' ejecutado (display_id: boxplot-update-{letter})")
+                        print(f"   📤 JavaScript del boxplot '{letter}' ejecutado")
                 except Exception as e:
                     from .matrix import MatrixLayout
                     if self._debug or MatrixLayout._debug:
