@@ -920,6 +920,106 @@
   }
 
   // ==========================================
+  // Funciones Helper para Tooltips
+  // ==========================================
+  
+  /**
+   * Muestra un tooltip con información del gráfico
+   * @param {object} tooltip - Selección D3 del tooltip
+   * @param {object} event - Evento del mouse
+   * @param {HTMLElement} container - Contenedor del gráfico
+   * @param {object} data - Datos a mostrar
+   * @param {object} formatters - Objeto con funciones de formato (opcional)
+   */
+  function showTooltip(tooltip, event, container, data, formatters = {}) {
+    // Obtener coordenadas del mouse (compatible con Colab y Jupyter)
+    let mouseX = 0;
+    let mouseY = 0;
+    
+    try {
+      if (event.clientX !== undefined && event.clientX !== null) {
+        mouseX = event.clientX;
+        mouseY = event.clientY;
+      } else if (event.pageX !== undefined && event.pageX !== null) {
+        mouseX = event.pageX;
+        mouseY = event.pageY;
+      } else {
+        const rect = container.getBoundingClientRect();
+        mouseX = rect.left + (rect.width / 2);
+        mouseY = rect.top + (rect.height / 2);
+      }
+    } catch (e) {
+      // Fallback: centro del contenedor
+      try {
+        const rect = container.getBoundingClientRect();
+        mouseX = rect.left + (rect.width / 2);
+        mouseY = rect.top + (rect.height / 2);
+      } catch (e2) {
+        mouseX = 100;
+        mouseY = 100;
+      }
+    }
+    
+    // Generar contenido HTML del tooltip
+    let html = '';
+    
+    // Si hay un formateador personalizado, usarlo
+    if (formatters.custom && typeof formatters.custom === 'function') {
+      html = formatters.custom(data);
+    } else {
+      // Formato por defecto: mostrar todos los campos relevantes
+      const fields = formatters.fields || Object.keys(data);
+      const labels = formatters.labels || {};
+      
+      html = fields
+        .filter(field => {
+          const value = data[field];
+          // Filtrar campos internos (que empiezan con _) y valores null/undefined
+          return !field.startsWith('_') && value !== null && value !== undefined;
+        })
+        .map(field => {
+          const label = labels[field] || field;
+          let value = data[field];
+          
+          // Aplicar formato si existe
+          if (formatters[field] && typeof formatters[field] === 'function') {
+            value = formatters[field](value);
+          } else if (typeof value === 'number') {
+            // Formato numérico por defecto (2 decimales)
+            value = value.toFixed(2);
+          }
+          
+          return `<div><strong>${label}:</strong> ${value}</div>`;
+        })
+        .join('');
+    }
+    
+    // Mostrar tooltip
+    tooltip
+      .html(html)
+      .style('display', 'block')
+      .style('left', (mouseX + 15) + 'px')
+      .style('top', (mouseY - 10) + 'px')
+      .transition()
+      .duration(150)
+      .style('opacity', '1');
+  }
+  
+  /**
+   * Oculta el tooltip
+   * @param {object} tooltip - Selección D3 del tooltip
+   */
+  function hideTooltip(tooltip) {
+    tooltip
+      .transition()
+      .duration(150)
+      .style('opacity', '0')
+      .on('end', function() {
+        tooltip.style('display', 'none');
+      });
+  }
+
+  // ==========================================
   // Renderizado de Gráficos con D3.js
   // ==========================================
   
@@ -2563,6 +2663,27 @@
       .style('overflow', 'visible')
       .style('display', 'block'); // Evitar espacios en blanco
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    // Crear tooltip para violin
+    const tooltipId = `violin-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'violin-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
 
     const categories = validViolins.map(v => String(v.category || 'Unknown'));
     const yAll = validViolins.flatMap(v => v.profile.map(p => p.y)).filter(y => y != null && !isNaN(y));
@@ -2703,6 +2824,37 @@
           .attr('stroke-width', 1)
           .attr('stroke-linejoin', 'round')
           .attr('stroke-linecap', 'round');
+        
+        // Agregar área invisible para tooltips
+        const yMin = d3.min(safeProfile.map(p => p.y));
+        const yMax = d3.max(safeProfile.map(p => p.y));
+        const median = d3.median(safeProfile.map(p => p.y));
+        const q1 = d3.quantile(safeProfile.map(p => p.y).sort(d3.ascending), 0.25);
+        const q3 = d3.quantile(safeProfile.map(p => p.y).sort(d3.ascending), 0.75);
+        
+        g.append('rect')
+          .attr('x', centerX - maxViolinWidth)
+          .attr('y', y(yMax))
+          .attr('width', maxViolinWidth * 2)
+          .attr('height', y(yMin) - y(yMax))
+          .attr('fill', 'transparent')
+          .style('cursor', 'pointer')
+          .on('mouseenter', function(event) {
+            const formatters = {
+              custom: (data) => {
+                return `<div><strong>${category}</strong></div>
+                        <div><strong>Mínimo:</strong> ${yMin.toFixed(2)}</div>
+                        <div><strong>Q1:</strong> ${q1.toFixed(2)}</div>
+                        <div><strong>Mediana:</strong> ${median.toFixed(2)}</div>
+                        <div><strong>Q3:</strong> ${q3.toFixed(2)}</div>
+                        <div><strong>Máximo:</strong> ${yMax.toFixed(2)}</div>`;
+              }
+            };
+            showTooltip(tooltip, event, container, {category, yMin, median, q1, q3, yMax}, formatters);
+          })
+          .on('mouseleave', function() {
+            hideTooltip(tooltip);
+          });
         
         renderedViolins++;
       } catch (e) {
