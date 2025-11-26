@@ -1375,10 +1375,10 @@ class ReactiveMatrixLayout:
                             try:
                                 # ✅ CORRECCIÓN: Validar que processed_items tenga elementos antes de acceder a [0]
                                 if isinstance(processed_items, list) and len(processed_items) > 0:
-                                if isinstance(processed_items[0], dict):
-                                    initial_data = pd_module.DataFrame(processed_items)
-                                else:
-                                    initial_data = pd_module.DataFrame(processed_items)
+                                    if isinstance(processed_items[0], dict):
+                                        initial_data = pd_module.DataFrame(processed_items)
+                                    else:
+                                        initial_data = pd_module.DataFrame(processed_items)
                                 else:
                                     initial_data = self._data
                             except Exception:
