@@ -2793,7 +2793,7 @@
         .x0(p => centerX - wScale(p.w))  // Lado izquierdo
         .x1(p => centerX + wScale(p.w))  // Lado derecho
         .y(p => y(p.y))
-        .curve(d3.curveCatmullRom.alpha(0.5))
+        .curve(d3.curveLinear)  // Usar curva linear para mostrar todos los detalles
         .defined(d => d != null && d.y != null && !isNaN(d.y) && d.w != null && !isNaN(d.w) && d.w > 0);
       
       // Generar el path y verificar que sea válido
