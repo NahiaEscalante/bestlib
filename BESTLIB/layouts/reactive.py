@@ -2236,6 +2236,11 @@ class ReactiveMatrixLayout:
                 default_color = kwargs.get('color', '#4a90e2')
                 show_axes = kwargs.get('axes', True)
                 
+                # Debug en Python
+                if self._debug or MatrixLayout._debug:
+                    print(f"📊 [Boxplot {letter}] Datos preparados: {box_data}")
+                    print(f"📊 [Boxplot {letter}] Count: {count}, Items: {len(items) if items else 0}")
+                
                 js_update = f"""
                 (function() {{
                     // Flag para evitar actualizaciones múltiples simultáneas
@@ -2250,8 +2255,13 @@ class ReactiveMatrixLayout:
                             return;
                         }}
                         
+                        const boxData = {box_data_json};
+                        console.log('📊 [Boxplot {letter}] Actualizando con datos:', boxData);
+                        console.log('📊 [Boxplot {letter}] Items seleccionados: {count}');
+                        
                         const container = document.getElementById('{div_id}');
                         if (!container) {{
+                            console.warn('[Boxplot {letter}] Contenedor no encontrado');
                             window._bestlib_updating_boxplot_{letter} = false;
                             return;
                         }}
