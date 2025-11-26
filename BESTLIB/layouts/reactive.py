@@ -2269,11 +2269,14 @@ class ReactiveMatrixLayout:
                         const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
                         let targetCell = null;
                         
+                        console.log('[Boxplot {letter}] Celdas encontradas:', cells.length);
+                        
                         // Buscar celda con SVG existente (más robusto)
                         for (let cell of cells) {{
                             const svg = cell.querySelector('svg');
                             if (svg) {{
                                 targetCell = cell;
+                                console.log('[Boxplot {letter}] Celda con SVG encontrada');
                                 break;
                             }}
                         }}
@@ -2281,12 +2284,16 @@ class ReactiveMatrixLayout:
                         // Si no encontramos, usar la primera celda
                         if (!targetCell && cells.length > 0) {{
                             targetCell = cells[0];
+                            console.log('[Boxplot {letter}] Usando primera celda');
                         }}
                         
                         if (!targetCell) {{
+                            console.warn('[Boxplot {letter}] No se encontró celda objetivo');
                             window._bestlib_updating_boxplot_{letter} = false;
                             return;
                         }}
+                        
+                        console.log('[Boxplot {letter}] Limpiando SVG existente...');
                         
                         // CRÍTICO: Solo limpiar el contenido de la celda, NO tocar el contenedor principal
                         // Esto evita que se dispare un re-render del layout completo
@@ -2299,6 +2306,7 @@ class ReactiveMatrixLayout:
                         const existingSvg = targetCell.querySelector('svg');
                         if (existingSvg) {{
                             existingSvg.remove();
+                            console.log('[Boxplot {letter}] SVG existente removido');
                         }}
                         // Limpiar cualquier otro contenido visual (divs, etc.) pero mantener la estructura de la celda
                         const otherContent = targetCell.querySelectorAll('div:not(.matrix-cell)');
@@ -2326,11 +2334,15 @@ class ReactiveMatrixLayout:
                         
                         const data = {box_data_json};
                         
+                        console.log('[Boxplot {letter}] Data length:', data.length);
+                        
                         if (data.length === 0) {{
                             targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
                             window._bestlib_updating_boxplot_{letter} = false;
                             return;
                         }}
+                        
+                        console.log('[Boxplot {letter}] Creando nuevo SVG...');
                         
                         // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
                         const svg = window.d3.select(targetCell)
@@ -2340,6 +2352,8 @@ class ReactiveMatrixLayout:
                             .style('max-height', height + 'px')
                             .style('overflow', 'hidden')
                             .style('display', 'block');
+                        
+                        console.log('[Boxplot {letter}] SVG creado, width:', width, 'height:', height);
                         
                         const g = svg.append('g')
                             .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
@@ -2353,6 +2367,8 @@ class ReactiveMatrixLayout:
                             .domain([window.d3.min(data, d => d.lower), window.d3.max(data, d => d.upper)])
                             .nice()
                             .range([chartHeight, 0]);
+                        
+                        console.log('[Boxplot {letter}] Escalas creadas, dibujando boxes...');
                         
                         // Dibujar boxplot para cada categoría
                         data.forEach((d, i) => {{
@@ -2397,6 +2413,8 @@ class ReactiveMatrixLayout:
                                 .attr('stroke-width', 2);
                         }});
                         
+                        console.log('[Boxplot {letter}] Boxes dibujados, total:', data.length);
+                        
                         if ({str(show_axes).lower()}) {{
                             const xAxis = g.append('g')
                                 .attr('transform', `translate(0,${{chartHeight}})`)
@@ -2405,6 +2423,8 @@ class ReactiveMatrixLayout:
                             const yAxis = g.append('g')
                                 .call(window.d3.axisLeft(y));
                         }}
+                        
+                        console.log('[Boxplot {letter}] Rendering completado exitosamente');
                         
                         // IMPORTANTE: Marcar que esta celda ya no necesita ResizeObserver
                         // porque se está actualizando manualmente
