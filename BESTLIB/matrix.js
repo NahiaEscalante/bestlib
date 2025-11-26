@@ -1617,6 +1617,8 @@
       renderScatterPlotD3(container, spec, d3, divId);
     } else if (chartType === 'histogram') {
       renderHistogramD3(container, spec, d3, divId);
+    } else if (chartType === 'grouped_bar') {
+      renderGroupedBarD3(container, spec, d3, divId);
     } else if (chartType === 'boxplot') {
       renderBoxplotD3(container, spec, d3, divId);
     } else if (chartType === 'heatmap') {
@@ -5879,6 +5881,180 @@
       
       // Renderizar etiquetas de ejes usando función helper
       renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+    }
+  }
+  
+  /**
+   * Grouped Bar Chart con D3.js
+   */
+  function renderGroupedBarD3(container, spec, d3, divId) {
+    const rows = spec.rows || [];
+    const groups = spec.groups || [];
+    const series = spec.series || [];
+    
+    if (rows.length === 0 || groups.length === 0 || series.length === 0) {
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No hay datos para mostrar</div>';
+      return;
+    }
+    
+    const dims = getChartDimensions(container, spec, 400, 350);
+    let width = dims.width;
+    let height = dims.height;
+    
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 15, right: 15, bottom: 30, left: 35 }
+      : { top: 20, right: 20, bottom: 40, left: 50 };
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
+    
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .style('overflow', 'visible');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    // Escalas
+    const x0 = d3.scaleBand()
+      .domain(groups)
+      .range([0, chartWidth])
+      .paddingInner(0.1);
+    
+    const x1 = d3.scaleBand()
+      .domain(series)
+      .range([0, x0.bandwidth()])
+      .padding(0.05);
+    
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(rows, d => d.value) || 100])
+      .nice()
+      .range([chartHeight, 0]);
+    
+    // Colores para las series
+    const colors = spec.colors || d3.schemeCategory10;
+    const color = d3.scaleOrdinal()
+      .domain(series)
+      .range(colors);
+    
+    // Crear tooltip
+    const tooltip = createTooltip(divId, 'grouped_bar');
+    
+    // Agrupar datos por grupo principal
+    const groupedData = groups.map(group => {
+      return {
+        group: group,
+        values: series.map(s => {
+          const row = rows.find(r => r.group === group && r.series === s);
+          return {
+            series: s,
+            value: row ? row.value : 0,
+            _original_rows: row?._original_rows || []
+          };
+        })
+      };
+    });
+    
+    // Crear grupos de barras
+    const groupBars = g.selectAll('.group')
+      .data(groupedData)
+      .enter()
+      .append('g')
+      .attr('class', 'group')
+      .attr('transform', d => `translate(${x0(d.group)},0)`);
+    
+    // Crear barras individuales
+    groupBars.selectAll('rect')
+      .data(d => d.values)
+      .enter()
+      .append('rect')
+      .attr('x', d => x1(d.series))
+      .attr('y', chartHeight)
+      .attr('width', x1.bandwidth())
+      .attr('height', 0)
+      .attr('fill', d => color(d.series))
+      .style('cursor', spec.interactive ? 'pointer' : 'default')
+      .on('click', function(event, d) {
+        if (spec.interactive) {
+          const originalRows = extractOriginalRows(d, `grouped bar ${d.series}`);
+          const payload = createSelectPayload(divId, originalRows, spec, container, 'grouped_bar', {
+            original_items: [d],
+            selected_series: d.series
+          });
+          sendEvent(divId, 'select', payload);
+        }
+      })
+      .on('mouseenter', function(event, d) {
+        d3.select(this).attr('opacity', 0.8);
+        showTooltip(tooltip, event, container, {
+          Series: d.series,
+          Value: d.value.toFixed(2)
+        });
+      })
+      .on('mouseleave', function() {
+        d3.select(this).attr('opacity', 1);
+        hideTooltip(tooltip);
+      })
+      .transition()
+      .duration(800)
+      .attr('y', d => y(d.value))
+      .attr('height', d => chartHeight - y(d.value));
+    
+    // Ejes
+    if (spec.axes !== false) {
+      const xAxis = g.append('g')
+        .attr('class', 'x-axis')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x0));
+      
+      applyUnifiedAxisStyles(xAxis);
+      
+      const yAxis = g.append('g')
+        .attr('class', 'y-axis')
+        .call(d3.axisLeft(y));
+      
+      applyUnifiedAxisStyles(yAxis);
+      
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+    }
+    
+    // Leyenda
+    const legend = svg.append('g')
+      .attr('class', 'legend')
+      .attr('transform', `translate(${width - margin.right - 100}, ${margin.top})`);
+    
+    series.forEach((s, i) => {
+      const legendRow = legend.append('g')
+        .attr('transform', `translate(0, ${i * 20})`);
+      
+      legendRow.append('rect')
+        .attr('width', 15)
+        .attr('height', 15)
+        .attr('fill', color(s));
+      
+      legendRow.append('text')
+        .attr('x', 20)
+        .attr('y', 12)
+        .style('font-size', '11px')
+        .style('fill', '#000')
+        .text(s);
+    });
+    
+    // Título
+    if (spec.title) {
+      svg.append('text')
+        .attr('x', width / 2)
+        .attr('y', margin.top / 2)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '16px')
+        .style('font-weight', '700')
+        .style('fill', '#000')
+        .text(spec.title);
     }
   }
   
