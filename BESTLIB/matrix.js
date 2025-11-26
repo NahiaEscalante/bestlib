@@ -2712,7 +2712,7 @@
     // Asegurar que maxWidth no sea 0
     const finalMaxWidth = maxWidth > 0 ? maxWidth : 1;
     const bandwidth = x.bandwidth() || 40;
-    const maxViolinWidth = (bandwidth * 0.5) - 5; // Reducir ancho para violines más estrechos
+    const maxViolinWidth = (bandwidth * 0.20) - 5; // Reducir ancho para violines más estrechos
     
     const wScale = d3.scaleLinear()
       .domain([0, finalMaxWidth])
