@@ -112,6 +112,17 @@ class MatrixLayout:
         
         # Asegurar que el comm esté registrado usando CommManager
         CommManager.register_comm()
+        
+        # Inicializar atributo para datos seleccionados
+        self._selected_data = []
+    
+    @property
+    def selected_data(self):
+        """
+        Retorna los datos seleccionados.
+        Se actualiza automáticamente cuando se hace una selección en gráficos interactivos.
+        """
+        return self._selected_data
     
     @classmethod
     def set_debug(cls, enabled: bool):
@@ -143,12 +154,15 @@ class MatrixLayout:
         """Registra un handler por defecto para eventos 'select' que muestre los datos seleccionados"""
         def default_select_handler(payload):
             """Handler por defecto que muestra los datos seleccionados (solo si no hay handlers personalizados)"""
-            # Solo ejecutar si no hay handlers personalizados
-            if self._has_custom_select_handler:
-                return
-            
             items = payload.get('items', [])
             count = payload.get('count', len(items))
+            
+            # Guardar datos seleccionados
+            self._selected_data = items
+            
+            # Solo ejecutar el print si no hay handlers personalizados
+            if self._has_custom_select_handler:
+                return
             
             if count == 0:
                 print("📊 No hay elementos seleccionados")
