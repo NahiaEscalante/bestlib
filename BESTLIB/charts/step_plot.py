@@ -77,7 +77,7 @@ class StepPlotChart(ChartBase):
             **kwargs: Otros parámetros
         
         Returns:
-            tuple: (datos_procesados, datos_originales)
+            list: Lista de puntos {x, y} procesados
         """
         # Ordenar por x_col para step plot
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
@@ -86,13 +86,22 @@ class StepPlotChart(ChartBase):
             # Para listas, ordenar manualmente
             data_sorted = sorted(data, key=lambda d: d.get(x_col, 0))
         
-        processed_data, original_data = prepare_line_data(
+        # prepare_line_data devuelve {'series': {'default': [...]}}
+        line_result = prepare_line_data(
             data_sorted,
             x_col=x_col,
             y_col=y_col
         )
         
-        return processed_data, original_data
+        # Extraer la lista de puntos de la estructura de series
+        if isinstance(line_result, dict) and 'series' in line_result:
+            series_data = line_result['series']
+            if isinstance(series_data, dict):
+                # Obtener la primera serie (normalmente 'default')
+                first_series = next(iter(series_data.values()))
+                return first_series
+        
+        return []
     
     def get_spec(self, data, x_col=None, y_col=None, **kwargs):
         """
@@ -111,7 +120,7 @@ class StepPlotChart(ChartBase):
         self.validate_data(data, x_col=x_col, y_col=y_col, **kwargs)
         
         # Preparar datos
-        processed_data, original_data = self.prepare_data(
+        processed_data = self.prepare_data(
             data,
             x_col=x_col,
             y_col=y_col,
