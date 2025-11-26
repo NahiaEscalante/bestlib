@@ -2422,13 +2422,25 @@ class ReactiveMatrixLayout:
                         
                         console.log('[Boxplot {letter}] Rendering completado exitosamente');
                         
+                        // CRÍTICO: Forzar repaint del navegador
+                        // Esto asegura que los cambios visuales se apliquen inmediatamente
+                        targetCell.style.display = 'none';
+                        targetCell.offsetHeight; // Trigger reflow
+                        targetCell.style.display = 'block';
+                        
+                        console.log('[Boxplot {letter}] Repaint forzado');
+                        
                         // IMPORTANTE: Marcar que esta celda ya no necesita ResizeObserver
                         // porque se está actualizando manualmente
                         targetCell._chartSpec = null;
                         targetCell._chartDivId = null;
                         
                         // Resetear flag después de completar la actualización
-                        window._bestlib_updating_boxplot_{letter} = false;
+                        // Usar setTimeout para asegurar que el repaint se complete
+                        setTimeout(() => {{
+                            window._bestlib_updating_boxplot_{letter} = false;
+                            console.log('[Boxplot {letter}] Flag reseteado');
+                        }}, 50);
                     }}
                     
                     updateBoxplot();
