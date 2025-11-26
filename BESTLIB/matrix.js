@@ -7255,16 +7255,30 @@
       bin.y = hexRadius * (Math.sqrt(3) * (bin.q/2 + bin.r));
     });
     
+    // Escala de colores mejorada con mejor contraste
+    // Usar interpoladores con rango ajustado para evitar colores muy claros
     let color;
     if (colorScale === 'Blues') {
-      color = d3.scaleSequential(d3.interpolateBlues)
-        .domain([0, maxCount]);
+      const bluesScale = d3.scaleLinear()
+        .domain([0, maxCount])
+        .range([0.2, 1]);
+      color = d => d3.interpolateBlues(bluesScale(d));
     } else if (colorScale === 'Reds') {
-      color = d3.scaleSequential(d3.interpolateReds)
-        .domain([0, maxCount]);
+      const redsScale = d3.scaleLinear()
+        .domain([0, maxCount])
+        .range([0.2, 1]);
+      color = d => d3.interpolateReds(redsScale(d));
+    } else if (colorScale === 'Viridis') {
+      const viridisScale = d3.scaleLinear()
+        .domain([0, maxCount])
+        .range([0.1, 1]);
+      color = d => d3.interpolateViridis(viridisScale(d));
     } else {
-      color = d3.scaleSequential(d3.interpolateViridis)
-        .domain([0, maxCount]);
+      // Por defecto usar Viridis
+      const viridisScale = d3.scaleLinear()
+        .domain([0, maxCount])
+        .range([0.1, 1]);
+      color = d => d3.interpolateViridis(viridisScale(d));
     }
     
     // Crear tooltip
@@ -7319,38 +7333,10 @@
         tooltip.style('opacity', 0);
       });
     
-    // Ejes
+    // Ejes con estilo negro unificado
     if (axes !== false) {
-      const xAxis = d3.axisBottom(x);
-      const yAxis = d3.axisLeft(y);
-      
-      g.append('g')
-        .attr('transform', `translate(0,${chartHeight})`)
-        .call(xAxis)
-        .style('opacity', 1);
-      
-      g.append('g')
-        .call(yAxis)
-        .style('opacity', 1);
-      
-      // Etiquetas
-      if (xLabel) {
-        g.append('text')
-          .attr('transform', `translate(${chartWidth / 2}, ${chartHeight + margin.bottom - 5})`)
-          .style('text-anchor', 'middle')
-          .style('font-size', '12px')
-          .text(xLabel);
-      }
-      
-      if (yLabel) {
-        g.append('text')
-          .attr('transform', 'rotate(-90)')
-          .attr('y', -margin.left + 15)
-          .attr('x', -chartHeight / 2)
-          .style('text-anchor', 'middle')
-          .style('font-size', '12px')
-          .text(yLabel);
-      }
+      renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
+      renderYAxis(g, y, chartWidth, chartHeight, margin, yLabel, svg);
     }
   }
 
