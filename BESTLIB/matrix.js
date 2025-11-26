@@ -3292,8 +3292,8 @@
       .text(d => d.name);
 
     
-    // Obtener categorías únicas
-    const categories = [...new Set(validPoints.map(p => p.category).filter(c => c != null && c !== ''))];
+    // Obtener categorías únicas de _class
+    const categories = [...new Set(validPoints.map(p => p._class).filter(c => c != null && c !== ''))];
     const color = d3.scaleOrdinal(d3.schemeCategory10).domain(categories.length > 0 ? categories : ['default']);
 
     // Dibujar puntos (después de inicializar todo)
@@ -3306,7 +3306,6 @@
         try {
           return toX(d.x);
         } catch (err) {
-          console.error('RadViz: Error calculando cx', err, d);
           return 0;
         }
       })
@@ -3314,14 +3313,13 @@
         try {
           return toY(d.y);
         } catch (err) {
-          console.error('RadViz: Error calculando cy', err, d);
           return 0;
         }
       })
       .attr('r', 3)
-      .attr('fill', d => d.category && categories.includes(d.category) ? color(d.category) : '#4a90e2')
+      .attr('fill', d => d._class && categories.includes(d._class) ? color(d._class) : '#4a90e2')
       .attr('opacity', 0.6)
-      .attr('stroke', d => d.category && categories.includes(d.category) ? color(d.category) : '#4a90e2')
+      .attr('stroke', d => d._class && categories.includes(d._class) ? color(d._class) : '#4a90e2')
       .attr('stroke-width', 1)
       .style('cursor', 'pointer')
       .style('pointer-events', 'all')
@@ -4148,7 +4146,6 @@
         '<small>El spec debe contener data con puntos</small>' +
         '</div>';
       container.innerHTML = errorMsg;
-      console.error('Parallel Coordinates: No hay datos', { spec });
       return;
     }
     
@@ -4158,7 +4155,6 @@
         '<small>Dimensiones disponibles: ' + (dimensions ? dimensions.length : 0) + '</small>' +
         '</div>';
       container.innerHTML = errorMsg;
-      console.error('Parallel Coordinates: Dimensiones insuficientes', { dimensions });
         return;
       }
       
@@ -4178,7 +4174,6 @@
         '<small>Los datos deben tener valores válidos para al menos una dimensión</small>' +
         '</div>';
       container.innerHTML = errorMsg;
-      console.error('Parallel Coordinates: No hay datos válidos', { data: data.slice(0, 3), spec });
       return;
     }
     
@@ -7667,13 +7662,13 @@
     
     // Validar que haya datos
     if (!data || data.length === 0) {
-      console.error('[BESTLIB] renderStepPlotD3: No hay datos', { 
-        spec, 
-        hasData: 'data' in spec,
-        dataType: typeof spec.data,
-        specKeys: Object.keys(spec)
-      });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para Step Plot</div>';
+      const debugInfo = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
+        '<strong>Error: No hay datos para Step Plot</strong><br/>' +
+        '<small>Spec type: ' + (spec.type || 'undefined') + '</small><br/>' +
+        '<small>Data length: ' + (data ? data.length : 0) + '</small><br/>' +
+        '<small>Verifica que el DataFrame tenga datos y las columnas x_col, y_col sean correctas</small>' +
+        '</div>';
+      container.innerHTML = debugInfo;
       return;
     }
     
