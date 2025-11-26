@@ -461,7 +461,7 @@ class MatrixLayout:
         try:
             from ..charts import ChartRegistry
             chart = ChartRegistry.get('histogram')
-            spec = chart.get_spec(data, column=value_col, bins=bins, **kwargs)
+            spec = chart.get_spec(data, value_col=value_col, bins=bins, **kwargs)
         except Exception:
             # Fallback: delegar a versión legacy si ChartRegistry no tiene histogram
             try:
