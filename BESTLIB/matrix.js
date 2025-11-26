@@ -7807,6 +7807,27 @@
       .nice()
       .range([chartHeight, 0]);
     
+    // Crear tooltip
+    const tooltipId = `kde-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'kde-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
     // Área rellena
     if (fill) {
       const area = d3.area()
@@ -7822,7 +7843,7 @@
         .attr('d', area);
     }
     
-    // Línea
+    // Línea con tooltip
     const line = d3.line()
       .x(d => x(d.x))
       .y(d => y(d.y))
@@ -7836,10 +7857,84 @@
       .attr('d', line)
       .attr('class', 'bestlib-line');
     
+    // Overlay invisible para capturar mouse events
+    const bisect = d3.bisector(d => d.x).left;
+    
+    g.append('rect')
+      .attr('class', 'overlay')
+      .attr('width', chartWidth)
+      .attr('height', chartHeight)
+      .style('fill', 'none')
+      .style('pointer-events', 'all')
+      .on('mousemove', function(event) {
+        const [mouseX] = d3.pointer(event);
+        const x0 = x.invert(mouseX);
+        const i = bisect(data, x0, 1);
+        const d0 = data[i - 1];
+        const d1 = data[i];
+        const d = d1 && (x0 - d0.x > d1.x - x0) ? d1 : d0;
+        
+        if (d) {
+          const pageX = event.pageX || event.clientX || 0;
+          const pageY = event.pageY || event.clientY || 0;
+          
+          tooltip
+            .style('left', (pageX + 10) + 'px')
+            .style('top', (pageY - 10) + 'px')
+            .style('display', 'block')
+            .html(`<strong>X:</strong> ${d.x.toFixed(3)}<br/><strong>Density:</strong> ${d.y.toFixed(4)}`)
+            .transition()
+            .duration(100)
+            .style('opacity', 1);
+        }
+      })
+      .on('mouseout', function() {
+        tooltip.transition()
+          .duration(200)
+          .style('opacity', 0)
+          .on('end', function() {
+            tooltip.style('display', 'none');
+          });
+      });
+    
+    // Rug plot si está habilitado
+    const rugData = spec.rug || [];
+    const showRug = opt.rug !== undefined ? opt.rug : (rugData.length > 0);
+    const rugColor = opt.rugColor || color;
+    
+    if (showRug && rugData.length > 0) {
+      const rugHeight = chartHeight * 0.02; // 2% de la altura
+      
+      g.selectAll('.rug')
+        .data(rugData)
+        .enter()
+        .append('line')
+        .attr('class', 'rug')
+        .attr('x1', d => x(d.x))
+        .attr('x2', d => x(d.x))
+        .attr('y1', chartHeight)
+        .attr('y2', chartHeight - rugHeight)
+        .attr('stroke', rugColor)
+        .attr('stroke-width', 1)
+        .attr('opacity', 0.6);
+    }
+    
     // Ejes usando funciones reutilizables
     if (spec.axes !== false) {
       renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
       renderYAxis(g, y, chartWidth, chartHeight, margin, yLabel, svg);
+    }
+    
+    // Título
+    if (spec.title) {
+      svg.append('text')
+        .attr('x', width / 2)
+        .attr('y', margin.top / 2)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '16px')
+        .style('font-weight', '700')
+        .style('fill', '#000')
+        .text(spec.title);
     }
   }
   
@@ -7917,6 +8012,27 @@
       .nice()
       .range([chartHeight, 0]);
     
+    // Crear tooltip
+    const tooltipId = `distplot-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'distplot-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
     // Histograma
     if (histogram.length > 0) {
       g.selectAll('.bar')
@@ -7929,7 +8045,33 @@
         .attr('y', d => y(d.y))
         .attr('height', d => chartHeight - y(d.y))
         .attr('fill', color)
-        .attr('opacity', 0.6);
+        .attr('opacity', 0.6)
+        .style('cursor', 'pointer')
+        .on('mouseenter', function(event, d) {
+          d3.select(this).attr('opacity', 0.8);
+          
+          const pageX = event.pageX || event.clientX || 0;
+          const pageY = event.pageY || event.clientY || 0;
+          
+          tooltip
+            .style('left', (pageX + 10) + 'px')
+            .style('top', (pageY - 10) + 'px')
+            .style('display', 'block')
+            .html(`<strong>Bin:</strong> ${d.bin_start.toFixed(2)} - ${d.bin_end.toFixed(2)}<br/><strong>Density:</strong> ${d.y.toFixed(4)}`)
+            .transition()
+            .duration(200)
+            .style('opacity', 1);
+        })
+        .on('mouseleave', function() {
+          d3.select(this).attr('opacity', 0.6);
+          
+          tooltip.transition()
+            .duration(200)
+            .style('opacity', 0)
+            .on('end', function() {
+              tooltip.style('display', 'none');
+            });
+        });
     }
     
     // KDE

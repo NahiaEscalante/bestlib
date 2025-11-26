@@ -80,7 +80,7 @@ class KdeChart(ChartBase):
             else:
                 raise ChartError("Los datos deben ser un DataFrame o lista no vacía")
     
-    def prepare_data(self, data, column=None, bandwidth=None, **kwargs):
+    def prepare_data(self, data, column=None, bandwidth=None, rug=False, **kwargs):
         """
         Prepara datos para KDE calculando la densidad.
         
@@ -88,10 +88,11 @@ class KdeChart(ChartBase):
             data: DataFrame o lista de diccionarios
             column: Nombre de columna numérica
             bandwidth: Ancho de banda para KDE (opcional)
+            rug: Si True, incluir rug plot
             **kwargs: Otros parámetros
         
         Returns:
-            dict: Datos preparados con 'x' y 'y' (densidad)
+            dict: Datos preparados con 'data' (kde) y opcionalmente 'rug'
         """
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
             values = data[column].dropna().values
@@ -161,9 +162,22 @@ class KdeChart(ChartBase):
         if len(kde_data) == 0:
             raise ChartError("No se pudieron generar datos para KDE")
         
-        return {'data': kde_data}
+        result = {'data': kde_data}
+        
+        # Rug opcional
+        if rug:
+            rug_data = []
+            for val in values:
+                try:
+                    rug_data.append({'x': float(val), 'y': 0})
+                except (ValueError, TypeError, OverflowError):
+                    pass
+            if rug_data:
+                result['rug'] = rug_data
+        
+        return result
     
-    def get_spec(self, data, column=None, bandwidth=None, **kwargs):
+    def get_spec(self, data, column=None, bandwidth=None, rug=False, **kwargs):
         """
         Genera la especificación del KDE.
         
@@ -171,6 +185,7 @@ class KdeChart(ChartBase):
             data: DataFrame o lista de diccionarios
             column: Nombre de columna numérica
             bandwidth: Ancho de banda para KDE (opcional)
+            rug: Si True, incluir rug plot
             **kwargs: Opciones adicionales (color, strokeWidth, axes, etc.)
         
         Returns:
@@ -180,10 +195,11 @@ class KdeChart(ChartBase):
         self.validate_data(data, column=column, **kwargs)
         
         # Preparar datos
-        kde_data = self.prepare_data(
+        kde_result = self.prepare_data(
             data,
             column=column,
             bandwidth=bandwidth,
+            rug=rug,
             **kwargs
         )
         
@@ -199,8 +215,12 @@ class KdeChart(ChartBase):
         # Construir spec
         spec = {
             'type': self.chart_type,
-            'data': kde_data['data'],
+            'data': kde_result['data'],
         }
+        
+        # Agregar rug data si existe
+        if 'rug' in kde_result:
+            spec['rug'] = kde_result['rug']
         
         # Agregar encoding
         encoding = {}
@@ -213,7 +233,7 @@ class KdeChart(ChartBase):
         
         # Agregar options
         options = {}
-        for key in ['color', 'strokeWidth', 'axes', 'xLabel', 'yLabel', 'figsize', 'interactive', 'fill', 'opacity']:
+        for key in ['color', 'strokeWidth', 'axes', 'xLabel', 'yLabel', 'figsize', 'interactive', 'fill', 'opacity', 'rug', 'rugColor']:
             if key in kwargs:
                 options[key] = kwargs.pop(key)
         
@@ -226,6 +246,10 @@ class KdeChart(ChartBase):
             options['fill'] = True
         if 'opacity' not in options:
             options['opacity'] = 0.3
+        if 'rug' not in options:
+            options['rug'] = rug
+        if 'rugColor' not in options:
+            options['rugColor'] = options['color']
         
         if options:
             spec['options'] = options
