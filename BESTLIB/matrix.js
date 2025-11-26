@@ -7069,6 +7069,27 @@
       .nice()
       .range([0, chartWidth]);
     
+    // Crear tooltip
+    const tooltipId = `horizontal-bar-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'horizontal-bar-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
     // Barras
     g.selectAll('.bar')
       .data(data)
@@ -7080,42 +7101,65 @@
       .attr('width', 0)
       .attr('height', y.bandwidth())
       .attr('fill', color)
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(event, d) {
+        d3.select(this).attr('opacity', 0.8);
+        
+        const mouseX = event.pageX || event.clientX || 0;
+        const mouseY = event.pageY || event.clientY || 0;
+        
+        tooltip
+          .style('left', (mouseX + 10) + 'px')
+          .style('top', (mouseY - 10) + 'px')
+          .style('display', 'block')
+          .html(`<strong>${d.category}</strong><br/>Value: ${d.value.toFixed(2)}`)
+          .transition()
+          .duration(200)
+          .style('opacity', 1);
+      })
+      .on('mouseleave', function() {
+        d3.select(this).attr('opacity', 1);
+        
+        tooltip.transition()
+          .duration(200)
+          .style('opacity', 0)
+          .on('end', function() {
+            tooltip.style('display', 'none');
+          });
+      })
       .transition()
       .duration(500)
       .attr('width', d => x(d.value));
     
     // Ejes
     if (axes !== false) {
-      const xAxis = d3.axisBottom(x);
-      const yAxis = d3.axisLeft(y);
-      
-      g.append('g')
+      const xAxisGroup = g.append('g')
+        .attr('class', 'x-axis')
         .attr('transform', `translate(0,${chartHeight})`)
-        .call(xAxis)
-        .style('opacity', 1);
+        .call(d3.axisBottom(x));
       
-      g.append('g')
-        .call(yAxis)
-        .style('opacity', 1);
+      const yAxisGroup = g.append('g')
+        .attr('class', 'y-axis')
+        .call(d3.axisLeft(y));
       
-      // Etiquetas
-      if (xLabel) {
-        g.append('text')
-          .attr('transform', `translate(${chartWidth / 2}, ${chartHeight + margin.bottom - 5})`)
-          .style('text-anchor', 'middle')
-          .style('font-size', '12px')
-          .text(xLabel);
-      }
+      // Aplicar estilos unificados (negro)
+      applyUnifiedAxisStyles(xAxisGroup);
+      applyUnifiedAxisStyles(yAxisGroup);
       
-      if (yLabel) {
-        g.append('text')
-          .attr('transform', 'rotate(-90)')
-          .attr('y', -margin.left + 15)
-          .attr('x', -chartHeight / 2)
-          .style('text-anchor', 'middle')
-          .style('font-size', '12px')
-          .text(yLabel);
-      }
+      // Renderizar etiquetas de ejes usando función helper
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+    }
+    
+    // Título
+    if (spec.title) {
+      svg.append('text')
+        .attr('x', width / 2)
+        .attr('y', margin.top / 2)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '16px')
+        .style('font-weight', '700')
+        .style('fill', '#000')
+        .text(spec.title);
     }
   }
 
