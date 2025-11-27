@@ -105,13 +105,13 @@ class ScatterChart(ChartBase):
                 step = len(processed_data) / max_points
                 processed_data = [processed_data[int(i * step)] for i in range(max_points) if int(i * step) < len(processed_data)]
         
-        return processed_data, original_data
+        return processed_data, original_dda
     
     def get_spec(self, data, x_col=None, y_col=None, category_col=None,
                  size_col=None, color_col=None, **kwargs):
         """
         Genera la especificación del scatter plot (BESTLIB Visualization Spec).
-        
+        holA como estas
         Args:
             data: DataFrame o lista de diccionarios
             x_col: Nombre de columna para eje X
