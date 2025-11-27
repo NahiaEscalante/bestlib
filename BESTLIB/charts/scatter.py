@@ -105,7 +105,7 @@ class ScatterChart(ChartBase):
                 step = len(processed_data) / max_points
                 processed_data = [processed_data[int(i * step)] for i in range(max_points) if int(i * step) < len(processed_data)]
         
-        return processed_data, original_dda
+        return processed_data, original_data
     
     def get_spec(self, data, x_col=None, y_col=None, category_col=None,
                  size_col=None, color_col=None, **kwargs):
