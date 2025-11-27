@@ -109,7 +109,7 @@ class ScatterChart(ChartBase):
                 step = len(processed_data) / max_points
                 processed_data = [processed_data[int(i * step)] for i in range(max_points) if int(i * step) < len(processed_data)]
 
-        # ⭐⭐⭐ CORRECCIÓN CRÍTICA: Adjuntar fila ORIGINAL a cada punto
+        # CORRECCIÓN CRÍTICA: Adjuntar fila ORIGINAL a cada punto
         for i in range(len(processed_data)):
             try:
                 processed_data[i]["_original_row"] = original_data[i]
