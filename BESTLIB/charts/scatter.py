@@ -64,57 +64,57 @@ class ScatterChart(ChartBase):
     def prepare_data(self, data, x_col=None, y_col=None, category_col=None, 
                     size_col=None, color_col=None, **kwargs):
 
-    processed_data, original_data = prepare_scatter_data(
-        data, 
-        x_col=x_col, 
-        y_col=y_col, 
-        category_col=category_col,
-        size_col=size_col,
-        color_col=color_col
-    )
+        processed_data, original_data = prepare_scatter_data(
+            data, 
+            x_col=x_col, 
+            y_col=y_col, 
+            category_col=category_col,
+            size_col=size_col,
+            color_col=color_col
+        )
     
-    # Enriquecer con tamaño y color si se especificaron
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
-        if size_col and size_col in data.columns:
-            size_values = data[size_col].astype(float, errors='ignore')
-            for idx in range(min(len(processed_data), len(size_values))):
-                try:
-                    processed_data[idx]['size'] = float(size_values.iloc[idx])
-                except (ValueError, TypeError):
-                    pass
-        if color_col and color_col in data.columns:
-            color_values = data[color_col]
-            for idx in range(min(len(processed_data), len(color_values))):
-                processed_data[idx]['color'] = color_values.iloc[idx]
-    else:
-        if isinstance(data, list):
-            for idx, item in enumerate(data):
-                if idx < len(processed_data):
-                    if size_col and size_col in item:
-                        try:
-                            processed_data[idx]['size'] = float(item.get(size_col))
-                        except Exception:
-                            pass
-                    if color_col and color_col in item:
-                        processed_data[idx]['color'] = item.get(color_col)
-
-    # Sampling
-    max_points = kwargs.get('maxPoints', None)
-    if max_points and isinstance(max_points, int) and max_points > 0 and len(processed_data) > max_points:
+        # Enriquecer con tamaño y color si se especificaron
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
-            step = len(data) / max_points
-            sample_indices = [int(i * step) for i in range(max_points)]
-            processed_data = [processed_data[i] for i in sample_indices if i < len(processed_data)]
+            if size_col and size_col in data.columns:
+                size_values = data[size_col].astype(float, errors='ignore')
+                for idx in range(min(len(processed_data), len(size_values))):
+                    try:
+                        processed_data[idx]['size'] = float(size_values.iloc[idx])
+                    except (ValueError, TypeError):
+                        pass
+            if color_col and color_col in data.columns:
+                color_values = data[color_col]
+                for idx in range(min(len(processed_data), len(color_values))):
+                    processed_data[idx]['color'] = color_values.iloc[idx]
         else:
-            step = len(processed_data) / max_points
-            processed_data = [processed_data[int(i * step)] for i in range(max_points) if int(i * step) < len(processed_data)]
+            if isinstance(data, list):
+                for idx, item in enumerate(data):
+                    if idx < len(processed_data):
+                        if size_col and size_col in item:
+                            try:
+                                processed_data[idx]['size'] = float(item.get(size_col))
+                            except Exception:
+                                pass
+                        if color_col and color_col in item:
+                            processed_data[idx]['color'] = item.get(color_col)
 
-    # ⭐⭐⭐ CORRECCIÓN CRÍTICA: Adjuntar fila ORIGINAL a cada punto
-    for i in range(len(processed_data)):
-        try:
-            processed_data[i]["_original_row"] = original_data[i]
-        except Exception:
-            processed_data[i]["_original_row"] = {}
+        # Sampling
+        max_points = kwargs.get('maxPoints', None)
+        if max_points and isinstance(max_points, int) and max_points > 0 and len(processed_data) > max_points:
+            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+                step = len(data) / max_points
+                sample_indices = [int(i * step) for i in range(max_points)]
+                processed_data = [processed_data[i] for i in sample_indices if i < len(processed_data)]
+            else:
+                step = len(processed_data) / max_points
+                processed_data = [processed_data[int(i * step)] for i in range(max_points) if int(i * step) < len(processed_data)]
+
+        # ⭐⭐⭐ CORRECCIÓN CRÍTICA: Adjuntar fila ORIGINAL a cada punto
+        for i in range(len(processed_data)):
+            try:
+                processed_data[i]["_original_row"] = original_data[i]
+            except Exception:
+                processed_data[i]["_original_row"] = {}
 
     return processed_data, original_data
 
