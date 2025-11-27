@@ -556,37 +556,83 @@ class ReactiveMatrixLayout:
         return self
     """
 
+    def add_scatter(
+        self, 
+        letter, 
+        data=None, 
+        x_col=None, 
+        y_col=None, 
+        category_col=None, 
+        interactive=True, 
+        **kwargs
+    ):
+    if data is not None:
+        self._data = data
+    elif self._data is None:
+        raise ValueError("Debe proporcionar data=")
+
+    # Modelo de selección local del scatter
+    scatter_selection = SelectionModel()
+    self._scatter_selection_models[letter] = scatter_selection
+
+    MatrixLayout = _get_matrix_layout()
+
+    scatter_letter = letter  # capturar letra local
+
     def scatter_handler(payload):
-    """Handler que actualiza scatter→linked y reactive→global"""
+        items = payload.get("items", [])
 
-    # ---------- VALIDAR ITEMS ----------
-    items = payload.get("items", [])
-    if not isinstance(items, list):
-        if self._debug or MatrixLayout._debug:
-            print(f"⚠️ items no es lista: {type(items)}")
-        items = []
+        # validar
+        if not isinstance(items, list):
+            items = []
 
-    # ---------- FILTRAR POR SCATTER LETTER ----------
-    evt_letter = payload.get("__scatter_letter__") or payload.get("__view_letter__")
-    if evt_letter != scatter_letter_capture:
-        return  # evento no es para este scatter
+        # filtrar por scatter correcto
+        evt_letter = payload.get("__scatter_letter__") or payload.get("__view_letter__")
+        if evt_letter != scatter_letter:
+            return
 
-    if self._debug or MatrixLayout._debug:
-        print(f"🎯 Evento para '{scatter_letter_capture}': {len(items)} items")
+        # convertir a DataFrame
+        df_items = _items_to_dataframe(items)
+        clean = df_items if (df_items is not None and not df_items.empty) else items
 
-    # ---------- CONVERTIR A DATAFRAME ----------
-    items_df = _items_to_dataframe(items)
-    clean = items_df if (items_df is not None and not items_df.empty) else items
+        # actualizar selection models
+        scatter_selection.update(clean)
+        self.selection_model.update(clean)
+        self._selected_data = clean
 
-    # ---------- ACTUALIZAR MODELOS ----------
-    scatter_selection_capture.update(clean)
-    self.selection_model.update(clean)
-    self._selected_data = clean
+        # CRÍTICO: actualizar vistas linkeadas
+        if hasattr(self, "_update_linked_views"):
+            self._update_linked_views(scatter_letter, clean)
 
-    # ---------- CRÍTICO: ACTUALIZAR LINKED VIEWS ----------
-    # Sin esto, el boxplot JAMÁS se actualiza
-    if hasattr(self, "_update_linked_views"):
-        self._update_linked_views(scatter_letter_capture, clean)
+    # registrar handler
+    self.on("select", scatter_handler)
+
+    # crear spec
+    kwargs2 = kwargs.copy()
+    kwargs2["interactive"] = interactive
+    kwargs2["__scatter_letter__"] = letter
+    kwargs2["__selection_model_id__"] = id(scatter_selection)
+
+    scatter_spec = MatrixLayout.map_scatter(
+        letter, self._data,
+        x_col=x_col, y_col=y_col,
+        category_col=category_col,
+        **kwargs2
+    )
+
+    scatter_spec["__scatter_letter__"] = letter
+    scatter_spec["__selection_model_id__"] = id(scatter_selection)
+    MatrixLayout._map[letter] = scatter_spec
+
+    # registrar vista
+    self._views[f"scatter_{letter}"] = {
+        "type": "scatter",
+        "letter": letter,
+        "selection_model": scatter_selection
+    }
+
+    return self
+
 
     
     def add_barchart(self, letter, category_col=None, value_col=None, linked_to=None, interactive=None, selection_var=None, **kwargs):
@@ -2045,696 +2091,63 @@ class ReactiveMatrixLayout:
         
         return self
     
-    def add_boxplot(self, letter, column=None, category_col=None, linked_to=None, **kwargs):
-        """
-        Agrega un boxplot enlazado que se actualiza automáticamente cuando se selecciona en scatter.
-        
-        Args:
-            letter: Letra del layout ASCII donde irá el boxplot
-            column: Nombre de columna numérica para el boxplot
-            category_col: Nombre de columna de categorías (opcional, para boxplot por categoría)
-            linked_to: Letra del scatter plot que debe actualizar este boxplot (opcional)
-            **kwargs: Argumentos adicionales (color, axes, etc.)
-        
-        Returns:
-            self para encadenamiento
-        """
-        MatrixLayout = _get_matrix_layout()
-        
-        if self._data is None:
-            raise ValueError("Debe usar set_data() o add_scatter() primero para establecer los datos")
-        
-        if column is None:
-            raise ValueError("Debe especificar 'column' para el boxplot")
-        
-        # Verificar si ya existe un callback para este boxplot (evitar duplicados)
-        if letter in self._boxplot_callbacks:
-            if self._debug or MatrixLayout._debug:
-                print(f"⚠️ Boxplot para '{letter}' ya está registrado. Ignorando registro duplicado.")
-            return self
-        
-        # Determinar a qué vista principal enlazar
-        if linked_to:
-            # Buscar en scatter plots primero (compatibilidad hacia atrás)
-            if linked_to in self._scatter_selection_models:
-                primary_letter = linked_to
-                primary_selection = self._scatter_selection_models[primary_letter]
-            elif linked_to in self._primary_view_models:
-                primary_letter = linked_to
-                primary_selection = self._primary_view_models[primary_letter]
-            else:
-                raise ValueError(f"Vista principal '{linked_to}' no existe. Vistas disponibles: scatter plots {list(self._scatter_selection_models.keys())}, vistas principales {list(self._primary_view_models.keys())}")
-        else:
-            # Si no se especifica, usar la última vista principal disponible
-            all_primary = {**self._scatter_selection_models, **self._primary_view_models}
-            if not all_primary:
-                raise ValueError("No hay vistas principales disponibles. Agrega una vista principal primero (scatter, bar chart, etc.)")
-            primary_letter = list(all_primary.keys())[-1]
-            primary_selection = all_primary[primary_letter]
-            if self._debug or MatrixLayout._debug:
-                print(f"💡 Boxplot '{letter}' enlazado automáticamente a vista principal '{primary_letter}'")
-        
-        # Agregar __linked_to__ al spec para indicadores visuales en JavaScript
-        if linked_to:
-            kwargs['__linked_to__'] = primary_letter
-        elif not linked_to and 'primary_letter' in locals():
-            kwargs['__linked_to__'] = primary_letter
-        
-        # Guardar parámetros
-        boxplot_params = {
-            'letter': letter,
-            'column': column,
-            'category_col': category_col,
-            'kwargs': kwargs.copy(),
-            'layout_div_id': self._layout.div_id
-        }
-        
-        # Función de actualización del boxplot
-        def update_boxplot(items, count):
-            """Actualiza el boxplot cuando cambia la selección"""
-            # CRÍTICO: Importar MatrixLayout al principio para evitar UnboundLocalError
-            MatrixLayout = _get_matrix_layout()
-            
-            # CRÍTICO: Flag para evitar ejecuciones múltiples simultáneas
-            if hasattr(update_boxplot, '_executing') and update_boxplot._executing:
-                if self._debug or MatrixLayout._debug:
-                    print(f"   ⏭️ Boxplot '{letter}' callback ya está ejecutándose, ignorando llamada duplicada")
-                return
-            update_boxplot._executing = True
-            
-            try:
-                import json
-                from IPython.display import Javascript
-                
-                if self._debug or MatrixLayout._debug:
-                    print(f"   🔄 Boxplot '{letter}' callback ejecutándose con {count} items")
-                
-                # Usar datos seleccionados o todos los datos
-                # Si los items tienen _original_row, usar esos datos
-                data_to_use = self._data
-                if items and len(items) > 0:
-                    # Extraer datos originales si están disponibles
-                    processed_items = []
-                    for item in items:
-                        if isinstance(item, dict):
-                            # Si tiene _original_row, usar esos datos
-                            if '_original_row' in item:
-                                processed_items.append(item['_original_row'])
-                            elif '_original_rows' in item:
-                                # Si hay múltiples filas originales
-                                processed_items.extend(item['_original_rows'])
-                            else:
-                                processed_items.append(item)
-                    
-                    if processed_items:
-                        if HAS_PANDAS and isinstance(processed_items[0], dict):
-                            import pandas as pd
-                            data_to_use = pd.DataFrame(processed_items)
-                        else:
-                            data_to_use = processed_items
-                    else:
-                        # Si no hay items procesados, usar todos los datos
-                        data_to_use = self._data
-                
-                # Preparar datos para boxplot
-                if HAS_PANDAS and isinstance(data_to_use, pd.DataFrame):
-                    if category_col and category_col in data_to_use.columns:
-                        # Boxplot por categoría
-                        box_data = []
-                        for cat in data_to_use[category_col].unique():
-                            cat_data = data_to_use[data_to_use[category_col] == cat][column].dropna()
-                            if len(cat_data) > 0:
-                                q1 = cat_data.quantile(0.25)
-                                median = cat_data.quantile(0.5)
-                                q3 = cat_data.quantile(0.75)
-                                iqr = q3 - q1
-                                lower = max(q1 - 1.5 * iqr, cat_data.min())
-                                upper = min(q3 + 1.5 * iqr, cat_data.max())
-                                box_data.append({
-                                    'category': cat,
-                                    'q1': float(q1),
-                                    'median': float(median),
-                                    'q3': float(q3),
-                                    'lower': float(lower),
-                                    'upper': float(upper),
-                                    'min': float(cat_data.min()),
-                                    'max': float(cat_data.max())
-                                })
-                    else:
-                        # Boxplot simple
-                        values = data_to_use[column].dropna()
-                        if len(values) > 0:
-                            q1 = values.quantile(0.25)
-                            median = values.quantile(0.5)
-                            q3 = values.quantile(0.75)
-                            iqr = q3 - q1
-                            lower = max(q1 - 1.5 * iqr, values.min())
-                            upper = min(q3 + 1.5 * iqr, values.max())
-                            box_data = [{
-                                'category': 'All',
-                                'q1': float(q1),
-                                'median': float(median),
-                                'q3': float(q3),
-                                'lower': float(lower),
-                                'upper': float(upper),
-                                'min': float(values.min()),
-                                'max': float(values.max())
-                            }]
-                        else:
-                            box_data = []
-                else:
-                    # Fallback para listas de diccionarios
-                    values = [item.get(column, 0) for item in data_to_use if column in item]
-                    if values:
-                        sorted_vals = sorted(values)
-                        n = len(sorted_vals)
-                        q1 = sorted_vals[int(n * 0.25)]
-                        median = sorted_vals[int(n * 0.5)]
-                        q3 = sorted_vals[int(n * 0.75)]
-                        iqr = q3 - q1
-                        lower = max(q1 - 1.5 * iqr, min(values))
-                        upper = min(q3 + 1.5 * iqr, max(values))
-                        box_data = [{
-                            'category': 'All',
-                            'q1': float(q1),
-                            'median': float(median),
-                            'q3': float(q3),
-                            'lower': float(lower),
-                            'upper': float(upper),
-                            'min': float(min(values)),
-                            'max': float(max(values))
-                        }]
-                    else:
-                        box_data = []
-                
-                if not box_data:
-                    return
-                
-                # IMPORTANTE: NO actualizar el mapping aquí para evitar bucles infinitos y re-renderización del layout completo
-                # Solo actualizar visualmente el gráfico con JavaScript
-                # El mapping se actualiza cuando se crea inicialmente el boxplot
-                # Actualizar el mapping global causa que el sistema detecte cambios y re-renderice todo el layout,
-                # lo que resulta en duplicación de gráficos, especialmente en layouts grandes (3x3, etc.)
-                
-                # JavaScript para actualizar el gráfico
-                div_id = boxplot_params['layout_div_id']
-                box_data_json = json.dumps(_sanitize_for_json(box_data))
-                default_color = kwargs.get('color', '#4a90e2')
-                show_axes = kwargs.get('axes', True)
-                x_label = json.dumps(kwargs.get('xLabel', 'Category'))
-                y_label = json.dumps(kwargs.get('yLabel', 'Value'))
-                
-                js_update = f"""
-                (function() {{
-                    // Flag para evitar actualizaciones múltiples simultáneas
-                    if (window._bestlib_updating_boxplot_{letter}) {{
-                        return;
-                    }}
-                    window._bestlib_updating_boxplot_{letter} = true;
-                    
-                    function updateBoxplot() {{
-                        if (!window.d3) {{
-                            setTimeout(updateBoxplot, 100);
-                            return;
-                        }}
-                        
-                        const container = document.getElementById('{div_id}');
-                        if (!container) {{
-                            window._bestlib_updating_boxplot_{letter} = false;
-                            return;
-                        }}
-                        
-                        const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
-                        let targetCell = null;
-                        
-                        // Buscar celda con SVG existente (más robusto)
-                        for (let cell of cells) {{
-                            const svg = cell.querySelector('svg');
-                            if (svg) {{
-                                targetCell = cell;
-                                break;
-                            }}
-                        }}
-                        
-                        // Si no encontramos, usar la primera celda
-                        if (!targetCell && cells.length > 0) {{
-                            targetCell = cells[0];
-                        }}
-                        
-                        if (!targetCell) {{
-                            window._bestlib_updating_boxplot_{letter} = false;
-                            return;
-                        }}
-                        
-                        // CRÍTICO: Solo limpiar el contenido de la celda, NO tocar el contenedor principal
-                        // Esto evita que se dispare un re-render del layout completo
-                        // IMPORTANTE: Desconectar ResizeObserver temporalmente para evitar re-renders
-                        if (targetCell._resizeObserver) {{
-                            targetCell._resizeObserver.disconnect();
-                        }}
-                        
-                        // En lugar de usar innerHTML = '', removemos solo el SVG existente
-                        const existingSvg = targetCell.querySelector('svg');
-                        if (existingSvg) {{
-                            existingSvg.remove();
-                        }}
-                        // Limpiar cualquier otro contenido visual (divs, etc.) pero mantener la estructura de la celda
-                        const otherContent = targetCell.querySelectorAll('div:not(.matrix-cell)');
-                        otherContent.forEach(el => el.remove());
-                        
-                        // NO reconectar el ResizeObserver aquí - se reconectará después de renderizar si es necesario
-                        
-                        // CRÍTICO: Obtener dimensiones FIJAS de la celda (definidas por CSS/grid)
-                        // NO usar getChartDimensions porque es reactivo y puede cambiar
-                        // Usar getBoundingClientRect para obtener el tamaño real del contenedor
-                        const cellRect = targetCell.getBoundingClientRect();
-                        const cellWidth = cellRect.width || targetCell.clientWidth || 400;
-                        const cellHeight = cellRect.height || targetCell.clientHeight || 350;
-                        
-                        // Guardar dimensiones fijas en la celda para reutilizar en futuras actualizaciones
-                        if (!targetCell._fixedDimensions) {{
-                            targetCell._fixedDimensions = {{ width: cellWidth, height: cellHeight }};
-                        }}
-                        
-                        // Usar dimensiones fijas guardadas o las actuales
-                        let width = targetCell._fixedDimensions.width || cellWidth;
-                        let height = targetCell._fixedDimensions.height || cellHeight;
-                        
-                        // 🔒 CORRECCIÓN: Usar márgenes con padding adicional para el eje Y (evitar superposición)
-                        const isLargeDashboard = targetCell.closest('.matrix-layout') && 
-                                                 targetCell.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
-                        // Aumentar margen izquierdo para separar el eje Y de los datos
-                        const defaultMargin = isLargeDashboard 
-                            ? {{ top: 15, right: 15, bottom: 30, left: 50 }}  // Aumentado de 35 a 50
-                            : {{ top: 20, right: 20, bottom: 40, left: 60 }}; // Aumentado de 50 a 60
-                        const specForMargins = {{ xLabel: {x_label}, yLabel: {y_label} }};
-                        const margin = window.calculateAxisMargins ? 
-                            window.calculateAxisMargins(specForMargins, defaultMargin, width, height) :
-                            defaultMargin;
-                        // 🔒 Asegurar que el margen izquierdo tenga mínimo suficiente para evitar superposición
-                        margin.left = Math.max(margin.left, isLargeDashboard ? 50 : 60);
-                        
-                        // IMPORTANTE: Calcular espacio necesario para etiquetas del eje X ANTES de limpiar
-                        // Necesitamos saber si las etiquetas estarán rotadas para calcular el espacio
-                        const data = {box_data_json};
-                        let needsRotation = false;
-                        let extraHeightForXAxis = 50; // Valor por defecto seguro
-                        
-                        if (data.length > 0) {{
-                            // Para boxplot, las etiquetas de categorías pueden ser largas
-                            const maxCategoryLength = Math.max(...data.map(d => String(d.category).length), 0);
-                            needsRotation = data.length > 3 || maxCategoryLength > 10;
-                            
-                            // Calcular espacio adicional basado en si hay rotación
-                            // Etiquetas rotadas a -45 grados necesitan más espacio (hasta 60-70px)
-                            // Etiquetas normales necesitan menos (25-30px)
-                            // + espacio para la etiqueta del eje X (20px)
-                            const extraHeightForRotatedLabels = needsRotation ? 60 : 0; // Espacio para etiquetas rotadas (-45 grados)
-                            const extraHeightForXAxisLabel = 20; // Espacio para la etiqueta "Species"
-                            extraHeightForXAxis = extraHeightForRotatedLabels + extraHeightForXAxisLabel;
-                        }}
-                        
-                        // 🔒 CORRECCIÓN: Calcular svgHeight asegurando que incluya espacio para el eje X
-                        // El SVG debe incluir el espacio para etiquetas rotadas y labels
-                        const baseHeight = Math.min(height, cellHeight);
-                        const svgHeight = baseHeight;
-                        
-                        // 🔒 CORRECCIÓN: Calcular chartHeight asegurando que el eje X quepa dentro del SVG
-                        // Reducir chartHeight para dejar espacio para el eje X y sus etiquetas
-                        let chartHeight = svgHeight - margin.top - margin.bottom - extraHeightForXAxis;
-                        let chartWidth = width - margin.left - margin.right;
-                        
-                        // 🔒 CORRECCIÓN: Asegurar dimensiones mínimas y que todo quepa dentro del SVG
-                        const minChartWidth = 200;
-                        const minChartHeight = 150;
-                        if (chartWidth < minChartWidth) {{
-                            chartWidth = minChartWidth;
-                            width = chartWidth + margin.left + margin.right;
-                        }}
-                        // Asegurar que chartHeight sea válido y que el eje X quepa
-                        if (chartHeight < minChartHeight) {{
-                            // Si no cabe, ajustar para que quepa el mínimo pero sin salirse del SVG
-                            const minRequiredHeight = margin.top + margin.bottom + minChartHeight + extraHeightForXAxis;
-                            if (svgHeight >= minRequiredHeight) {{
-                                chartHeight = svgHeight - margin.top - margin.bottom - extraHeightForXAxis;
-                            }} else {{
-                                // Si aún no cabe, reducir extraHeightForXAxis pero mantener mínimo
-                                const availableHeight = svgHeight - margin.top - margin.bottom;
-                                chartHeight = Math.max(minChartHeight, availableHeight - extraHeightForXAxis);
-                                // Ajustar extraHeightForXAxis para que quepa
-                                extraHeightForXAxis = Math.max(20, availableHeight - chartHeight);
-                            }}
-                        }}
-                        
-                        // 🔒 CORRECCIÓN: Asegurar que chartHeight no sea negativo
-                        chartHeight = Math.max(chartHeight, minChartHeight);
-                        
-                        // CRÍTICO: NO modificar estilos de la celda - mantener tamaño fijo del grid
-                        // data ya fue definido arriba para calcular needsRotation
-                        
-                        if (data.length === 0) {{
-                            targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
-                            window._bestlib_updating_boxplot_{letter} = false;
-                            return;
-                        }}
-                        
-                        // 🔒 CORRECCIÓN: Establecer SVG con viewBox para mejor escalado y ajuste al contenedor
-                        // IMPORTANTE: Usar overflow: visible para que las etiquetas de ejes se vean
-                        // El SVG debe caber dentro de la celda sin cambiar su tamaño
-                        const svg = window.d3.select(targetCell)
-                            .append('svg')
-                            .attr('width', '100%')
-                            .attr('height', '100%')
-                            .attr('viewBox', `0 0 ${{width}} ${{svgHeight}}`)
-                            .attr('preserveAspectRatio', 'xMidYMid meet')
-                            .style('max-width', '100%')
-                            .style('max-height', '100%')
-                            .style('overflow', 'visible')
-                            .style('display', 'block');
-                        
-                        const g = svg.append('g')
-                            .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
-                        
-                        const x = window.d3.scaleBand()
-                            .domain(data.map(d => d.category))
-                            .range([0, chartWidth])
-                            .padding(0.2);
-                        
-                        // 🔒 CORRECCIÓN: Calcular dominio Y con padding para evitar que se pegue al eje
-                        const yMin = window.d3.min(data, d => d.lower);
-                        const yMax = window.d3.max(data, d => d.upper);
-                        // Asegurar que el dominio sea válido (no NaN, no infinito)
-                        const yDomainMin = (isFinite(yMin) && !isNaN(yMin)) ? yMin : 0;
-                        const yDomainMax = (isFinite(yMax) && !isNaN(yMax)) ? yMax : (yDomainMin + 1);
-                        // 🔒 Agregar padding al dominio Y (5% arriba y abajo) para separar de los bordes
-                        const yRange = yDomainMax - yDomainMin;
-                        const yPadding = yRange * 0.05; // 5% de padding
-                        const yPaddedMin = yDomainMin - yPadding;
-                        const yPaddedMax = yDomainMax + yPadding;
-                        const y = window.d3.scaleLinear()
-                            .domain([yPaddedMin, yPaddedMax])
-                            .nice()
-                            .range([chartHeight, 0]);
-                        
-                        // Dibujar boxplot para cada categoría
-                        data.forEach((d, i) => {{
-                            const xPos = x(d.category);
-                            const boxWidth = x.bandwidth();
-                            const centerX = xPos + boxWidth / 2;
-                            
-                            // Bigotes (whiskers)
-                            g.append('line')
-                                .attr('x1', centerX)
-                                .attr('x2', centerX)
-                                .attr('y1', y(d.lower))
-                                .attr('y2', y(d.q1))
-                                .attr('stroke', '#000')
-                                .attr('stroke-width', 2);
-                            
-                            g.append('line')
-                                .attr('x1', centerX)
-                                .attr('x2', centerX)
-                                .attr('y1', y(d.q3))
-                                .attr('y2', y(d.upper))
-                                .attr('stroke', '#000')
-                                .attr('stroke-width', 2);
-                            
-                            // Caja (box)
-                            g.append('rect')
-                                .attr('x', xPos)
-                                .attr('y', y(d.q3))
-                                .attr('width', boxWidth)
-                                .attr('height', y(d.q1) - y(d.q3))
-                                .attr('fill', '{default_color}')
-                                .attr('stroke', '#000')
-                                .attr('stroke-width', 2);
-                            
-                            // Mediana (median line)
-                            g.append('line')
-                                .attr('x1', xPos)
-                                .attr('x2', xPos + boxWidth)
-                                .attr('y1', y(d.median))
-                                .attr('y2', y(d.median))
-                                .attr('stroke', '#fff')
-                                .attr('stroke-width', 2);
-                        }});
-                        
-                        if ({str(show_axes).lower()}) {{
-                            // 🔒 CORRECCIÓN: Eje X - Asegurar que se muestre correctamente y no se salga del SVG
-                            const xAxis = g.append('g')
-                                .attr('class', 'x-axis')
-                                .attr('transform', `translate(0,${{chartHeight}})`);
-                            
-                            const xAxisGenerator = window.d3.axisBottom(x);
-                            xAxis.call(xAxisGenerator);
-                            
-                            // Estilizar etiquetas del eje X con rotación si es necesario
-                            xAxis.selectAll('text')
-                                .style('font-size', needsRotation ? '10px' : '12px')
-                                .style('font-weight', '600')
-                                .style('fill', '#000000')
-                                .style('font-family', 'Arial, sans-serif')
-                                .attr('transform', needsRotation ? 'rotate(-45)' : null)
-                                .style('text-anchor', needsRotation ? 'end' : 'middle')
-                                .attr('dx', needsRotation ? '-0.5em' : '0')
-                                .attr('dy', needsRotation ? '0.5em' : '0.7em')
-                                .style('opacity', 1);  // Asegurar que sean visibles
-                            
-                            // Estilizar líneas del eje X
-                            xAxis.selectAll('line, path')
-                                .style('stroke', '#000000')
-                                .style('stroke-width', '1.5px')
-                                .style('opacity', 1);  // Asegurar que sean visibles
-                            
-                            // 🔒 CORRECCIÓN: Eje Y - Asegurar que se muestre correctamente
-                            const yAxis = g.append('g')
-                                .attr('class', 'y-axis');
-                            
-                            const yAxisGenerator = window.d3.axisLeft(y)
-                                .ticks(5)
-                                .tickFormat(window.d3.format('.2f'));  // Formato numérico para el eje Y
-                            
-                            yAxis.call(yAxisGenerator);
-                            
-                            // Estilizar etiquetas del eje Y
-                            yAxis.selectAll('text')
-                                .style('font-size', '12px')
-                                .style('font-weight', '600')
-                                .style('fill', '#000000')
-                                .style('font-family', 'Arial, sans-serif')
-                                .style('opacity', 1);  // Asegurar que sean visibles
-                            
-                            // Estilizar líneas del eje Y
-                            yAxis.selectAll('line, path')
-                                .style('stroke', '#000000')
-                                .style('stroke-width', '1.5px')
-                                .style('opacity', 1);  // Asegurar que sean visibles
-                            
-                            // Renderizar etiquetas de ejes
-                            // Etiqueta del eje X (debajo del gráfico)
-                            // CRÍTICO: Asegurar que la etiqueta quede dentro del SVG
-                            const xLabelX = chartWidth / 2;
-                            // Posicionar la etiqueta dentro del espacio disponible del SVG
-                            // chartHeight + margin.bottom es donde termina el área del gráfico
-                            // Usar el espacio calculado en extraHeightForXAxis
-                            const spaceForRotatedLabels = needsRotation ? 45 : 0;
-                            // Asegurar que xLabelY no exceda svgHeight - margin.top
-                            const maxYLabelPosition = svgHeight - margin.top - 5; // 5px de margen de seguridad
-                            const xLabelY = Math.min(
-                                chartHeight + margin.bottom + spaceForRotatedLabels + 15,
-                                maxYLabelPosition
-                            );
-                            
-                            const xLabelText = g.append('text')
-                                .attr('x', xLabelX)
-                                .attr('y', xLabelY)
-                                .attr('text-anchor', 'middle')
-                                .style('font-size', '13px')
-                                .style('font-weight', '700')
-                                .style('fill', '#000000')
-                                .style('font-family', 'Arial, sans-serif')
-                                .text({x_label});
-                            
-                            // Etiqueta del eje Y (a la izquierda del gráfico, rotada -90 grados)
-                            const yLabelX = margin.left / 2;
-                            const yLabelY = margin.top + chartHeight / 2;
-                            
-                            const yLabelText = svg.append('text')
-                                .attr('x', yLabelX)
-                                .attr('y', yLabelY)
-                                .attr('text-anchor', 'middle')
-                                .attr('dominant-baseline', 'central')
-                                .style('font-size', '13px')
-                                .style('font-weight', '700')
-                                .style('fill', '#000000')
-                                .style('font-family', 'Arial, sans-serif')
-                                .style('pointer-events', 'none')
-                                .attr('transform', `rotate(-90 ${{yLabelX}} ${{yLabelY}})`)
-                                .text({y_label});
-                        }}
-                        
-                        // Renderizar título del gráfico si está especificado
-                        const title = '{kwargs.get("title", "")}';
-                        if (title && title.trim() !== '') {{
-                            const titleFontSize = {kwargs.get("titleFontSize", 16)};
-                            const titleY = margin.top - 10;
-                            const titleX = chartWidth / 2;
-                            
-                            svg.append('text')
-                                .attr('x', titleX + margin.left)
-                                .attr('y', titleY)
-                                .attr('text-anchor', 'middle')
-                                .style('font-size', titleFontSize + 'px')
-                                .style('font-weight', '700')
-                                .style('fill', '#000000')
-                                .style('font-family', 'Arial, sans-serif')
-                                .text(title);
-                        }}
-                        
-                        // IMPORTANTE: Marcar que esta celda ya no necesita ResizeObserver
-                        // porque se está actualizando manualmente
-                        targetCell._chartSpec = null;
-                        targetCell._chartDivId = null;
-                        
-                        // Resetear flag después de completar la actualización
-                        window._bestlib_updating_boxplot_{letter} = false;
-                    }}
-                    
-                    updateBoxplot();
-                }})();
-                """
-                
-                try:
-                    # CRÍTICO: En lugar de usar display(), ejecutar JavaScript directamente
-                    # usando el comm existente para evitar que se dispare un re-render completo
-                    # Esto previene la duplicación de la matriz
-                    from IPython.display import Javascript, display
-                    import uuid
-                    
-                    # Generar un ID único para este script para evitar duplicaciones
-                    script_id = f'boxplot-update-{letter}-{uuid.uuid4().hex[:8]}'
-                    
-                    # IMPORTANTE: Usar display_id para que Jupyter reemplace el output anterior
-                    # en lugar de crear uno nuevo, lo que previene la duplicación
-                    display(Javascript(js_update), clear=False, display_id=f'boxplot-update-{letter}', update=True)
-                    
-                    if self._debug or MatrixLayout._debug:
-                        print(f"   📤 JavaScript del boxplot '{letter}' ejecutado (display_id: boxplot-update-{letter})")
-                except Exception as e:
-                    MatrixLayout = _get_matrix_layout()
-                    if self._debug or MatrixLayout._debug:
-                        print(f"⚠️ Error ejecutando JavaScript del boxplot: {e}")
-                        import traceback
-                        traceback.print_exc()
-                    
-            except Exception as e:
-                MatrixLayout = _get_matrix_layout()
-                import traceback
-                if self._debug or MatrixLayout._debug:
-                    print(f"⚠️ Error actualizando boxplot: {e}")
-                    traceback.print_exc()
-            finally:
-                # CRÍTICO: Resetear flag después de completar
-                update_boxplot._executing = False
-                if self._debug or MatrixLayout._debug:
-                    print(f"   ✅ Boxplot '{letter}' callback completado")
-        
-        # Registrar callback en el SelectionModel de la vista principal
-        primary_selection.on_change(update_boxplot)
-        
-        # Guardar referencia al callback para evitar duplicados
-        self._boxplot_callbacks[letter] = update_boxplot
-        
-        # Debug: verificar que el callback se registró
-        if self._debug or MatrixLayout._debug:
-            print(f"🔗 [ReactiveMatrixLayout] Callback registrado para boxplot '{letter}' enlazado a vista principal '{primary_letter}'")
-            print(f"   - SelectionModel ID: {id(primary_selection)}")
-            print(f"   - Callbacks registrados: {len(primary_selection._callbacks)}")
-            print(f"   - Boxplot callbacks guardados: {list(self._boxplot_callbacks.keys())}")
-        
-        # Crear boxplot inicial con todos los datos
-        if HAS_PANDAS and isinstance(self._data, pd.DataFrame):
-            if category_col and category_col in self._data.columns:
-                box_data = []
-                for cat in self._data[category_col].unique():
-                    cat_data = self._data[self._data[category_col] == cat][column].dropna()
-                    if len(cat_data) > 0:
-                        q1 = cat_data.quantile(0.25)
-                        median = cat_data.quantile(0.5)
-                        q3 = cat_data.quantile(0.75)
-                        iqr = q3 - q1
-                        lower = max(q1 - 1.5 * iqr, cat_data.min())
-                        upper = min(q3 + 1.5 * iqr, cat_data.max())
-                        box_data.append({
-                            'category': cat,
-                            'q1': float(q1),
-                            'median': float(median),
-                            'q3': float(q3),
-                            'lower': float(lower),
-                            'upper': float(upper),
-                            'min': float(cat_data.min()),
-                            'max': float(cat_data.max())
-                        })
-            else:
-                values = self._data[column].dropna()
-                if len(values) > 0:
-                    q1 = values.quantile(0.25)
-                    median = values.quantile(0.5)
-                    q3 = values.quantile(0.75)
-                    iqr = q3 - q1
-                    lower = max(q1 - 1.5 * iqr, values.min())
-                    upper = min(q3 + 1.5 * iqr, values.max())
-                    box_data = [{
-                        'category': 'All',
-                        'q1': float(q1),
-                        'median': float(median),
-                        'q3': float(q3),
-                        'lower': float(lower),
-                        'upper': float(upper),
-                        'min': float(values.min()),
-                        'max': float(values.max())
-                    }]
-                else:
-                    box_data = []
-        else:
-            values = [item.get(column, 0) for item in self._data if column in item]
-            if values:
-                sorted_vals = sorted(values)
-                n = len(sorted_vals)
-                q1 = sorted_vals[int(n * 0.25)]
-                median = sorted_vals[int(n * 0.5)]
-                q3 = sorted_vals[int(n * 0.75)]
-                iqr = q3 - q1
-                lower = max(q1 - 1.5 * iqr, min(values))
-                upper = min(q3 + 1.5 * iqr, max(values))
-                box_data = [{
-                    'category': 'All',
-                    'q1': float(q1),
-                    'median': float(median),
-                    'q3': float(q3),
-                    'lower': float(lower),
-                    'upper': float(upper),
-                    'min': float(min(values)),
-                    'max': float(max(values))
-                }]
-            else:
-                box_data = []
-        
-        if box_data:
-            boxplot_spec = {
-                'type': 'boxplot',
-                'data': box_data,
-                'column': column,
-                'category_col': category_col,
-                **kwargs
-            }
-            # Asegurar que __linked_to__ esté en el spec si fue agregado antes
-            if '__linked_to__' in kwargs:
-                boxplot_spec['__linked_to__'] = kwargs['__linked_to__']
-            MatrixLayout._map[letter] = boxplot_spec
-        
-        return self
+  
+
     
+    def add_boxplot(self, letter, numeric_col=None, linked_to=None, **kwargs):
+    if numeric_col is None:
+        raise ValueError("Debe pasar numeric_col=")
+
+    # registrar vista
+    self._views[f"boxplot_{letter}"] = {
+        "type": "boxplot",
+        "letter": letter,
+        "numeric_col": numeric_col,
+        "linked_to": linked_to,
+        "kwargs": kwargs
+    }
+
+    MatrixLayout = _get_matrix_layout()
+
+    # construir inicial
+    spec = MatrixLayout.map_boxplot(
+        letter,
+        self._data[[numeric_col]],
+        value_col=numeric_col,
+        **kwargs
+    )
+
+    MatrixLayout._map[letter] = spec
+    return self
+
+
+    def _update_linked_views(self, source_letter, selected):
+        MatrixLayout = _get_matrix_layout()
+
+        for _, cfg in self._views.items():
+            if cfg["type"] != "boxplot": 
+            continue
+        if cfg["linked_to"] != source_letter:
+            continue
+
+        letter = cfg["letter"]
+        col = cfg["numeric_col"]
+
+        df = selected if isinstance(selected, pd.DataFrame) else self._data
+
+        new_data = df[[col]].dropna()
+
+        spec = MatrixLayout.map_boxplot(
+            letter,
+            new_data,
+            value_col=col,
+            **cfg["kwargs"]
+        )
+
+        MatrixLayout._map[letter] = spec
+        MatrixLayout.update(letter)
+
+
     def _prepare_barchart_data(self, data, category_col, value_col, kwargs):
         """Helper para preparar datos del bar chart (incluyendo _original_rows)"""
         try:
