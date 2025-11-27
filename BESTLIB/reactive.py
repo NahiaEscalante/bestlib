@@ -422,9 +422,11 @@ class ReactiveMatrixLayout:
         """
         self._data = data
         return self
-    
+
+        
+    """ cambio en el scatter
     def add_scatter(self, letter, data=None, x_col=None, y_col=None, category_col=None, interactive=True, **kwargs):
-        """
+       
         Agrega un scatter plot a la matriz con soporte para DataFrames.
         
         Args:
@@ -438,7 +440,8 @@ class ReactiveMatrixLayout:
         
         Returns:
             self para encadenamiento
-        """
+       
+
         if data is not None:
             self._data = data
         elif self._data is None:
@@ -503,7 +506,8 @@ class ReactiveMatrixLayout:
         # Registrar handler en el layout principal
         # Nota: Usamos el mismo layout pero cada scatter tiene su propio SelectionModel
         # El JavaScript enviará __scatter_letter__ en el payload
-        self._layout.on('select', scatter_handler)
+        self.on("select", scatter_handler)
+
         
         # Configurar el scatter plot en el mapping
         # IMPORTANTE: Agregar __scatter_letter__ ANTES de crear el spec para asegurar que esté disponible
@@ -550,6 +554,40 @@ class ReactiveMatrixLayout:
         self._view_letters[view_id] = letter
         
         return self
+    """
+
+    def scatter_handler(payload):
+    """Handler que actualiza scatter→linked y reactive→global"""
+
+    # ---------- VALIDAR ITEMS ----------
+    items = payload.get("items", [])
+    if not isinstance(items, list):
+        if self._debug or MatrixLayout._debug:
+            print(f"⚠️ items no es lista: {type(items)}")
+        items = []
+
+    # ---------- FILTRAR POR SCATTER LETTER ----------
+    evt_letter = payload.get("__scatter_letter__") or payload.get("__view_letter__")
+    if evt_letter != scatter_letter_capture:
+        return  # evento no es para este scatter
+
+    if self._debug or MatrixLayout._debug:
+        print(f"🎯 Evento para '{scatter_letter_capture}': {len(items)} items")
+
+    # ---------- CONVERTIR A DATAFRAME ----------
+    items_df = _items_to_dataframe(items)
+    clean = items_df if (items_df is not None and not items_df.empty) else items
+
+    # ---------- ACTUALIZAR MODELOS ----------
+    scatter_selection_capture.update(clean)
+    self.selection_model.update(clean)
+    self._selected_data = clean
+
+    # ---------- CRÍTICO: ACTUALIZAR LINKED VIEWS ----------
+    # Sin esto, el boxplot JAMÁS se actualiza
+    if hasattr(self, "_update_linked_views"):
+        self._update_linked_views(scatter_letter_capture, clean)
+
     
     def add_barchart(self, letter, category_col=None, value_col=None, linked_to=None, interactive=None, selection_var=None, **kwargs):
         """
