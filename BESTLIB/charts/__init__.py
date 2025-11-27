@@ -47,9 +47,11 @@ def _safe_import_chart(module_name, chart_name):
 
 # Importar gráficos básicos
 try:
-    from .scatter import ScatterChart
-except (ImportError, AttributeError, Exception):
-    pass
+    from .scatter import ScatterChart as _ScatterChart
+    ScatterChart = _ScatterChart
+except:
+    ScatterChart = None
+
 
 try:
     from .bar import BarChart
