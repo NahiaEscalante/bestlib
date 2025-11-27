@@ -282,74 +282,43 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
 
 
 class SelectionModel(ReactiveData):
-    """
-    Modelo reactivo especializado para selecciones de brush.
-    
-    Uso en BESTLIB:
-        selection = SelectionModel()
-        
-        # Registrar callback
-        def on_select(items, count):
-            print(f"✅ {count} puntos seleccionados")
-            
-        selection.on_change(on_select)
-        
-        # Conectar con MatrixLayout
-        layout.connect_selection(selection)
-    """
-    
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.history = []
-""" 
-    def _items_changed(self, change): VERSION 1
+        self.selected_data = []   # <-- NECESARIO
+
+    def _items_changed(self, change):
+        """Guarda historial y actualiza selected_data"""
         super()._items_changed(change)
-        
+
+        # Extraer items nuevos
         if isinstance(change, dict):
             new_items = change.get('new', [])
         else:
             new_items = change if not hasattr(change, 'new') else change.new
-        
+
+        # Convertir a DataFrame si es posible
+        df = _items_to_dataframe(new_items)
+        self.selected_data = df if df is not None else new_items
+
+        # Guardar historial
         if new_items:
             self.history.append({
                 'timestamp': self._get_timestamp(),
                 'items': new_items,
                 'count': len(new_items)
             })
-    """
-
-    def _items_changed(self, change):
-    """Guarda historial y actualiza selected_data"""
-    super()._items_changed(change)
-
-    if isinstance(change, dict):
-        new_items = change.get('new', [])
-    else:
-        new_items = change if not hasattr(change, 'new') else change.new
-
-    # CONVERTIR new_items A DATAFRAME (si pandas está disponible)
-    df = _items_to_dataframe(new_items)
-    self.selected_data = df if df is not None else new_items
-
-    # Guardar historial
-    if new_items:
-        self.history.append({
-            'timestamp': self._get_timestamp(),
-            'items': new_items,
-            'count': len(new_items)
-        })
-
 
     def _get_timestamp(self):
         """Obtiene timestamp actual"""
         import time
         return time.time()
-    
+
     def get_history(self):
         """Retorna el historial de selecciones"""
         return self.history
-    
+
     def clear_history(self):
         """Limpia el historial de selecciones"""
         self.history = []
-
