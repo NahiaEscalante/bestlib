@@ -254,7 +254,7 @@ class ReactiveMatrixLayout:
         
         # Crear un handler personalizado para este scatter plot específico
         # El handler se conecta directamente al layout principal pero filtra por letra
-        from .matrix import MatrixLayout
+        #from .matrix import MatrixLayout
         
         # Crear handler que filtra eventos por letra del scatter
         # Usar closure para capturar la letra
