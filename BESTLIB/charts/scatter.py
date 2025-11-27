@@ -116,7 +116,7 @@ class ScatterChart(ChartBase):
             except Exception:
                 processed_data[i]["_original_row"] = {}
 
-    return processed_data, original_data
+        return processed_data, original_data
 
     
     def get_spec(self, data, x_col=None, y_col=None, category_col=None,
