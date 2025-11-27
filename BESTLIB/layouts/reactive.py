@@ -1,4 +1,4 @@
-from BESTLIB.layouts.matrix import MatrixLayout
+from .matrix import MatrixLayout
 
 """
 ReactiveMatrixLayout - Layout reactivo para BESTLIB
