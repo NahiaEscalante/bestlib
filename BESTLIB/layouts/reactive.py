@@ -1,7 +1,10 @@
+from BESTLIB.layouts.matrix import MatrixLayout
+
 """
 ReactiveMatrixLayout - Layout reactivo para BESTLIB
 Migrado desde reactive.py legacy a layouts/reactive.py según estructura modular
 """
+
 try:
     import ipywidgets as widgets
     HAS_WIDGETS = True

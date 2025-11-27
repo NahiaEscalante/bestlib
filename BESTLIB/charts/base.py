@@ -24,16 +24,6 @@ class ChartBase(ABC):
     
     @abstractmethod
     def validate_data(self, data, **kwargs):
-        """
-        Valida que los datos sean adecuados para este gráfico.
-        
-        Args:
-            data: DataFrame o lista de diccionarios
-            **kwargs: Parámetros específicos del gráfico
-        
-        Raises:
-            ChartError: Si los datos no son válidos
-        """
         pass
     
     @abstractmethod
