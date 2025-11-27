@@ -46,7 +46,7 @@ except (ImportError, AttributeError, ModuleNotFoundError, Exception):
     pd = None
 
 # Importar desde módulos modulares
-from .matrix import MatrixLayout
+#from .matrix import MatrixLayout descomentar si es necesario but idk
 from ..reactive.selection import SelectionModel
 from ..reactive.selection import _items_to_dataframe
 
