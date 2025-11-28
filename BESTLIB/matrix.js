@@ -5486,6 +5486,14 @@
    */
   function renderHorizontalBarD3(container, spec, d3, divId) {
     const data = spec.data || [];
+    
+    // Validar que hay datos
+    if (!data || data.length === 0) {
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos para mostrar</div>';
+      console.warn('renderHorizontalBarD3: No hay datos', { spec, divId });
+      return;
+    }
+    
     const dims = getChartDimensions(container, spec, 400, 350);
     let width = dims.width;
     let height = dims.height;
@@ -5493,9 +5501,10 @@
     // 🔒 OPTIMIZACIÓN: Reducir márgenes para dashboards grandes
     const isLargeDashboard = container.closest('.matrix-layout') && 
                              container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    // Para barras horizontales, necesitamos más espacio a la izquierda para las etiquetas de categorías
     const defaultMargin = isLargeDashboard 
-      ? { top: 15, right: 30, bottom: 35, left: 15 }  // Márgenes reducidos para dashboards grandes
-      : { top: 20, right: 40, bottom: 50, left: 20 }; // Márgenes normales (más espacio izquierdo para categorías)
+      ? { top: 15, right: 30, bottom: 35, left: 80 }  // Márgenes reducidos para dashboards grandes (más espacio izquierdo)
+      : { top: 20, right: 40, bottom: 50, left: 100 }; // Márgenes normales (más espacio izquierdo para categorías)
     const margin = calculateAxisMargins(spec, defaultMargin, width, height);
     
     // 🔒 MEJORA ESTÉTICA: Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
@@ -5590,28 +5599,7 @@
       .attr('fill', d => d.color || spec.color || '#4a90e2')
       .attr('stroke', spec.stroke || '#000000')
       .attr('stroke-width', spec.strokeWidth || 0)
-      .style('cursor', spec.interactive ? 'pointer' : 'default');
-    
-    // Agregar marcadores en los extremos de las barras si está habilitado
-    if (spec.markers) {
-      g.selectAll('.marker')
-        .data(data)
-        .enter()
-        .append('circle')
-        .attr('class', 'marker')
-        .attr('cy', d => y(d.category) + y.bandwidth() / 2)
-        .attr('cx', 0)
-        .attr('r', 4)
-        .attr('fill', '#ffffff')
-        .attr('stroke', spec.stroke || '#000000')
-        .attr('stroke-width', (spec.strokeWidth || 0) + 1)
-        .style('opacity', 0)
-        .transition()
-        .duration(800)
-        .delay(400)
-        .style('opacity', 1)
-        .attr('cx', d => x(d.value));
-    }
+      .style('cursor', spec.interactive ? 'pointer' : 'default')
       .on('click', function(event, d) {
         if (spec.interactive) {
           const index = data.indexOf(d);
@@ -5686,12 +5674,24 @@
       .attr('x', 0)
       .attr('width', d => x(d.value));
     
-    // Actualizar marcadores después de la animación de barras
+    // Agregar marcadores en los extremos de las barras si está habilitado
     if (spec.markers) {
       g.selectAll('.marker')
+        .data(data)
+        .enter()
+        .append('circle')
+        .attr('class', 'marker')
+        .attr('cy', d => y(d.category) + y.bandwidth() / 2)
+        .attr('cx', 0)
+        .attr('r', 4)
+        .attr('fill', '#ffffff')
+        .attr('stroke', spec.stroke || '#000000')
+        .attr('stroke-width', (spec.strokeWidth || 0) + 1)
+        .style('opacity', 0)
         .transition()
         .duration(800)
         .delay(400)
+        .style('opacity', 1)
         .attr('cx', d => x(d.value));
     }
     
