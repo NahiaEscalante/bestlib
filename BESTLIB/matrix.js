@@ -1230,10 +1230,12 @@
     }
     
     const chartType = spec.type;
+    console.log('renderChartD3: Tipo de gráfico detectado', { chartType, specKeys: Object.keys(spec) });
     
     if (chartType === 'bar') {
       renderBarChartD3(container, spec, d3, divId);
     } else if (chartType === 'horizontal_bar') {
+      console.log('renderChartD3: Llamando renderHorizontalBarD3');
       renderHorizontalBarD3(container, spec, d3, divId);
     } else if (chartType === 'scatter') {
       renderScatterPlotD3(container, spec, d3, divId);
@@ -5485,16 +5487,28 @@
    * Gráfico de barras horizontales con D3.js
    */
   function renderHorizontalBarD3(container, spec, d3, divId) {
+    console.log('renderHorizontalBarD3: Iniciando renderizado', { spec, divId, container: container ? container.id : 'no container' });
+    
     const data = spec.data || [];
     
     // Validar que hay datos
     if (!data || data.length === 0) {
       container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos para mostrar</div>';
-      console.warn('renderHorizontalBarD3: No hay datos', { spec, divId });
+      console.warn('renderHorizontalBarD3: No hay datos', { spec, divId, dataLength: data.length });
+      return;
+    }
+    
+    console.log('renderHorizontalBarD3: Datos encontrados', { dataLength: data.length, firstItem: data[0] });
+    
+    // Validar que D3 está disponible
+    if (!d3) {
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #d32f2f;">Error: D3.js no está disponible</div>';
+      console.error('renderHorizontalBarD3: D3 no disponible');
       return;
     }
     
     const dims = getChartDimensions(container, spec, 400, 350);
+    console.log('renderHorizontalBarD3: Dimensiones calculadas', dims);
     let width = dims.width;
     let height = dims.height;
     
@@ -5729,6 +5743,8 @@
       // Renderizar etiquetas de ejes usando función helper
       renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
     }
+    
+    console.log('renderHorizontalBarD3: Renderizado completado exitosamente');
   }
   
   /**
