@@ -377,9 +377,26 @@ class MatrixLayout:
         self._merge_opt = list(letters) if letters is not None else []
         return self
 
-# layouts/matrix.py
-@classmethod
-def map_horizontal_bar(cls, letter, data, category_col, value_col=None, **kwargs):
-    """Mapea un gráfico de barras horizontales a una letra del layout"""
-    chart = HorizontalBarChart()
-    return chart.get_spec(data, category_col=category_col, value_col=value_col, **kwargs)
+
+def add_horizontal_bar(self, letter, data, category_col, value_col=None, **kwargs):
+    """
+    Agrega un gráfico de barras horizontales al layout.
+    
+    Args:
+        letter: Letra del layout
+        data: Datos para el gráfico
+        category_col: Columna para las categorías (eje Y)
+        value_col: Columna para los valores (eje X). Si es None, cuenta ocurrencias.
+        **kwargs: Argumentos adicionales para el gráfico
+    """
+    # Usar el método map_horizontal_bar para obtener la especificación
+    spec = self.map_horizontal_bar(letter, data, category_col, value_col, **kwargs)
+    
+    # Añadir la especificación al mapeo del layout
+    self._mapping[letter] = spec
+    
+    # Si hay una selección activa, aplicar el filtro
+    if hasattr(self, '_selection') and self._selection is not None:
+        self._apply_selection(self._selection)
+    
+    return self
