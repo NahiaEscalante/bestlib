@@ -409,6 +409,10 @@ class MatrixLayout:
         Returns:
             self: Para permitir el encadenamiento de métodos
         """
+        # Asegurarse de que _mapping existe
+        if not hasattr(self, '_mapping'):
+            self._mapping = {}
+            
         # Usar el método map_horizontal_bar para obtener la especificación
         spec = self.map_horizontal_bar(data, category_col=category_col, value_col=value_col, **kwargs)
         
@@ -417,6 +421,7 @@ class MatrixLayout:
         
         # Si hay una selección activa, aplicar el filtro
         if hasattr(self, '_selection') and self._selection is not None:
-            self._apply_selection(self._selection)
+            if hasattr(self, '_apply_selection'):
+                self._apply_selection(self._selection)
         
         return self
