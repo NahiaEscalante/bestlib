@@ -638,6 +638,115 @@ class MatrixLayout:
         return spec
 
     @classmethod
+    def map_horizontal_bar(cls, letter, data, category_col=None, value_col=None, x_col=None, y_col=None, **kwargs):
+        """
+        Método helper para crear horizontal bar chart desde DataFrame de pandas.
+        
+        Args:
+            letter: Letra del layout ASCII donde irá el gráfico
+            data: DataFrame de pandas o lista de diccionarios
+            category_col: Nombre de columna para categorías (eje Y)
+            value_col: Nombre de columna para valores (eje X, opcional, si no se especifica cuenta)
+            x_col: Alias de value_col (para compatibilidad con scatter plot API)
+            y_col: Alias de category_col (para compatibilidad con scatter plot API)
+            **kwargs: Argumentos adicionales (color, colorMap, interactive, axes, strokeWidth, markers, etc.)
+        
+        Returns:
+            dict: Especificación del horizontal bar chart para usar en map()
+        
+        Ejemplo:
+            import pandas as pd
+            df = pd.DataFrame({'dept': ['A', 'B', 'C'], 'ventas': [100, 200, 150]})
+            
+            # Usando category_col y value_col
+            MatrixLayout.map_horizontal_bar('H', df, category_col='dept', value_col='ventas', interactive=True)
+            layout = MatrixLayout("H")
+            
+            # O usando x_col y y_col (alias)
+            MatrixLayout.map_horizontal_bar('H', df, y_col='dept', x_col='ventas', interactive=True)
+            layout = MatrixLayout("H")
+        """
+        from collections import Counter
+        
+        # Soporte para x_col y y_col como alias (para compatibilidad)
+        # Para horizontal_bar: x_col = value_col (valores en eje X), y_col = category_col (categorías en eje Y)
+        if x_col is not None and value_col is None:
+            value_col = x_col
+        if y_col is not None and category_col is None:
+            category_col = y_col
+        
+        # Validar datos
+        try:
+            if HAS_PANDAS and isinstance(data, pd.DataFrame):
+                if category_col and category_col not in data.columns:
+                    raise ValueError(f"Columna '{category_col}' no existe en el DataFrame. Columnas disponibles: {list(data.columns)}")
+                if value_col and value_col not in data.columns:
+                    raise ValueError(f"Columna '{value_col}' no existe en el DataFrame. Columnas disponibles: {list(data.columns)}")
+            else:
+                cls._validate_data(data, required_type='list')
+        except ValueError as e:
+            raise ValueError(f"Error validando datos para horizontal bar chart '{letter}': {e}")
+        except Exception as e:
+            raise ValueError(f"Error inesperado validando datos para horizontal bar chart '{letter}': {e}")
+        
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            # Si hay value_col, agrupar y sumar
+            if value_col and value_col in data.columns:
+                bar_data = data.groupby(category_col)[value_col].sum().reset_index()
+                bar_data = bar_data.rename(columns={category_col: 'category', value_col: 'value'})
+                bar_data = bar_data.to_dict('records')
+            elif category_col and category_col in data.columns:
+                # Contar por categoría
+                counts = data[category_col].value_counts()
+                bar_data = [{'category': cat, 'value': count} for cat, count in counts.items()]
+            else:
+                raise ValueError("Debe especificar category_col")
+            
+            # Agregar datos originales para referencia
+            original_data = data.to_dict('records')
+            for i, bar_item in enumerate(bar_data):
+                # Encontrar todas las filas con esta categoría
+                matching_rows = [row for row in original_data if row.get(category_col) == bar_item['category']]
+                bar_item['_original_rows'] = matching_rows
+        else:
+            # Lista de diccionarios
+            if category_col:
+                categories = Counter([item.get(category_col, 'unknown') for item in data])
+                bar_data = [{'category': cat, 'value': count} for cat, count in categories.items()]
+            else:
+                categories = Counter([item.get('category', 'unknown') for item in data])
+                bar_data = [{'category': cat, 'value': count} for cat, count in categories.items()]
+            
+            # Agregar datos originales
+            original_data = data if isinstance(data, list) else []
+            for bar_item in bar_data:
+                matching_rows = [row for row in original_data if row.get(category_col or 'category') == bar_item['category']]
+                bar_item['_original_rows'] = matching_rows
+        
+        # Agregar etiquetas de ejes automáticamente si no están en kwargs
+        # Para barras horizontales: xLabel es el valor, yLabel es la categoría
+        if 'xLabel' not in kwargs:
+            kwargs['xLabel'] = value_col if value_col else 'Value'
+        if 'yLabel' not in kwargs and category_col:
+            kwargs['yLabel'] = category_col
+        
+        # Procesar figsize si está en kwargs
+        cls._process_figsize_in_kwargs(kwargs)
+        
+        spec = {
+            'type': 'horizontal_bar',
+            'data': bar_data,
+            **kwargs
+        }
+        
+        # Actualizar el mapping
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map[letter] = spec
+        
+        return spec
+
+    @classmethod
     def map_grouped_barchart(cls, letter, data, main_col=None, sub_col=None, value_col=None, **kwargs):
         """
         Crea barplot anidado: categorías principales (main_col) con subcategorías (sub_col).
