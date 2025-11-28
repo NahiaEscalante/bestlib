@@ -1233,6 +1233,8 @@
     
     if (chartType === 'bar') {
       renderBarChartD3(container, spec, d3, divId);
+    } else if (chartType === 'horizontal_bar') {
+      renderHorizontalBarD3(container, spec, d3, divId);
     } else if (chartType === 'scatter') {
       renderScatterPlotD3(container, spec, d3, divId);
     } else if (chartType === 'histogram') {
@@ -1257,7 +1259,7 @@
       // Tipo de gráfico no soportado aún, mostrar mensaje visible
       const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
         '<strong>Error: Gráfico tipo "' + chartType + '" no implementado aún</strong><br/>' +
-        '<small>Tipos soportados: bar, scatter, histogram, boxplot, heatmap, line, pie, violin, radviz, star_coordinates, parallel_coordinates</small>' +
+        '<small>Tipos soportados: bar, horizontal_bar, scatter, histogram, boxplot, heatmap, line, pie, violin, radviz, star_coordinates, parallel_coordinates</small>' +
         '</div>';
       container.innerHTML = errorMsg;
       console.error('renderChartD3: Tipo de gráfico no soportado', { chartType, spec });
@@ -5468,6 +5470,256 @@
         .style('font-size', '12px')
         .style('font-weight', '600')
         .style('fill', '#000000')  // NEGRO
+        .style('font-family', 'Arial, sans-serif');
+      
+      yAxis.selectAll('line, path')
+        .style('stroke', '#000000')
+        .style('stroke-width', '1.5px');
+      
+      // Renderizar etiquetas de ejes usando función helper
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
+    }
+  }
+  
+  /**
+   * Gráfico de barras horizontales con D3.js
+   */
+  function renderHorizontalBarD3(container, spec, d3, divId) {
+    const data = spec.data || [];
+    const dims = getChartDimensions(container, spec, 400, 350);
+    let width = dims.width;
+    let height = dims.height;
+    
+    // 🔒 OPTIMIZACIÓN: Reducir márgenes para dashboards grandes
+    const isLargeDashboard = container.closest('.matrix-layout') && 
+                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
+    const defaultMargin = isLargeDashboard 
+      ? { top: 15, right: 30, bottom: 35, left: 15 }  // Márgenes reducidos para dashboards grandes
+      : { top: 20, right: 40, bottom: 50, left: 20 }; // Márgenes normales (más espacio izquierdo para categorías)
+    const margin = calculateAxisMargins(spec, defaultMargin, width, height);
+    
+    // 🔒 MEJORA ESTÉTICA: Asegurar que el SVG tenga suficiente espacio para las etiquetas de ejes
+    let chartWidth = width - margin.left - margin.right;
+    let chartHeight = height - margin.top - margin.bottom;
+    
+    // Verificar que el ancho sea suficiente (ajustar si es necesario)
+    const minChartWidth = 200;
+    const minWidth = margin.left + margin.right + minChartWidth;
+    if (width < minWidth) {
+      width = minWidth;
+      chartWidth = width - margin.left - margin.right;
+    } else {
+      const maxAvailableWidth = container.clientWidth || width;
+      if (width > maxAvailableWidth) {
+        width = maxAvailableWidth;
+        chartWidth = Math.max(width - margin.left - margin.right, minChartWidth);
+      }
+    }
+    
+    // Verificar que la altura sea suficiente
+    const minChartHeight = 200;
+    const minHeight = margin.top + margin.bottom + minChartHeight;
+    if (height < minHeight) {
+      height = minHeight;
+      chartHeight = height - margin.top - margin.bottom;
+    } else {
+      const maxAvailableHeight = container.clientHeight || height;
+      if (height > maxAvailableHeight) {
+        height = maxAvailableHeight;
+        chartHeight = Math.max(height - margin.top - margin.bottom, minChartHeight);
+      }
+    }
+    
+    // Crear SVG con D3
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .style('overflow', 'visible');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    // Escalas D3 - INVERTIDAS para barras horizontales
+    // Y escala (categorías) - vertical, de arriba a abajo
+    const y = d3.scaleBand()
+      .domain(data.map(d => d.category))
+      .range([0, chartHeight])
+      .padding(0.2);
+    
+    // X escala (valores) - horizontal, de izquierda a derecha
+    const x = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d.value) || 100])
+      .nice()
+      .range([0, chartWidth]);
+    
+    // Crear tooltip para horizontal bar chart
+    const tooltipId = `horizontal-bar-tooltip-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body').append('div')
+        .attr('id', tooltipId)
+        .attr('class', 'horizontal-bar-chart-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    
+    const xLabel = spec.xLabel || 'Value';
+    const yLabel = spec.yLabel || 'Category';
+    
+    // Dibujar barras horizontales
+    const bars = g.selectAll('.bar')
+      .data(data)
+      .enter()
+      .append('rect')
+      .attr('class', 'bar')
+      .attr('y', d => y(d.category))
+      .attr('x', 0)
+      .attr('width', 0)
+      .attr('height', y.bandwidth())
+      .attr('fill', d => d.color || spec.color || '#4a90e2')
+      .attr('stroke', spec.stroke || '#000000')
+      .attr('stroke-width', spec.strokeWidth || 0)
+      .style('cursor', spec.interactive ? 'pointer' : 'default');
+    
+    // Agregar marcadores en los extremos de las barras si está habilitado
+    if (spec.markers) {
+      g.selectAll('.marker')
+        .data(data)
+        .enter()
+        .append('circle')
+        .attr('class', 'marker')
+        .attr('cy', d => y(d.category) + y.bandwidth() / 2)
+        .attr('cx', 0)
+        .attr('r', 4)
+        .attr('fill', '#ffffff')
+        .attr('stroke', spec.stroke || '#000000')
+        .attr('stroke-width', (spec.strokeWidth || 0) + 1)
+        .style('opacity', 0)
+        .transition()
+        .duration(800)
+        .delay(400)
+        .style('opacity', 1)
+        .attr('cx', d => x(d.value));
+    }
+      .on('click', function(event, d) {
+        if (spec.interactive) {
+          const index = data.indexOf(d);
+          
+          // Obtener todas las filas originales de esta categoría
+          const originalRows = d._original_rows || d._original_row || (d._original_row ? [d._original_row] : null) || [d];
+          
+          // Asegurar que originalRows sea un array
+          const items = Array.isArray(originalRows) ? originalRows : [originalRows];
+          
+          // Obtener letra de la vista
+          let viewLetter = spec.__view_letter__ || null;
+          if (!viewLetter && container) {
+            const letterAttr = container.getAttribute('data-letter');
+            if (letterAttr) {
+              viewLetter = letterAttr;
+            } else {
+              const idMatch = container.id && container.id.match(/-cell-([A-Z])-/);
+              if (idMatch) {
+                viewLetter = idMatch[1];
+              }
+            }
+          }
+
+          sendEvent(divId, 'select', { 
+            type: 'select',
+            items: items,
+            indices: [index],
+            original_items: [d],
+            _original_rows: items,
+            __view_letter__: viewLetter,
+            __is_primary_view__: spec.__is_primary_view__ || false
+          });
+        }
+      })
+      .on('mouseenter', function(event, d) {
+        // Resaltar barra
+        d3.select(this)
+          .attr('fill', d => d.color || spec.hoverColor || '#357abd')
+          .attr('opacity', 0.9);
+        
+        // Mostrar tooltip
+        const mouseX = event.pageX || event.clientX || 0;
+        const mouseY = event.pageY || event.clientY || 0;
+        
+        const value = typeof d.value === 'number' ? d.value.toFixed(2) : d.value;
+        tooltip
+          .style('left', (mouseX + 10) + 'px')
+          .style('top', (mouseY - 10) + 'px')
+          .style('display', 'block')
+          .html(`<strong>${yLabel}:</strong> ${d.category}<br/><strong>${xLabel}:</strong> ${value}`)
+          .transition()
+          .duration(200)
+          .style('opacity', 1);
+      })
+      .on('mouseleave', function(event, d) {
+        // Restaurar color
+        d3.select(this)
+          .attr('fill', d => d.color || spec.color || '#4a90e2')
+          .attr('opacity', 1);
+        
+        // Ocultar tooltip
+        tooltip.transition()
+          .duration(200)
+          .style('opacity', 0)
+          .on('end', function() {
+            tooltip.style('display', 'none');
+          });
+      })
+      .transition()
+      .duration(800)
+      .attr('x', 0)
+      .attr('width', d => x(d.value));
+    
+    // Actualizar marcadores después de la animación de barras
+    if (spec.markers) {
+      g.selectAll('.marker')
+        .transition()
+        .duration(800)
+        .delay(400)
+        .attr('cx', d => x(d.value));
+    }
+    
+    // Ejes con D3 - INVERTIDOS para barras horizontales
+    if (spec.axes !== false) {
+      // Eje X (valores) - en la parte inferior
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x));
+      
+      xAxis.selectAll('text')
+        .style('font-size', '12px')
+        .style('font-weight', '600')
+        .style('fill', '#000000')
+        .style('font-family', 'Arial, sans-serif');
+      
+      xAxis.selectAll('line, path')
+        .style('stroke', '#000000')
+        .style('stroke-width', '1.5px');
+      
+      // Eje Y (categorías) - en la parte izquierda
+      const yAxis = g.append('g')
+        .call(d3.axisLeft(y));
+      
+      yAxis.selectAll('text')
+        .style('font-size', '12px')
+        .style('font-weight', '600')
+        .style('fill', '#000000')
         .style('font-family', 'Arial, sans-serif');
       
       yAxis.selectAll('line, path')
