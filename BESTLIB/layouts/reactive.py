@@ -2978,3 +2978,40 @@ def _sanitize_for_json(obj):
     return str(obj)
 
 
+# layouts/reactive.py
+def add_horizontal_bar(self, letter, category_col, value_col=None, linked_to=None, interactive=None, **kwargs):
+    """
+    Agrega un gráfico de barras horizontales al layout.
+    
+    Args:
+        letter: Letra del layout
+        category_col: Columna para las categorías (eje Y)
+        value_col: Columna para los valores (eje X). Si es None, cuenta ocurrencias.
+        linked_to: Letra del gráfico al que está enlazado (para linked brushing)
+        interactive: Si es True, permite interacción
+        **kwargs: Argumentos adicionales para el gráfico
+    """
+    if interactive is None:
+        interactive = linked_to is not None
+    
+    # Configurar gráfico
+    chart = HorizontalBarChart()
+    spec = chart.get_spec(
+        self._data,
+        category_col=category_col,
+        value_col=value_col,
+        interactive=interactive,
+        **kwargs
+    )
+    
+    # Configurar enlace si es necesario
+    if linked_to:
+        self._setup_linked_chart(letter, 'horizontal_bar', linked_to, **kwargs)
+    
+    # Configurar interactividad
+    if interactive:
+        self._setup_interactive_chart(letter, 'horizontal_bar', **kwargs)
+    
+    # Actualizar el mapping
+    self._layout.map({letter: spec})
+    return self

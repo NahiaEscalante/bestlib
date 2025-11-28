@@ -130,3 +130,55 @@ def validate_bar_data(data, category_col, value_col=None):
             required.append(value_col)
         validate_columns(data, required, required_type='list')
 
+
+def validate_horizontal_bar_data(data, category_col, value_col=None, **kwargs):
+    """
+    Valida los datos para un gráfico de barras horizontales.
+    
+    Args:
+        data: Datos a validar (DataFrame o lista de diccionarios)
+        category_col: Columna para las categorías (eje Y)
+        value_col: Columna para los valores (eje X). Si es None, se cuentan ocurrencias.
+        **kwargs: Argumentos adicionales
+        
+    Raises:
+        DataError: Si los datos no son válidos
+    """
+    import pandas as pd
+    
+    if data is None:
+        raise DataError("No se proporcionaron datos")
+    
+    # Convertir a DataFrame si es necesario
+    if not isinstance(data, pd.DataFrame):
+        try:
+            df = pd.DataFrame(data)
+        except Exception as e:
+            raise DataError(f"No se pudo convertir los datos a DataFrame: {e}")
+    else:
+        df = data
+    
+    # Validar columnas requeridas
+    required_cols = [category_col]
+    if value_col is not None:
+        required_cols.append(value_col)
+    
+    missing = [col for col in required_cols if col not in df.columns]
+    if missing:
+        raise DataError(f"Columnas faltantes: {', '.join(missing)}")
+    
+    # Validar tipos de datos
+    if value_col is not None:
+        try:
+            pd.to_numeric(df[value_col])
+        except ValueError:
+            raise DataError(f"La columna de valores '{value_col}' debe ser numérica")
+    
+    # Validar valores faltantes
+    for col in required_cols:
+        if df[col].isnull().any():
+            raise DataError(f"La columna '{col}' contiene valores faltantes")
+    
+    # Validar valores únicos en category_col
+    if df[category_col].nunique() != len(df[category_col]):
+        raise DataError(f"La columna de categorías '{category_col}' tiene valores duplicados")

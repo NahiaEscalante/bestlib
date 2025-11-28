@@ -560,3 +560,55 @@ def prepare_grouped_bar_data(data, main_col=None, sub_col=None, value_col=None):
     
     return rows, groups, series
 
+def prepare_horizontal_bar_data(data, category_col, value_col=None, **kwargs):
+    """
+    Prepara datos para un gráfico de barras horizontales.
+    
+    Args:
+        data: DataFrame o lista de diccionarios
+        category_col: Columna para el eje Y (categorías)
+        value_col: Columna para el eje X (valores). Si es None, cuenta ocurrencias.
+        **kwargs: Argumentos adicionales
+        
+    Returns:
+        dict: Datos formateados para el gráfico
+    """
+    import pandas as pd
+    
+    # Convertir a DataFrame si es necesario
+    if not isinstance(data, pd.DataFrame):
+        df = pd.DataFrame(data)
+    else:
+        df = data.copy()
+    
+    # Si no hay value_col, contar ocurrencias de category_col
+    if value_col is None:
+        value_col = '__count__'
+        df[value_col] = 1
+    
+    # Validar columnas
+    required_cols = [c for c in [category_col, value_col] if c is not None]
+    missing = [col for col in required_cols if col not in df.columns]
+    if missing:
+        raise ValueError(f"Columnas faltantes: {', '.join(missing)}")
+    
+    # Ordenar por valor (opcional)
+    sort = kwargs.get('sort', 'desc')  # 'asc', 'desc' o None
+    if sort == 'desc':
+        df = df.sort_values(by=value_col, ascending=False)
+    elif sort == 'asc':
+        df = df.sort_values(by=value_col, ascending=True)
+    
+    # Limitar el número de barras (opcional)
+    max_categories = kwargs.get('max_categories')
+    if max_categories and len(df) > max_categories:
+        df = df.head(max_categories)
+    
+    # Preparar datos para el frontend
+    values = df.to_dict('records')
+    
+    return {
+        'values': values,
+        'category_col': category_col,
+        'value_col': value_col
+    }

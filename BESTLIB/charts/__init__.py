@@ -17,6 +17,7 @@ from .radviz import RadvizChart
 from .star_coordinates import StarCoordinatesChart
 from .parallel_coordinates import ParallelCoordinatesChart
 from .grouped_bar import GroupedBarChart
+from .horizontal_bar import HorizontalBarChart 
 
 # Registrar todos los gráficos automáticamente
 ChartRegistry.register(ScatterChart)
@@ -31,7 +32,7 @@ ChartRegistry.register(RadvizChart)
 ChartRegistry.register(StarCoordinatesChart)
 ChartRegistry.register(ParallelCoordinatesChart)
 ChartRegistry.register(GroupedBarChart)
-
+ChartRegistry.register(HorizontalBarChart)
 __all__ = [
     'ChartBase',
     'ChartRegistry',
@@ -46,6 +47,7 @@ __all__ = [
     'RadvizChart',
     'StarCoordinatesChart',
     'ParallelCoordinatesChart',
-    'GroupedBarChart'
+    'GroupedBarChart',
+    'HorizontalBarChart'
 ]
 
