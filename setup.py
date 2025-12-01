@@ -10,7 +10,7 @@ long_description = readme_file.read_text(encoding="utf-8") if readme_file.exists
 
 # Leer versión
 version = {}
-version_file = Path(__file__).parent / "bestlib" / "version.py"
+version_file = Path(__file__).parent / "BESTLIB" / "version.py"
 if version_file.exists():
     exec(version_file.read_text(), version)
 else:
@@ -25,9 +25,9 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/NahiaEscalante/bestlib",
-    packages=find_packages(exclude=["tests", "examples", "docs"]),
+    packages=find_packages(exclude=["tests", "examples", "docs", "bestlib-v2", "BESTLIB-backup"]),
     package_data={
-        "bestlib": [
+        "BESTLIB": [
             "assets/*.js",
             "assets/*.css",
         ],
