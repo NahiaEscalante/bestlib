@@ -62,3 +62,9 @@ site/
 *.tmp
 *.bak
 .cache/
+
+# Proyecto - archivos temporales y backup
+bestlib-v2/
+BESTLIB-backup/
+*.md.backup
+*_OLD/

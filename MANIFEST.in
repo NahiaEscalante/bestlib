@@ -1,0 +1,25 @@
+﻿# Excluir carpetas temporales y de backup del paquete
+global-exclude bestlib-v2/*
+global-exclude BESTLIB-backup/*
+global-exclude *.md.backup
+global-exclude *_OLD/*
+
+# Incluir solo lo necesario
+include README.md
+include LICENSE
+include CHANGELOG.md
+include requirements.txt
+include pyproject.toml
+
+# Incluir assets de BESTLIB
+recursive-include BESTLIB/assets *.js *.css
+
+# Excluir archivos de Python compilados
+global-exclude __pycache__
+global-exclude *.py[co]
+global-exclude *.so
+
+# Excluir archivos temporales
+global-exclude .DS_Store
+global-exclude *.swp
+global-exclude *~
