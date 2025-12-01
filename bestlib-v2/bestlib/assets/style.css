@@ -1,0 +1,638 @@
+:root {
+  /* Variables CSS para personalización */
+  --matrix-gap: 12px;
+  --matrix-max-width: 1200px;
+  --matrix-cell-padding: 15px;
+  --matrix-cell-min-height: 350px;
+  --matrix-cell-border-radius: 8px;
+  --matrix-cell-border-color: #e0e0e0;
+  --matrix-cell-background: #ffffff;
+  --matrix-cell-inner-background: #ffffff;
+  --matrix-cell-inner-border-color: #e0e0e0;
+  --matrix-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --matrix-font-size: 14px;
+  
+  /* Variables para indicadores de enlace - MÁS VISIBLES */
+  --link-primary-color: #2563eb;
+  --link-secondary-color: #dc2626;
+  --link-border-width: 4px;
+  --link-border-style: solid;
+  --link-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+  --link-hover-shadow: 0 6px 16px rgba(37, 99, 235, 0.6);
+  --link-connector-color: #2563eb;
+  --link-connector-width: 3px;
+  
+  /* Aspect ratio por defecto para gráficos */
+  --chart-aspect-ratio: 1.3; /* width/height */
+  --chart-min-width: 250px;
+  --chart-min-height: 200px;
+  
+  /* ==========================================
+   * ESTILOS UNIFICADOS PARA GRÁFICOS
+   * ========================================== */
+  
+  /* Colores principales */
+  --chart-primary-color: #4a90e2;
+  --chart-primary-hover: #357abd;
+  --chart-secondary-color: #2563eb;
+  --chart-selection-color: #ff6b35;
+  --chart-background: #ffffff;
+  --chart-text-color: #000000;
+  --chart-text-secondary: #666666;
+  --chart-grid-color: #e0e0e0;
+  
+  /* Paleta de colores por defecto para categorías */
+  --chart-color-1: #4a90e2;
+  --chart-color-2: #e24a4a;
+  --chart-color-3: #4ae24a;
+  --chart-color-4: #e2e24a;
+  --chart-color-5: #e24ae2;
+  --chart-color-6: #4ae2e2;
+  --chart-color-7: #e2a44a;
+  --chart-color-8: #a44ae2;
+  
+  /* Grosores de línea */
+  --chart-line-width: 2px;
+  --chart-line-width-thick: 2.5px;
+  --chart-line-width-thin: 1.5px;
+  --chart-axis-width: 2px;
+  --chart-grid-width: 1px;
+  
+  /* Opacidades */
+  --chart-opacity-default: 1;
+  --chart-opacity-hover: 0.85;
+  --chart-opacity-selected: 1;
+  --chart-opacity-unselected: 0.3;
+  --chart-opacity-fill: 0.3;
+  --chart-opacity-grid: 0.5;
+  
+  /* Tamaños de puntos (scatter) */
+  --chart-point-radius: 4px;
+  --chart-point-radius-hover: 6px;
+  --chart-point-radius-selected: 6px;
+  --chart-point-stroke-width: 1.5px;
+  
+  /* Tipografía */
+  --chart-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --chart-label-font-size: 13px;
+  --chart-label-font-weight: 700;
+  --chart-tick-font-size: 11px;
+  --chart-tick-font-weight: 600;
+  --chart-title-font-size: 15px;
+  --chart-title-font-weight: 700;
+  
+  /* Transiciones */
+  --chart-transition-duration: 300ms;
+  --chart-transition-duration-slow: 500ms;
+  --chart-transition-easing: ease-in-out;
+  
+  /* Márgenes estándar */
+  --chart-margin-top: 25px;
+  --chart-margin-right: 25px;
+  --chart-margin-bottom: 45px;
+  --chart-margin-left: 55px;
+  
+  /* Márgenes para dashboards grandes */
+  --chart-margin-top-large: 20px;
+  --chart-margin-right-large: 20px;
+  --chart-margin-bottom-large: 35px;
+  --chart-margin-left-large: 40px;
+}
+
+.matrix-layout {
+  display: grid;
+  gap: var(--matrix-gap);
+  width: 100%;
+  max-width: var(--matrix-max-width);
+  margin: 0 auto;
+  position: relative; /* Para líneas conectivas */
+  padding: 8px; /* Espacio para líneas conectivas y evitar cortes */
+  overflow: visible !important; /* CRÍTICO: Permitir que líneas conectivas y gráficos se vean completos */
+  box-sizing: border-box;
+}
+
+.matrix-layout > div {
+  background: var(--matrix-cell-background);
+  border: 1px solid var(--matrix-cell-border-color);
+  border-radius: var(--matrix-cell-border-radius);
+  padding: var(--matrix-cell-padding);
+  overflow: visible !important;  /* CRÍTICO: visible para líneas conectivas, pero .matrix-cell tiene overflow: hidden */
+  min-height: var(--matrix-cell-min-height);
+  max-height: none;  /* Removido límite máximo para evitar cortes */
+  display: flex;
+  align-items: center;  /* Centrar verticalmente para mejor presentación */
+  justify-content: center;
+  position: relative; /* Para posicionamiento de elementos internos */
+  box-sizing: border-box; /* Asegurar que padding se incluya en dimensiones */
+}
+
+.matrix-cell {
+  border: 2px solid var(--matrix-cell-inner-border-color);
+  background: #ffffff !important;
+  display: flex;
+  justify-content: center;
+  align-items: center;  /* Centrar verticalmente para mejor presentación */
+  font-family: var(--matrix-font-family);
+  font-size: var(--matrix-font-size);
+  border-radius: var(--matrix-cell-border-radius);
+  overflow: hidden !important;  /* 🔒 MEJORA ESTÉTICA: hidden para evitar que gráficos se salgan */
+  min-height: 320px;  /* Aumentado para acomodar gráficos completos con ejes */
+  width: 100%;  /* Asegurar que ocupe todo el ancho disponible */
+  height: 100%;  /* Asegurar que ocupe toda la altura disponible */
+  position: relative;  /* Para posicionar indicadores de enlace */
+  transition: all 0.3s ease;  /* Transición suave para todos los cambios */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); /* Sombra sutil para profundidad */
+  box-sizing: border-box; /* Asegurar que border se incluya en dimensiones */
+  /* 🔒 MEJORA ESTÉTICA: Padding mínimo para que gráficos ocupen casi todo el espacio */
+  padding: 4px; /* Padding reducido para maximizar espacio del gráfico */
+}
+
+/* Indicadores visuales MEJORADOS para gráficos enlazados */
+.matrix-cell.linked-primary {
+  border: var(--link-border-width) var(--link-border-style) var(--link-primary-color) !important;
+  box-shadow: var(--link-shadow), inset 0 0 0 1px rgba(37, 99, 235, 0.1);
+  background: #ffffff !important;
+}
+
+/* Etiquetas de enlace ahora se crean desde JavaScript, pero mantenemos estilos base */
+.matrix-cell.linked-primary .link-primary-label,
+.matrix-cell.linked-secondary .link-secondary-label {
+  pointer-events: none;
+  user-select: none;
+}
+
+.matrix-cell.linked-secondary {
+  border: var(--link-border-width) var(--link-border-style) var(--link-secondary-color) !important;
+  box-shadow: var(--link-shadow), inset 0 0 0 1px rgba(220, 38, 38, 0.1);
+  background: #ffffff !important;
+}
+
+/* Animación mejorada para indicador de enlace */
+@keyframes pulse-link {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.5);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.02);
+    box-shadow: 0 3px 10px rgba(220, 38, 38, 0.7);
+  }
+}
+
+/* Efecto hover mejorado para gráficos enlazados */
+.matrix-cell.linked-primary:hover {
+  box-shadow: var(--link-hover-shadow), inset 0 0 0 1px rgba(37, 99, 235, 0.2);
+  transform: translateY(-1px);
+}
+
+.matrix-cell.linked-secondary:hover {
+  box-shadow: var(--link-hover-shadow), inset 0 0 0 1px rgba(220, 38, 38, 0.2);
+  transform: translateY(-1px);
+}
+
+/* Línea conectiva entre gráficos enlazados */
+.link-connector {
+  position: absolute;
+  z-index: 50;
+  pointer-events: none;
+  stroke: var(--link-connector-color);
+  stroke-width: var(--link-connector-width);
+  stroke-dasharray: 5, 5;
+  fill: none;
+  animation: dash-animation 2s linear infinite;
+  filter: drop-shadow(0 2px 4px rgba(37, 99, 235, 0.3));
+}
+
+@keyframes dash-animation {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 20;
+  }
+}
+
+/* Etiqueta en línea conectiva */
+.link-label {
+  position: absolute;
+  background: var(--link-primary-color);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  z-index: 51;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Clase para mantener aspect ratio consistente en gráficos */
+.matrix-cell svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  /* Mejorar calidad visual */
+  shape-rendering: geometricPrecision;
+  text-rendering: optimizeLegibility;
+  /* CRÍTICO: Permitir que contenido se vea pero asegurar que SVG no exceda contenedor */
+  overflow: visible;
+  display: block; /* Evitar espacios en blanco */
+  /* Asegurar que el SVG respete los límites del contenedor */
+  box-sizing: border-box;
+  /* Centrar el contenido del SVG */
+  margin: 0;
+  padding: 0;
+}
+
+/* Mejoras para dashboards grandes (3x3, 4x4) */
+.matrix-layout:has(> div:nth-child(9)) {
+  /* Cuando hay 9 o más celdas, optimizar tamaños */
+  --matrix-cell-min-height: 280px;
+  --matrix-cell-padding: 8px;
+  --matrix-gap: 6px;
+  /* Mejor espaciado para dashboards grandes - reducir padding y gap */
+  /* Asegurar que los gráficos se vean bien incluso con max-width pequeño */
+}
+
+/* Optimización especial para matrices 3x3 con max-width pequeño */
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell {
+  min-height: 260px !important;
+  padding: 6px !important;
+  /* Reducir padding para maximizar espacio del gráfico */
+}
+
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell svg {
+  min-width: 180px !important;
+  min-height: 140px !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  /* Asegurar que los SVGs se adapten al contenedor */
+}
+
+/* Mejorar legibilidad de etiquetas en dashboards grandes */
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell svg text {
+  font-size: 10px !important;
+  /* Reducir tamaño de fuente para que quepa mejor */
+}
+
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell svg .x-axis text,
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell svg .y-axis text {
+  font-size: 9px !important;
+  /* Etiquetas de ejes más pequeñas pero legibles */
+}
+
+.matrix-layout:has(> div:nth-child(9)) > div {
+  /* Mejor aspecto visual para dashboards grandes */
+  border: 1.5px solid var(--matrix-cell-border-color);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell {
+  /* Mejor contraste en celdas grandes */
+  border: 2px solid var(--matrix-cell-inner-border-color);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.matrix-layout:has(> div:nth-child(12)) {
+  /* Cuando hay 12 o más celdas, reducir aún más */
+  --matrix-cell-min-height: 240px;
+  --matrix-cell-padding: 10px;
+  --matrix-gap: 8px;
+}
+
+.matrix-layout:has(> div:nth-child(12)) > div {
+  /* Optimización adicional para dashboards muy grandes */
+  border: 1px solid var(--matrix-cell-border-color);
+}
+
+.matrix-layout:has(> div:nth-child(12)) .matrix-cell {
+  border: 1.5px solid var(--matrix-cell-inner-border-color);
+  background: #ffffff;
+}
+
+/* Asegurar que los indicadores de enlace sean visibles */
+.matrix-cell.linked-primary .link-primary-label,
+.matrix-cell.linked-secondary .link-secondary-label {
+  pointer-events: none; /* No interferir con interacciones del gráfico */
+  user-select: none;
+}
+
+/* Ajustar tamaño de indicadores en dashboards grandes - mantener legibilidad */
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell.linked-primary .link-primary-label,
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell.linked-secondary .link-secondary-label {
+  padding: 3px 6px !important;
+  font-size: 9px !important;
+}
+
+.matrix-layout:has(> div:nth-child(12)) .matrix-cell.linked-primary .link-primary-label,
+.matrix-layout:has(> div:nth-child(12)) .matrix-cell.linked-secondary .link-secondary-label {
+  padding: 2px 5px !important;
+  font-size: 8px !important;
+}
+
+/* Contenedor de gráfico con aspect ratio controlado */
+.chart-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.chart-container svg {
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+}
+
+/* Mejorar legibilidad en dashboards grandes */
+.matrix-layout:has(> div:nth-child(9)) .matrix-cell svg {
+  /* Asegurar que los gráficos se vean bien en dashboards grandes */
+  min-width: 200px;
+  min-height: 150px;
+}
+
+.matrix-layout:has(> div:nth-child(12)) .matrix-cell svg {
+  min-width: 180px;
+  min-height: 130px;
+}
+
+/* Media queries para responsividad */
+@media (max-width: 768px) {
+  :root {
+    --matrix-gap: 8px;
+    --matrix-cell-padding: 10px;
+    --matrix-cell-min-height: 300px;
+  }
+  
+  .matrix-layout {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --matrix-gap: 6px;
+    --matrix-cell-padding: 8px;
+    --matrix-cell-min-height: 250px;
+  }
+}
+
+/* ==========================================
+ * CLASES CSS REUTILIZABLES PARA GRÁFICOS
+ * ========================================== */
+
+/* Ejes unificados */
+.bestlib-axis {
+  stroke: var(--chart-text-color);
+  stroke-width: var(--chart-axis-width);
+  fill: none;
+}
+
+.bestlib-axis text {
+  fill: var(--chart-text-color);
+  font-family: var(--chart-font-family);
+  font-size: var(--chart-tick-font-size);
+  font-weight: var(--chart-tick-font-weight);
+}
+
+.bestlib-axis line {
+  stroke: var(--chart-text-color);
+  stroke-width: var(--chart-axis-width);
+}
+
+.bestlib-axis path {
+  stroke: var(--chart-text-color);
+  stroke-width: var(--chart-axis-width);
+}
+
+/* Grid */
+.bestlib-grid {
+  stroke: var(--chart-grid-color);
+  stroke-width: var(--chart-grid-width);
+  opacity: var(--chart-opacity-grid);
+  stroke-dasharray: 2, 2;
+}
+
+/* Etiquetas de ejes */
+.bestlib-axis-label {
+  fill: var(--chart-text-color);
+  font-family: var(--chart-font-family);
+  font-size: var(--chart-label-font-size);
+  font-weight: var(--chart-label-font-weight);
+  text-anchor: middle;
+}
+
+.bestlib-axis-label-x {
+  fill: var(--chart-text-color);
+  font-family: var(--chart-font-family);
+  font-size: var(--chart-label-font-size);
+  font-weight: var(--chart-label-font-weight);
+  text-anchor: middle;
+}
+
+.bestlib-axis-label-y {
+  fill: var(--chart-text-color);
+  font-family: var(--chart-font-family);
+  font-size: var(--chart-label-font-size);
+  font-weight: var(--chart-label-font-weight);
+  text-anchor: middle;
+}
+
+/* Líneas de gráficos */
+.bestlib-line {
+  fill: none;
+  stroke: var(--chart-primary-color);
+  stroke-width: var(--chart-line-width);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke-width var(--chart-transition-duration) var(--chart-transition-easing),
+              opacity var(--chart-transition-duration) var(--chart-transition-easing);
+}
+
+.bestlib-line:hover {
+  stroke-width: var(--chart-line-width-thick);
+  opacity: var(--chart-opacity-hover);
+}
+
+/* Puntos (scatter plots) */
+.bestlib-point {
+  fill: var(--chart-primary-color);
+  stroke: var(--chart-background);
+  stroke-width: var(--chart-point-stroke-width);
+  opacity: var(--chart-opacity-default);
+  transition: r var(--chart-transition-duration) var(--chart-transition-easing),
+              opacity var(--chart-transition-duration) var(--chart-transition-easing),
+              stroke-width var(--chart-transition-duration) var(--chart-transition-easing);
+}
+
+.bestlib-point:hover {
+  r: var(--chart-point-radius-hover);
+  opacity: var(--chart-opacity-hover);
+  stroke-width: 2px;
+}
+
+.bestlib-point-selected {
+  fill: var(--chart-primary-color);
+  stroke: var(--chart-selection-color);
+  stroke-width: 2px;
+  opacity: var(--chart-opacity-selected);
+  r: var(--chart-point-radius-selected);
+}
+
+/* Barras */
+.bestlib-bar {
+  fill: var(--chart-primary-color);
+  stroke: var(--chart-background);
+  stroke-width: 1px;
+  opacity: var(--chart-opacity-default);
+  transition: fill var(--chart-transition-duration) var(--chart-transition-easing),
+              opacity var(--chart-transition-duration) var(--chart-transition-easing),
+              y var(--chart-transition-duration-slow) var(--chart-transition-easing),
+              height var(--chart-transition-duration-slow) var(--chart-transition-easing);
+}
+
+.bestlib-bar:hover {
+  fill: var(--chart-primary-hover);
+  opacity: var(--chart-opacity-hover);
+}
+
+/* Áreas rellenas */
+.bestlib-area {
+  fill: var(--chart-primary-color);
+  opacity: var(--chart-opacity-fill);
+  stroke: var(--chart-primary-color);
+  stroke-width: var(--chart-line-width);
+  transition: opacity var(--chart-transition-duration) var(--chart-transition-easing);
+}
+
+/* Marcadores (markers en line plots) */
+.bestlib-marker {
+  fill: var(--chart-primary-color);
+  stroke: var(--chart-background);
+  stroke-width: 1.5px;
+  opacity: var(--chart-opacity-default);
+  transition: r var(--chart-transition-duration) var(--chart-transition-easing),
+              opacity var(--chart-transition-duration) var(--chart-transition-easing);
+}
+
+.bestlib-marker:hover {
+  r: 5px;
+  opacity: var(--chart-opacity-hover);
+}
+
+/* Tooltips */
+.bestlib-tooltip {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-family: var(--chart-font-family);
+  font-size: 12px;
+  font-weight: 500;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--chart-transition-duration) var(--chart-transition-easing);
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.bestlib-tooltip-visible {
+  opacity: 1;
+}
+
+/* Boxplot elementos */
+.bestlib-box {
+  fill: var(--chart-primary-color);
+  stroke: var(--chart-text-color);
+  stroke-width: var(--chart-line-width-thin);
+  opacity: var(--chart-opacity-default);
+}
+
+.bestlib-whisker {
+  stroke: var(--chart-text-color);
+  stroke-width: var(--chart-line-width);
+}
+
+.bestlib-median {
+  stroke: var(--chart-selection-color);
+  stroke-width: var(--chart-line-width-thick);
+}
+
+/* Hexbin */
+.bestlib-hexbin {
+  stroke: var(--chart-background);
+  stroke-width: 1px;
+  transition: opacity var(--chart-transition-duration) var(--chart-transition-easing);
+}
+
+.bestlib-hexbin:hover {
+  opacity: var(--chart-opacity-hover);
+  stroke-width: 1.5px;
+}
+
+/* Error bars */
+.bestlib-errorbar {
+  stroke: var(--chart-text-color);
+  stroke-width: var(--chart-line-width-thin);
+}
+
+.bestlib-errorbar-cap {
+  stroke: var(--chart-text-color);
+  stroke-width: var(--chart-line-width);
+}
+
+/* Violin plot */
+.bestlib-violin {
+  fill: var(--chart-primary-color);
+  opacity: var(--chart-opacity-fill);
+  stroke: var(--chart-primary-color);
+  stroke-width: var(--chart-line-width-thin);
+}
+
+/* Pie chart */
+.bestlib-pie-slice {
+  stroke: var(--chart-background);
+  stroke-width: 2px;
+  transition: opacity var(--chart-transition-duration) var(--chart-transition-easing);
+}
+
+.bestlib-pie-slice:hover {
+  opacity: var(--chart-opacity-hover);
+  stroke-width: 3px;
+}
+
+/* Heatmap */
+.bestlib-heatmap-cell {
+  stroke: var(--chart-background);
+  stroke-width: 1px;
+  transition: opacity var(--chart-transition-duration) var(--chart-transition-easing);
+}
+
+.bestlib-heatmap-cell:hover {
+  opacity: var(--chart-opacity-hover);
+  stroke-width: 2px;
+}
+
+/* Brush selection */
+.bestlib-brush-selection {
+  fill: var(--chart-secondary-color);
+  fill-opacity: 0.25;
+  stroke: var(--chart-secondary-color);
+  stroke-width: 2.5px;
+  stroke-dasharray: 8, 4;
+}
+
+.bestlib-brush-handle {
+  fill: var(--chart-secondary-color);
+  stroke: var(--chart-primary-color);
+  stroke-width: 2px;
+}
+
