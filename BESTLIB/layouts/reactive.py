@@ -1358,23 +1358,30 @@ class ReactiveMatrixLayout:
             print(f"   - bins: {bins}")
             print(f"   - histogram_kwargs keys: {list(histogram_kwargs.keys())}")
             
-            # ✅ CORRECCIÓN CRÍTICA: Llamar a map_histogram y guardar el spec retornado
+            # ✅ CORRECCIÓN CRÍTICA: Crear histogram usando el método de instancia
             try:
-                spec = MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **histogram_kwargs)
-                print(f"🔍 [add_histogram] DESPUÉS de llamar map_histogram:")
+                spec = self._register_chart(
+                    letter,
+                    'histogram',
+                    initial_data,
+                    column=column,
+                    bins=bins,
+                    **histogram_kwargs
+                )
+                print(f"🔍 [add_histogram] DESPUÉS de crear histogram:")
                 print(f"   - spec type: {type(spec)}")
                 print(f"   - spec keys: {list(spec.keys()) if isinstance(spec, dict) else 'N/A'}")
                 if isinstance(spec, dict):
                     print(f"   - spec['data'] length: {len(spec.get('data', []))}")
             except Exception as e:
-                print(f"❌ [add_histogram] ERROR al llamar map_histogram: {e}")
+                print(f"❌ [add_histogram] ERROR al crear histogram: {e}")
                 import traceback
                 traceback.print_exc()
                 raise
             
             # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
             # Usar el spec retornado en lugar de acceder directamente a _map para evitar problemas de sincronización
-            if spec and letter in MatrixLayout._map:
+            if spec and letter in self._layout._map:
                 self._layout.update_spec_metadata(
                     letter,
                     __view_letter__=letter,
@@ -1407,14 +1414,28 @@ class ReactiveMatrixLayout:
             # CRÍTICO: Si linked_to es None, NO enlazar automáticamente (gráfico estático)
             if linked_to is None:
                 # Crear histograma estático sin enlazar
-                MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **kwargs)
+                self._register_chart(
+                    letter,
+                    'histogram',
+                    initial_data,
+                    column=column,
+                    bins=bins,
+                    **kwargs
+                )
                 return self
             
             # Validar que linked_to no sea el string "None"
             if isinstance(linked_to, str) and linked_to.lower() == 'none':
                 linked_to = None
                 # Crear histograma estático sin enlazar
-                MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **kwargs)
+                self._register_chart(
+                    letter,
+                    'histogram',
+                    initial_data,
+                    column=column,
+                    bins=bins,
+                    **kwargs
+                )
                 return self
             
             # Buscar en scatter plots primero (compatibilidad hacia atrás)
@@ -1882,11 +1903,18 @@ class ReactiveMatrixLayout:
         
         # Crear histograma inicial con datos filtrados si hay selección, o todos los datos si no
         # (Solo para vistas enlazadas, las vistas principales ya se crearon arriba)
-        MatrixLayout.map_histogram(letter, initial_data, value_col=column, bins=bins, **kwargs)
+        kwargs_with_linked = kwargs.copy()
+        if linked_to:
+            kwargs_with_linked['__linked_to__'] = linked_to
         
-        # ✅ CORRECCIÓN CRÍTICA: Asegurar que __linked_to__ esté en el spec guardado (solo para vistas enlazadas)
-        if letter in MatrixLayout._map and linked_to:
-            self._layout.update_spec_metadata(letter, __linked_to__=linked_to)
+        self._register_chart(
+            letter,
+            'histogram',
+            initial_data,
+            column=column,
+            bins=bins,
+            **kwargs_with_linked
+        )
         
         return self
     
@@ -2209,104 +2237,6 @@ class ReactiveMatrixLayout:
             print(f"   - SelectionModel ID: {id(primary_selection)}")
             print(f"   - Callbacks registrados: {len(primary_selection._callbacks)}")
             print(f"   - Boxplot callbacks guardados: {list(self._boxplot_callbacks.keys())}")
-        
-        # Crear boxplot inicial con datos filtrados si hay selección, o todos los datos si no
-        data_to_use = initial_data
-        # Asegurar que pd esté disponible si HAS_PANDAS es True
-        # Usar globals() para acceder al pd del módulo y evitar UnboundLocalError
-        if HAS_PANDAS:
-            # Obtener pd del módulo global
-            pd_module = globals().get('pd')
-            if pd_module is None:
-                import sys
-                if 'pandas' in sys.modules:
-                    pd_module = sys.modules['pandas']
-                else:
-                    import pandas as pd_module
-                    globals()['pd'] = pd_module
-            # Usar pd_module en lugar de pd para evitar UnboundLocalError
-            if pd_module is not None and isinstance(data_to_use, pd_module.DataFrame):
-                if category_col and category_col in data_to_use.columns:
-                    # Boxplot por categoría
-                    box_data = []
-                    for cat in data_to_use[category_col].unique():
-                        cat_data = data_to_use[data_to_use[category_col] == cat][column].dropna()
-                        if len(cat_data) > 0:
-                            q1 = cat_data.quantile(0.25)
-                            median = cat_data.quantile(0.5)
-                            q3 = cat_data.quantile(0.75)
-                            iqr = q3 - q1
-                            lower = max(q1 - 1.5 * iqr, cat_data.min())
-                            upper = min(q3 + 1.5 * iqr, cat_data.max())
-                            box_data.append({
-                                'category': cat,
-                                'q1': float(q1),
-                                'median': float(median),
-                                'q3': float(q3),
-                                'lower': float(lower),
-                                'upper': float(upper),
-                                'min': float(cat_data.min()),
-                                'max': float(cat_data.max())
-                            })
-                else:
-                    # Boxplot simple
-                    values = data_to_use[column].dropna()
-                    if len(values) > 0:
-                        q1 = values.quantile(0.25)
-                        median = values.quantile(0.5)
-                        q3 = values.quantile(0.75)
-                        iqr = q3 - q1
-                        lower = max(q1 - 1.5 * iqr, values.min())
-                        upper = min(q3 + 1.5 * iqr, values.max())
-                        box_data = [{
-                            'category': 'All',
-                            'q1': float(q1),
-                            'median': float(median),
-                            'q3': float(q3),
-                            'lower': float(lower),
-                            'upper': float(upper),
-                            'min': float(values.min()),
-                            'max': float(values.max())
-                        }]
-                    else:
-                        box_data = []
-            else:
-                # Si no es DataFrame, usar fallback para listas de diccionarios
-                values = [item.get(column, 0) for item in data_to_use if column in item]
-                if values:
-                    sorted_vals = sorted(values)
-                    n = len(sorted_vals)
-                    q1 = sorted_vals[int(n * 0.25)]
-                    median = sorted_vals[int(n * 0.5)]
-                    q3 = sorted_vals[int(n * 0.75)]
-                    iqr = q3 - q1
-                    lower = max(q1 - 1.5 * iqr, min(values))
-                    upper = min(q3 + 1.5 * iqr, max(values))
-                    box_data = [{
-                        'category': 'All',
-                        'q1': float(q1),
-                        'median': float(median),
-                        'q3': float(q3),
-                        'lower': float(lower),
-                        'upper': float(upper),
-                        'min': float(min(values)),
-                        'max': float(max(values))
-                    }]
-                else:
-                    box_data = []
-        
-        if box_data:
-            boxplot_spec = {
-                'type': 'boxplot',
-                'data': box_data,
-                'column': column,
-                'category_col': category_col,
-                **kwargs
-            }
-            # Asegurar que __linked_to__ esté en el spec si fue agregado antes
-            if '__linked_to__' in kwargs:
-                boxplot_spec['__linked_to__'] = kwargs['__linked_to__']
-            MatrixLayout._register_spec(letter, boxplot_spec)
         
         return self
     
