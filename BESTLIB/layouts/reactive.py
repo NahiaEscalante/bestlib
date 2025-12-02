@@ -610,9 +610,9 @@ class ReactiveMatrixLayout:
         
         # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
         # Esto es necesario para que JavaScript pueda identificar el gráfico correctamente
-        if letter in MatrixLayout._map:
+        if letter in self._layout._map:
             if is_primary:
-                MatrixLayout.update_spec_metadata(
+                self._layout.update_spec_metadata(
                     letter,
                     __view_letter__=letter,
                     __is_primary_view__=True,
@@ -621,7 +621,7 @@ class ReactiveMatrixLayout:
                 if self._debug or MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Bar chart '{letter}' configurado como vista principal con __view_letter__={letter}")
             elif linked_to:
-                MatrixLayout.update_spec_metadata(letter, __linked_to__=linked_to)
+                self._layout.update_spec_metadata(letter, __linked_to__=linked_to)
         
         # Registrar vista para sistema de enlace
         view_id = f"barchart_{letter}"
@@ -1104,9 +1104,9 @@ class ReactiveMatrixLayout:
         MatrixLayout.map_grouped_barchart(letter, self._data, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
         
         # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
-        if letter in MatrixLayout._map:
+        if letter in self._layout._map:
             if is_primary:
-                MatrixLayout.update_spec_metadata(
+                self._layout.update_spec_metadata(
                     letter,
                     __view_letter__=letter,
                     __is_primary_view__=True,
@@ -1115,7 +1115,7 @@ class ReactiveMatrixLayout:
                 if self._debug or MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Grouped bar chart '{letter}' configurado como vista principal con __view_letter__={letter}")
             elif linked_to:
-                MatrixLayout.update_spec_metadata(letter, __linked_to__=linked_to)
+                self._layout.update_spec_metadata(letter, __linked_to__=linked_to)
         
         # Si es vista enlazada, configurar callback
         if not is_primary:
@@ -1375,7 +1375,7 @@ class ReactiveMatrixLayout:
             # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
             # Usar el spec retornado en lugar de acceder directamente a _map para evitar problemas de sincronización
             if spec and letter in MatrixLayout._map:
-                MatrixLayout.update_spec_metadata(
+                self._layout.update_spec_metadata(
                     letter,
                     __view_letter__=letter,
                     __is_primary_view__=True,
@@ -1384,9 +1384,9 @@ class ReactiveMatrixLayout:
                 # ✅ DEBUG: Verificar que el spec tiene datos
                 if self._debug or MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Histogram '{letter}' configurado como vista principal con __view_letter__={letter}")
-                    print(f"   - Spec type: {MatrixLayout._map[letter].get('type')}")
-                    print(f"   - Data length: {len(MatrixLayout._map[letter].get('data', []))}")
-                    data = MatrixLayout._map[letter].get('data', [])
+                    print(f"   - Spec type: {self._layout._map[letter].get('type')}")
+                    print(f"   - Data length: {len(self._layout._map[letter].get('data', []))}")
+                    data = self._layout._map[letter].get('data', [])
                     if data:
                         print(f"   - First bin: bin={data[0].get('bin')}, count={data[0].get('count')}")
                     else:
@@ -1395,7 +1395,7 @@ class ReactiveMatrixLayout:
                 if self._debug or MatrixLayout._debug:
                     print(f"❌ [ReactiveMatrixLayout] ERROR: Histogram '{letter}' no se guardó en _map después de map_histogram")
                     print(f"   - spec is None: {spec is None}")
-                    print(f"   - letter in _map: {letter in MatrixLayout._map if hasattr(MatrixLayout, '_map') else 'N/A'}")
+                    print(f"   - letter in _map: {letter in self._layout._map}")
             
             return self
         
@@ -1886,7 +1886,7 @@ class ReactiveMatrixLayout:
         
         # ✅ CORRECCIÓN CRÍTICA: Asegurar que __linked_to__ esté en el spec guardado (solo para vistas enlazadas)
         if letter in MatrixLayout._map and linked_to:
-            MatrixLayout.update_spec_metadata(letter, __linked_to__=linked_to)
+            self._layout.update_spec_metadata(letter, __linked_to__=linked_to)
         
         return self
     
@@ -1999,11 +1999,18 @@ class ReactiveMatrixLayout:
         
         # Si es vista principal, crear boxplot y retornar
         if is_primary:
-            MatrixLayout.map_boxplot(letter, self._data, category_col=category_col, value_col=column, **kwargs)
+            self._register_chart(
+                letter,
+                'boxplot',
+                self._data,
+                category_col=category_col,
+                value_col=column,
+                **kwargs
+            )
             
             # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
-            if letter in MatrixLayout._map:
-                MatrixLayout.update_spec_metadata(
+            if letter in self._layout._map:
+                self._layout.update_spec_metadata(
                     letter,
                     __view_letter__=letter,
                     __is_primary_view__=True,
@@ -2052,7 +2059,14 @@ class ReactiveMatrixLayout:
             all_primary = {**self._scatter_selection_models, **self._primary_view_models}
             if not all_primary:
                 # Si no hay vistas principales, crear boxplot estático
-                MatrixLayout.map_boxplot(letter, self._data, category_col=category_col, value_col=column, **kwargs)
+                self._register_chart(
+                    letter,
+                    'boxplot',
+                    self._data,
+                    category_col=category_col,
+                    value_col=column,
+                    **kwargs
+                )
                 return self
             primary_letter = list(all_primary.keys())[-1]
             primary_selection = all_primary[primary_letter]
@@ -2065,12 +2079,19 @@ class ReactiveMatrixLayout:
         else:
             kwargs.pop('__linked_to__', None)  # Remover si existe
         
-        # Crear boxplot inicial
-        MatrixLayout.map_boxplot(letter, self._data, category_col=category_col, value_col=column, **kwargs)
+        # Crear boxplot inicial usando el método de instancia
+        self._register_chart(
+            letter,
+            'boxplot',
+            self._data,
+            category_col=category_col,
+            value_col=column,
+            **kwargs
+        )
         
         # ✅ CORRECCIÓN CRÍTICA: Asegurar que __linked_to__ esté en el spec guardado
-        if letter in MatrixLayout._map and primary_letter is not None:
-            MatrixLayout.update_spec_metadata(letter, __linked_to__=primary_letter)
+        if letter in self._layout._map and primary_letter is not None:
+            self._layout.update_spec_metadata(letter, __linked_to__=primary_letter)
         
         # Guardar parámetros
         boxplot_params = {
@@ -2525,8 +2546,8 @@ class ReactiveMatrixLayout:
         
         # Asegurar que __linked_to__ esté en el spec guardado (por si map_pie no lo copió)
         if not is_primary and linked_to:
-            if letter in MatrixLayout._map:
-                MatrixLayout.update_spec_metadata(letter, __linked_to__=linked_to)
+            if letter in self._layout._map:
+                self._layout.update_spec_metadata(letter, __linked_to__=linked_to)
         
         # Si es vista enlazada, configurar callback
         if not is_primary:
