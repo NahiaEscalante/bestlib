@@ -2226,14 +2226,22 @@ class ReactiveMatrixLayout:
                     print(f"   - Data length: {len(spec.get('data', []))}")
                 
                 if spec and spec.get('data'):
+                    print(f"   - Generando JavaScript para actualizar DOM...")
                     import json
                     from IPython.display import Javascript, display
                     
                     # Preparar datos para JavaScript
-                    box_data_json = json.dumps(spec['data'])
+                    try:
+                        box_data_json = json.dumps(spec['data'])
+                        print(f"   - JSON generado: {len(box_data_json)} caracteres")
+                    except Exception as e:
+                        print(f"   ❌ Error generando JSON: {e}")
+                        raise
+                    
                     title = spec.get('title', '')
                     x_label = spec.get('xLabel', '')
                     y_label = spec.get('yLabel', '')
+                    print(f"   - Metadatos: title={bool(title)}, xLabel={bool(x_label)}, yLabel={bool(y_label)}")
                     
                     # JavaScript para actualizar el boxplot
                     js_update = f"""
@@ -2377,16 +2385,23 @@ class ReactiveMatrixLayout:
                     """
                     
                     # Ejecutar JavaScript
-                    display(Javascript(js_update), display_id=f'boxplot-update-{letter}', update=True)
+                    print(f"   - Ejecutando JavaScript ({len(js_update)} caracteres)...")
+                    try:
+                        display(Javascript(js_update), display_id=f'boxplot-update-{letter}', update=True)
+                        print(f"   ✅ JavaScript ejecutado")
+                    except Exception as e:
+                        print(f"   ❌ Error ejecutando JavaScript: {e}")
+                        raise
                 
                 if self._debug or MatrixLayout._debug:
                     print(f"   ✅ Boxplot '{letter}' actualizado en DOM")
+                else:
+                    print(f"   ✅ Boxplot '{letter}' actualizado en DOM")
                     
             except Exception as e:
-                if self._debug or MatrixLayout._debug:
-                    print(f"⚠️ Error actualizando boxplot: {e}")
-                    import traceback
-                    traceback.print_exc()
+                print(f"❌ Error actualizando boxplot: {e}")
+                import traceback
+                traceback.print_exc()
         
         # Registrar callback en el SelectionModel de la vista principal
         primary_selection.on_change(update_boxplot)
