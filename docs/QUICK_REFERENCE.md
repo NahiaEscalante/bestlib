@@ -1,13 +1,38 @@
 ﻿# 🚀 BESTLIB - Referencia Rápida
 
+## Instalación
+
+### Jupyter Notebook / JupyterLab (Local)
+
+```bash
+pip install pybestlib
+```
+
+### Google Colab
+
+**IMPORTANTE**: En Colab, usa `--no-deps` para evitar conflictos:
+
+```python
+!pip install --no-deps pybestlib
+```
+
+O desde GitHub:
+
+```python
+!pip install --no-deps git+https://github.com/NahiaEscalante/bestlib.git
+```
+
 ## Importar
 
 ```python
-from BESTLIB.matrix import MatrixLayout
+from BESTLIB.layouts.matrix import MatrixLayout
+from BESTLIB.layouts.reactive import ReactiveMatrixLayout
+from BESTLIB.reactive.selection import SelectionModel
+
 MatrixLayout.set_debug(True)  # Opcional: ver mensajes
 ```
 
-> Nota: El módulo legacy `LinkedViews` está deprecado. Para vistas enlazadas usa `ReactiveMatrixLayout`.
+> **Nota**: El módulo legacy `BESTLIB.matrix` y `LinkedViews` están deprecados. Usa `BESTLIB.layouts.matrix.MatrixLayout` y `ReactiveMatrixLayout` en su lugar.
 
 ## 1️⃣ Elementos Visuales Simples
 

@@ -204,6 +204,24 @@ class ReactiveMatrixLayout:
             return pd.DataFrame()
         return []
     
+    def _register_chart(self, letter, chart_type, data, **kwargs):
+        """
+        Helper para registrar un chart en el layout interno usando el método de instancia.
+        
+        Args:
+            letter: Letra del layout
+            chart_type: Tipo de chart ('scatter', 'bar', 'histogram', etc.)
+            data: Datos del chart
+            **kwargs: Argumentos adicionales para el chart
+        
+        Returns:
+            El spec generado
+        """
+        from ..charts import ChartRegistry
+        chart = ChartRegistry.get(chart_type)
+        spec = chart.get_spec(data, **kwargs)
+        return self._layout._register_spec(letter, spec)
+    
     def add_scatter(self, letter, data=None, x_col=None, y_col=None, category_col=None, interactive=True, selection_var=None, **kwargs):
         """
         Agrega un scatter plot a la matriz con soporte para DataFrames.
@@ -316,11 +334,12 @@ class ReactiveMatrixLayout:
         kwargs_with_identifier['interactive'] = interactive  # Agregar el valor correcto
         
         # Crear scatter plot spec con identificadores incluidos
-        scatter_spec = MatrixLayout.map_scatter(
-            letter, 
-            self._data, 
-            x_col=x_col, 
-            y_col=y_col, 
+        scatter_spec = self._register_chart(
+            letter,
+            'scatter',
+            self._data,
+            x_col=x_col,
+            y_col=y_col,
             category_col=category_col,
             **kwargs_with_identifier  # ✅ interactive ya está aquí
         )
@@ -338,7 +357,7 @@ class ReactiveMatrixLayout:
                 '__selection_model_id__': id(scatter_selection)
             }
             scatter_spec.update(metadata)
-            MatrixLayout.update_spec_metadata(letter, **metadata)
+            self._layout.update_spec_metadata(letter, **metadata)
             
             # Debug: verificar que el spec tiene los identificadores
             if self._debug or MatrixLayout._debug:
@@ -2062,430 +2081,65 @@ class ReactiveMatrixLayout:
             'layout_div_id': self._layout.div_id
             }
         
-        # Función de actualización del boxplot
+        # Función de actualización del boxplot (versión simplificada)
         def update_boxplot(items, count):
             """Actualiza el boxplot cuando cambia la selección"""
-            # CRÍTICO: Importar MatrixLayout al principio para evitar UnboundLocalError
-            from .matrix import MatrixLayout
-            
-            # ✅ CORRECCIÓN CRÍTICA: Importar pandas al principio para evitar UnboundLocalError
-            pd_module = None
-            if HAS_PANDAS:
-                # Intentar obtener pd de globals primero
-                pd_module = globals().get('pd')
-                if pd_module is None:
-                    import sys
-                    if 'pandas' in sys.modules:
-                        pd_module = sys.modules['pandas']
-                    else:
-                        import pandas as pd_module
-                        globals()['pd'] = pd_module
-            
-            # CRÍTICO: Flag para evitar ejecuciones múltiples simultáneas
-            if hasattr(update_boxplot, '_executing') and update_boxplot._executing:
-                if self._debug or MatrixLayout._debug:
-                    print(f"   ⏭️ Boxplot '{letter}' callback ya está ejecutándose, ignorando llamada duplicada")
-                return
-            update_boxplot._executing = True
-            
-            # ✅ CORRECCIÓN: Validar que items tenga el formato correcto antes de procesar
-            # Si items está vacío o no tiene la estructura esperada, usar todos los datos
-            if not items or (isinstance(items, list) and len(items) == 0):
-                if self._debug or MatrixLayout._debug:
-                    print(f"   ℹ️ Boxplot '{letter}': items vacío, usando todos los datos")
-                items = None
-                count = 0
+            if self._debug or MatrixLayout._debug:
+                print(f"   🔄 Boxplot '{letter}' callback ejecutándose con {count} items")
             
             try:
-                import json
-                from IPython.display import Javascript
-                
-                if self._debug or MatrixLayout._debug:
-                    print(f"   🔄 Boxplot '{letter}' callback ejecutándose con {count} items")
-                
-                # ✅ CORRECCIÓN CRÍTICA: Usar datos seleccionados o todos los datos
-                # Estrategia mejorada: usar índices originales si están disponibles, o crear DataFrame desde items
+                # Determinar datos a usar
                 data_to_use = self._data
                 if items and len(items) > 0:
-                    # ✅ ESTRATEGIA 1: Si tenemos índices originales en el payload, usarlos para filtrar self._data
-                    # Esto garantiza que tenemos todas las columnas del DataFrame original
-                    if HAS_PANDAS and pd_module is not None and isinstance(self._data, pd_module.DataFrame):
-                        # Buscar índices en el payload (pueden venir en diferentes formatos)
-                        indices = None
-                        if hasattr(items, '__iter__') and not isinstance(items, (str, dict)):
-                            # Si items es una lista, buscar en el primer item o en el contexto
-                            # Los índices pueden venir en el payload original, no en items
-                            pass  # Los índices no están en items, están en el payload original
-                        
-                        # ✅ ESTRATEGIA 2: Extraer datos originales desde items
-                        processed_items = []
-                        for item in items:
-                            if isinstance(item, dict):
-                                # Si tiene _original_row, usar esos datos
-                                if '_original_row' in item:
-                                    processed_items.append(item['_original_row'])
-                                elif '_original_rows' in item:
-                                    # Si hay múltiples filas originales
-                                    processed_items.extend(item['_original_rows'])
-                                else:
-                                    # Si no tiene _original_row/_original_rows, el item ya es una fila original
-                                    # (esto es común cuando viene de scatter plot)
-                                    processed_items.append(item)
+                    # Extraer datos originales desde items
+                    processed_items = []
+                    for item in items:
+                        if isinstance(item, dict):
+                            if '_original_row' in item:
+                                processed_items.append(item['_original_row'])
+                            elif '_original_rows' in item:
+                                processed_items.extend(item['_original_rows'])
                             else:
                                 processed_items.append(item)
-                        
-                        if processed_items:
-                            try:
-                                # Intentar crear DataFrame desde los items procesados
-                                if HAS_PANDAS and pd_module is not None:
-                                    if isinstance(processed_items[0], dict):
-                                        data_from_items = pd_module.DataFrame(processed_items)
-                                    else:
-                                        data_from_items = pd_module.DataFrame(processed_items)
-                                    
-                                    # ✅ CORRECCIÓN CRÍTICA: Verificar que el DataFrame tenga todas las columnas necesarias
-                                    # Si falta la columna del boxplot, usar self._data completo
-                                    if column and column not in data_from_items.columns:
-                                        if self._debug or MatrixLayout._debug:
-                                            print(f"⚠️ Error actualizando boxplot: '{column}' no está en datos filtrados, usando todos los datos")
-                                        data_to_use = self._data
-                                    else:
-                                        data_to_use = data_from_items
-                                else:
-                                    data_to_use = processed_items
-                            except Exception as e:
-                                if self._debug or MatrixLayout._debug:
-                                    print(f"⚠️ Error creando DataFrame desde items: {e}")
-                                # Si falla, usar todos los datos
-                                data_to_use = self._data
                         else:
-                            # Si no hay items procesados, usar todos los datos
-                            data_to_use = self._data
-                    else:
-                        # Si no es DataFrame, usar items directamente
-                        data_to_use = items if items else self._data
-                else:
-                    # Si no hay items, usar todos los datos (selección desactivada)
-                    data_to_use = self._data
-                
-                # Preparar datos para boxplot
-                # ✅ CORRECCIÓN: pd_module ya está definido al principio de la función
-                if HAS_PANDAS and pd_module is not None and isinstance(data_to_use, pd_module.DataFrame):
-                        # ✅ CORRECCIÓN CRÍTICA: Verificar que las columnas necesarias existen
-                        if column not in data_to_use.columns:
+                            processed_items.append(item)
+                    
+                    if processed_items and HAS_PANDAS and pd is not None:
+                        try:
+                            data_to_use = pd.DataFrame(processed_items)
+                            # Verificar que la columna necesaria existe
+                            if column not in data_to_use.columns:
+                                if self._debug or MatrixLayout._debug:
+                                    print(f"⚠️ Columna '{column}' no encontrada, usando todos los datos")
+                                data_to_use = self._data
+                        except Exception as e:
                             if self._debug or MatrixLayout._debug:
-                                print(f"⚠️ Error actualizando boxplot: '{column}' no está en datos. Columnas disponibles: {list(data_to_use.columns)[:10]}")
-                            # Intentar usar todos los datos
+                                print(f"⚠️ Error creando DataFrame: {e}")
                             data_to_use = self._data
-                            if column not in data_to_use.columns:
-                                if self._debug or MatrixLayout._debug:
-                                    print(f"❌ Error crítico: '{column}' no está en datos originales")
-                                update_boxplot._executing = False
-                                return
-                        
-                        if category_col and category_col in data_to_use.columns:
-                            # Boxplot por categoría
-                            box_data = []
-                            for cat in data_to_use[category_col].unique():
-                                cat_data = data_to_use[data_to_use[category_col] == cat][column].dropna()
-                                if len(cat_data) > 0:
-                                    q1 = cat_data.quantile(0.25)
-                                    median = cat_data.quantile(0.5)
-                                    q3 = cat_data.quantile(0.75)
-                                    iqr = q3 - q1
-                                    lower = max(q1 - 1.5 * iqr, cat_data.min())
-                                    upper = min(q3 + 1.5 * iqr, cat_data.max())
-                                    box_data.append({
-                                        'category': cat,
-                                        'q1': float(q1),
-                                        'median': float(median),
-                                        'q3': float(q3),
-                                        'lower': float(lower),
-                                        'upper': float(upper),
-                                        'min': float(cat_data.min()),
-                                        'max': float(cat_data.max())
-                                    })
-                        else:
-                            # Boxplot simple
-                            # ✅ CORRECCIÓN CRÍTICA: Verificar que la columna existe antes de acceder
-                            if column not in data_to_use.columns:
-                                if self._debug or MatrixLayout._debug:
-                                    print(f"⚠️ Error actualizando boxplot: '{column}' no está en datos. Columnas disponibles: {list(data_to_use.columns)[:10]}")
-                                # Usar todos los datos si la columna no está en los datos filtrados
-                                data_to_use = self._data
-                                if column not in data_to_use.columns:
-                                    if self._debug or MatrixLayout._debug:
-                                        print(f"❌ Error crítico: '{column}' no está en datos originales")
-                                    update_boxplot._executing = False
-                                    return
-                            
-                            values = data_to_use[column].dropna()
-                            if len(values) > 0:
-                                q1 = values.quantile(0.25)
-                                median = values.quantile(0.5)
-                                q3 = values.quantile(0.75)
-                                iqr = q3 - q1
-                                lower = max(q1 - 1.5 * iqr, values.min())
-                                upper = min(q3 + 1.5 * iqr, values.max())
-                                box_data = [{
-                                    'category': 'All',
-                                    'q1': float(q1),
-                                    'median': float(median),
-                                    'q3': float(q3),
-                                    'lower': float(lower),
-                                    'upper': float(upper),
-                                    'min': float(values.min()),
-                                    'max': float(values.max())
-                                }]
-                            else:
-                                box_data = []
-                else:
-                    # Fallback para listas de diccionarios
-                    values = [item.get(column, 0) for item in data_to_use if column in item]
-                    if values:
-                        sorted_vals = sorted(values)
-                        n = len(sorted_vals)
-                        q1 = sorted_vals[int(n * 0.25)]
-                        median = sorted_vals[int(n * 0.5)]
-                        q3 = sorted_vals[int(n * 0.75)]
-                        iqr = q3 - q1
-                        lower = max(q1 - 1.5 * iqr, min(values))
-                        upper = min(q3 + 1.5 * iqr, max(values))
-                        box_data = [{
-                            'category': 'All',
-                            'q1': float(q1),
-                            'median': float(median),
-                            'q3': float(q3),
-                            'lower': float(lower),
-                            'upper': float(upper),
-                            'min': float(min(values)),
-                            'max': float(max(values))
-                        }]
-                    else:
-                        box_data = []
                 
-                if not box_data:
-                    return
+                # Regenerar spec con datos filtrados
+                kwargs_update = boxplot_params['kwargs'].copy()
+                if primary_letter is not None:
+                    kwargs_update['__linked_to__'] = primary_letter
                 
-                # IMPORTANTE: NO actualizar el mapping aquí para evitar bucles infinitos y re-renderización del layout completo
-                # Solo actualizar visualmente el gráfico con JavaScript
-                # El mapping se actualiza cuando se crea inicialmente el boxplot
-                # Actualizar el mapping global causa que el sistema detecte cambios y re-renderice todo el layout,
-                # lo que resulta en duplicación de gráficos, especialmente en layouts grandes (3x3, etc.)
+                # Usar el método de instancia para registrar el spec actualizado
+                self._register_chart(
+                    letter,
+                    'boxplot',
+                    data_to_use,
+                    category_col=category_col,
+                    value_col=column,
+                    **kwargs_update
+                )
                 
-                # JavaScript para actualizar el gráfico
-                div_id = boxplot_params['layout_div_id']
-                box_data_json = json.dumps(_sanitize_for_json(box_data))
-                default_color = kwargs.get('color', '#4a90e2')
-                show_axes = kwargs.get('axes', True)
-                
-                js_update = f"""
-                (function() {{
-                    // Flag para evitar actualizaciones múltiples simultáneas
-                    if (window._bestlib_updating_boxplot_{letter}) {{
-                        return;
-                    }}
-                    window._bestlib_updating_boxplot_{letter} = true;
-                    
-                    function updateBoxplot() {{
-                        if (!window.d3) {{
-                            setTimeout(updateBoxplot, 100);
-                            return;
-                        }}
-                        
-                        const container = document.getElementById('{div_id}');
-                        if (!container) {{
-                            window._bestlib_updating_boxplot_{letter} = false;
-                            return;
-                        }}
-                        
-                        const cells = container.querySelectorAll('.matrix-cell[data-letter="{letter}"]');
-                        let targetCell = null;
-                        
-                        // Buscar celda con SVG existente (más robusto)
-                        for (let cell of cells) {{
-                            const svg = cell.querySelector('svg');
-                            if (svg) {{
-                                targetCell = cell;
-                                break;
-                            }}
-                        }}
-                        
-                        // Si no encontramos, usar la primera celda
-                        if (!targetCell && cells.length > 0) {{
-                            targetCell = cells[0];
-                        }}
-                        
-                        if (!targetCell) {{
-                            window._bestlib_updating_boxplot_{letter} = false;
-                            return;
-                        }}
-                        
-                        // CRÍTICO: Solo limpiar el contenido de la celda, NO tocar el contenedor principal
-                        // Esto evita que se dispare un re-render del layout completo
-                        // IMPORTANTE: Desconectar ResizeObserver temporalmente para evitar re-renders
-                        if (targetCell._resizeObserver) {{
-                            targetCell._resizeObserver.disconnect();
-                        }}
-                        
-                        // En lugar de usar innerHTML = '', removemos solo el SVG existente
-                        const existingSvg = targetCell.querySelector('svg');
-                        if (existingSvg) {{
-                            existingSvg.remove();
-                        }}
-                        // Limpiar cualquier otro contenido visual (divs, etc.) pero mantener la estructura de la celda
-                        const otherContent = targetCell.querySelectorAll('div:not(.matrix-cell)');
-                        otherContent.forEach(el => el.remove());
-                        
-                        // NO reconectar el ResizeObserver aquí - se reconectará después de renderizar si es necesario
-                        
-                        // CRÍTICO: Usar getChartDimensions() para calcular dimensiones de manera consistente
-                        // Esto asegura que respeta max_width y usa la misma lógica que el render inicial
-                        const dims = window.getChartDimensions ? 
-                            window.getChartDimensions(targetCell, {{ type: 'boxplot' }}, 400, 350) :
-                            {{ width: Math.max(targetCell.clientWidth || 400, 200), height: 350 }};
-                        const width = dims.width;
-                        const height = dims.height;
-                        const margin = {{ top: 20, right: 20, bottom: 40, left: 50 }};
-                        const chartWidth = width - margin.left - margin.right;
-                        const chartHeight = height - margin.top - margin.bottom;
-                        
-                        // CRÍTICO: Establecer altura mínima y máxima explícitamente en la celda
-                        // para prevenir expansión infinita
-                        targetCell.style.minHeight = height + 'px';
-                        targetCell.style.maxHeight = height + 'px';
-                        targetCell.style.height = height + 'px';
-                        targetCell.style.overflow = 'hidden';
-                        
-                        const data = {box_data_json};
-                        
-                        if (data.length === 0) {{
-                            targetCell.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No hay datos</div>';
-                            window._bestlib_updating_boxplot_{letter} = false;
-                            return;
-                        }}
-                        
-                        // CRÍTICO: Establecer dimensiones fijas en el SVG para prevenir expansión infinita
-                        const svg = window.d3.select(targetCell)
-                            .append('svg')
-                            .attr('width', width)
-                            .attr('height', height)
-                            .style('max-height', height + 'px')
-                            .style('overflow', 'hidden')
-                            .style('display', 'block');
-                        
-                        const g = svg.append('g')
-                            .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
-                        
-                        const x = window.d3.scaleBand()
-                            .domain(data.map(d => d.category))
-                            .range([0, chartWidth])
-                            .padding(0.2);
-                        
-                        const y = window.d3.scaleLinear()
-                            .domain([window.d3.min(data, d => d.lower), window.d3.max(data, d => d.upper)])
-                            .nice()
-                            .range([chartHeight, 0]);
-                        
-                        // Dibujar boxplot para cada categoría
-                        data.forEach((d, i) => {{
-                            const xPos = x(d.category);
-                            const boxWidth = x.bandwidth();
-                            const centerX = xPos + boxWidth / 2;
-                            
-                            // Bigotes (whiskers)
-                            g.append('line')
-                                .attr('x1', centerX)
-                                .attr('x2', centerX)
-                                .attr('y1', y(d.lower))
-                                .attr('y2', y(d.q1))
-                                .attr('stroke', '#000')
-                                .attr('stroke-width', 2);
-                            
-                            g.append('line')
-                                .attr('x1', centerX)
-                                .attr('x2', centerX)
-                                .attr('y1', y(d.q3))
-                                .attr('y2', y(d.upper))
-                                .attr('stroke', '#000')
-                                .attr('stroke-width', 2);
-                            
-                            // Caja (box)
-                            g.append('rect')
-                                .attr('x', xPos)
-                                .attr('y', y(d.q3))
-                                .attr('width', boxWidth)
-                                .attr('height', y(d.q1) - y(d.q3))
-                                .attr('fill', '{default_color}')
-                                .attr('stroke', '#000')
-                                .attr('stroke-width', 2);
-                            
-                            // Mediana (median line)
-                            g.append('line')
-                                .attr('x1', xPos)
-                                .attr('x2', xPos + boxWidth)
-                                .attr('y1', y(d.median))
-                                .attr('y2', y(d.median))
-                                .attr('stroke', '#fff')
-                                .attr('stroke-width', 2);
-                        }});
-                        
-                        if ({str(show_axes).lower()}) {{
-                            const xAxis = g.append('g')
-                                .attr('transform', `translate(0,${{chartHeight}})`)
-                                .call(window.d3.axisBottom(x));
-                            
-                            const yAxis = g.append('g')
-                                .call(window.d3.axisLeft(y));
-                        }}
-                        
-                        // IMPORTANTE: Marcar que esta celda ya no necesita ResizeObserver
-                        // porque se está actualizando manualmente
-                        targetCell._chartSpec = null;
-                        targetCell._chartDivId = null;
-                        
-                        // Resetear flag después de completar la actualización
-                        window._bestlib_updating_boxplot_{letter} = false;
-                    }}
-                    
-                    updateBoxplot();
-                }})();
-                """
-                
-                try:
-                    # CRÍTICO: En lugar de usar display(), ejecutar JavaScript directamente
-                    # usando el comm existente para evitar que se dispare un re-render completo
-                    # Esto previene la duplicación de la matriz
-                    from IPython.display import Javascript, display
-                    import uuid
-                    
-                    # Generar un ID único para este script para evitar duplicaciones
-                    script_id = f'boxplot-update-{letter}-{uuid.uuid4().hex[:8]}'
-                    
-                    # IMPORTANTE: Usar display_id para que Jupyter reemplace el output anterior
-                    # en lugar de crear uno nuevo, lo que previene la duplicación
-                    display(Javascript(js_update), clear=False, display_id=f'boxplot-update-{letter}', update=True)
-                    
-                    if self._debug or MatrixLayout._debug:
-                        print(f"   📤 JavaScript del boxplot '{letter}' ejecutado (display_id: boxplot-update-{letter})")
-                except Exception as e:
-                    from .matrix import MatrixLayout
-                    if self._debug or MatrixLayout._debug:
-                        print(f"⚠️ Error ejecutando JavaScript del boxplot: {e}")
-                        import traceback
-                        traceback.print_exc()
+                if self._debug or MatrixLayout._debug:
+                    print(f"   ✅ Boxplot '{letter}' spec actualizado")
                     
             except Exception as e:
-                from .matrix import MatrixLayout
-                import traceback
                 if self._debug or MatrixLayout._debug:
                     print(f"⚠️ Error actualizando boxplot: {e}")
+                    import traceback
                     traceback.print_exc()
-            finally:
-                # CRÍTICO: Resetear flag después de completar
-                update_boxplot._executing = False
-                if self._debug or MatrixLayout._debug:
-                    print(f"   ✅ Boxplot '{letter}' callback completado")
         
         # Registrar callback en el SelectionModel de la vista principal
         primary_selection.on_change(update_boxplot)
@@ -3309,32 +2963,116 @@ class ReactiveMatrixLayout:
         
         return self
 
-    def add_violin(self, letter, value_col=None, category_col=None, bins=20, linked_to=None, **kwargs):
-        from .matrix import MatrixLayout
+    def add_violin(self, letter, value_col=None, category_col=None, bins=50, linked_to=None, **kwargs):
+        """
+        Agrega un violin plot que muestra la distribución de densidad de los datos.
+        
+        Args:
+            letter: Letra del layout ASCII
+            value_col: Columna con valores numéricos
+            category_col: Columna de categorías (opcional)
+            bins: Número de puntos para el perfil de densidad (default: 50)
+            linked_to: Letra de la vista principal que debe actualizar este violin (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
-        MatrixLayout.map_violin(letter, self._data, value_col=value_col, category_col=category_col, bins=bins, **kwargs)
+        
+        # Crear violin plot inicial usando el método de instancia
+        self._register_chart(
+            letter,
+            'violin',
+            self._data,
+            value_col=value_col,
+            category_col=category_col,
+            bins=bins,
+            **kwargs
+        )
         
         # Solo registrar callback si linked_to está especificado explícitamente
         if linked_to is None:
-            # No enlazar automáticamente, hacer gráfico estático
             return self
         
         # Buscar vista principal especificada
         if linked_to in self._scatter_selection_models:
-            sel = self._scatter_selection_models[linked_to]
+            primary_selection = self._scatter_selection_models[linked_to]
         elif linked_to in self._primary_view_models:
-            sel = self._primary_view_models[linked_to]
+            primary_selection = self._primary_view_models[linked_to]
         else:
             raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
         
-        def update(items, count):
-            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+        # Guardar parámetros para el callback
+        violin_params = {
+            'value_col': value_col,
+            'category_col': category_col,
+            'bins': bins,
+            'kwargs': kwargs.copy()
+        }
+        
+        def update_violin(items, count):
+            """Actualiza el violin plot cuando cambia la selección"""
+            if self._debug or MatrixLayout._debug:
+                print(f"   🔄 Violin '{letter}' callback ejecutándose con {count} items")
+            
             try:
-                MatrixLayout.map_violin(letter, data_to_use, value_col=value_col, category_col=category_col, bins=bins, **kwargs)
-            except Exception:
-                pass
-        sel.on_change(update)
+                # Determinar datos a usar
+                data_to_use = self._data
+                if items and len(items) > 0:
+                    # Extraer datos originales desde items
+                    processed_items = []
+                    for item in items:
+                        if isinstance(item, dict):
+                            if '_original_row' in item:
+                                processed_items.append(item['_original_row'])
+                            elif '_original_rows' in item:
+                                processed_items.extend(item['_original_rows'])
+                            else:
+                                processed_items.append(item)
+                        else:
+                            processed_items.append(item)
+                    
+                    if processed_items and HAS_PANDAS and pd is not None:
+                        try:
+                            data_to_use = pd.DataFrame(processed_items)
+                            # Verificar que la columna necesaria existe
+                            if value_col not in data_to_use.columns:
+                                if self._debug or MatrixLayout._debug:
+                                    print(f"⚠️ Columna '{value_col}' no encontrada, usando todos los datos")
+                                data_to_use = self._data
+                        except Exception as e:
+                            if self._debug or MatrixLayout._debug:
+                                print(f"⚠️ Error creando DataFrame: {e}")
+                            data_to_use = self._data
+                
+                # Regenerar spec con datos filtrados
+                kwargs_update = violin_params['kwargs'].copy()
+                if linked_to is not None:
+                    kwargs_update['__linked_to__'] = linked_to
+                
+                # Usar el método de instancia para registrar el spec actualizado
+                self._register_chart(
+                    letter,
+                    'violin',
+                    data_to_use,
+                    value_col=value_col,
+                    category_col=category_col,
+                    bins=bins,
+                    **kwargs_update
+                )
+                
+                if self._debug or MatrixLayout._debug:
+                    print(f"   ✅ Violin '{letter}' spec actualizado")
+                    
+            except Exception as e:
+                if self._debug or MatrixLayout._debug:
+                    print(f"⚠️ Error actualizando violin: {e}")
+                    import traceback
+                    traceback.print_exc()
+        
+        primary_selection.on_change(update_violin)
         return self
 
     def add_radviz(self, letter, features=None, class_col=None, linked_to=None, **kwargs):

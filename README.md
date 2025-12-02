@@ -19,6 +19,10 @@
 
 ## 🚀 Instalación
 
+### Jupyter Notebook / JupyterLab (Local)
+
+Para instalación completa con todas las dependencias:
+
 ```bash
 pip install pybestlib
 ```
@@ -29,7 +33,21 @@ pip install pybestlib
 !pip install bestlib
 ```
 
-**Nota:** Colab ya incluye las dependencias necesarias (`pandas`, `numpy`, `ipywidgets`).
+**Nota:** Colab ya incluye las dependencias necesarias (`pandas`, `numpy`, `ipywidgets`, `ipython`, `ipykernel`). Instalar versiones más nuevas puede causar que el runtime se reinicie o falle.
+
+### Verificar instalación
+
+Después de instalar, verifica que todo funciona:
+
+```python
+import BESTLIB
+print(BESTLIB.__version__)
+
+# Verificar que pandas e ipywidgets están disponibles
+import pandas as pd
+import ipywidgets
+print("✅ Instalación correcta")
+```
 
 ## 💡 Inicio Rápido
 
