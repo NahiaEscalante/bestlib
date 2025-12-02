@@ -2220,20 +2220,15 @@ class ReactiveMatrixLayout:
                     y_label = spec.get('yLabel', '')
                     
                     # JavaScript para actualizar el boxplot
+                    div_id = boxplot_params.get('layout_div_id', '')
                     js_update = f"""
                     (function() {{
-                        // Buscar la celda del boxplot
-                        const cells = document.querySelectorAll('.matrix-cell');
-                        let targetCell = null;
-                        for (const cell of cells) {{
-                            const letterSpan = cell.querySelector('.cell-letter');
-                            if (letterSpan && letterSpan.textContent.trim() === '{letter}') {{
-                                targetCell = cell;
-                                break;
-                            }}
-                        }}
-                        
-                        if (!targetCell || !window.d3) return;
+                        setTimeout(function() {{
+                            let container = document.getElementById('{div_id}');
+                            if (!container) container = document;
+                            let targetCell = container.querySelector('.matrix-cell[data-letter="{letter}"]');
+                            if (!targetCell) targetCell = document.querySelector('.matrix-cell[data-letter="{letter}"]');
+                            if (!targetCell || !window.d3) return;
                         
                         // Obtener dimensiones originales
                         const svg = d3.select(targetCell).select('svg');
@@ -2248,12 +2243,12 @@ class ReactiveMatrixLayout:
                         // Datos del boxplot - normalizar lower/upper a min/max
                         const rawData = {box_data_json};
                         if (!rawData || rawData.length === 0) return;
-                        const boxData = rawData.map(d => ({{
+                        const boxData = rawData.map(d => ({
                             category: d.category,
                             min: d.min !== undefined ? d.min : d.lower,
                             max: d.max !== undefined ? d.max : d.upper,
                             q1: d.q1, q3: d.q3, median: d.median
-                        }})).filter(d => !isNaN(d.min) && !isNaN(d.max));
+                        })).filter(d => !isNaN(d.min) && !isNaN(d.max));
                         if (boxData.length === 0) return;
                         
                         // Configuración
@@ -2364,6 +2359,7 @@ class ReactiveMatrixLayout:
                                 .style('font-size', '12px')
                                 .text('{y_label}');
                         }}
+                        }}, 100);
                     }})();
                     """
                     
