@@ -7920,7 +7920,28 @@
         specKeys: Object.keys(spec),
         hasData: 'data' in spec
       });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay series para Ridgeline</div>';
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: No hay series para Ridgeline Plot</div>';
+      return;
+    }
+    
+    // Validar que al menos una serie tenga datos válidos
+    const validSeriesKeys = Object.keys(series).filter(key => {
+      const serieData = series[key];
+      if (!Array.isArray(serieData) || serieData.length === 0) return false;
+      // Verificar que al menos un punto tenga x e y válidos
+      return serieData.some(d => {
+        const hasX = d && typeof d.x === 'number' && !isNaN(d.x) && isFinite(d.x);
+        const hasY = d && typeof d.y === 'number' && !isNaN(d.y) && isFinite(d.y);
+        return hasX && hasY;
+      });
+    });
+    
+    if (validSeriesKeys.length === 0) {
+      console.error('[BESTLIB] renderRidgelineD3: Todas las series están vacías o tienen datos inválidos', { 
+        seriesKeys: Object.keys(series),
+        sampleSeries: Object.keys(series).slice(0, 2).map(k => ({ key: k, length: series[k]?.length || 0, sample: series[k]?.slice(0, 2) }))
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: Series vacías o datos inválidos para Ridgeline Plot</div>';
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -8094,9 +8115,38 @@
    * Ribbon Plot con D3.js
    */
   function renderRibbonD3(container, spec, d3, divId) {
+    // Debug logging detallado
+    console.log('[BESTLIB] renderRibbonD3 llamado', {
+      hasSpec: !!spec,
+      specType: typeof spec,
+      specKeys: spec ? Object.keys(spec) : [],
+      hasData: spec && 'data' in spec,
+      dataType: spec && spec.data ? typeof spec.data : 'undefined',
+      dataIsArray: spec && spec.data ? Array.isArray(spec.data) : false,
+      dataLength: spec && spec.data && Array.isArray(spec.data) ? spec.data.length : 0
+    });
+    
     const data = spec.data || [];
     if (!data || data.length === 0) {
-      console.warn('[BESTLIB] renderRibbonD3: No hay datos', { spec });
+      console.error('[BESTLIB] renderRibbonD3: No hay datos', { spec });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: No hay datos para Ribbon Plot</div>';
+      return;
+    }
+    
+    // Validar que los datos tengan la estructura correcta
+    const validData = data.filter(d => {
+      const hasX = d && typeof d.x === 'number' && !isNaN(d.x) && isFinite(d.x);
+      const hasY1 = d && typeof d.y1 === 'number' && !isNaN(d.y1) && isFinite(d.y1);
+      const hasY2 = d && typeof d.y2 === 'number' && !isNaN(d.y2) && isFinite(d.y2);
+      return hasX && hasY1 && hasY2;
+    });
+    
+    if (validData.length === 0) {
+      console.error('[BESTLIB] renderRibbonD3: Datos inválidos (x, y1, y2 deben ser números válidos)', { 
+        originalLength: data.length, 
+        sampleData: data.slice(0, 3) 
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: Datos inválidos para Ribbon Plot (x, y1, y2 deben ser números)</div>';
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -8136,13 +8186,13 @@
     const yLabel = options.yLabel || spec.yLabel;
     
     const x = d3.scaleLinear()
-      .domain(data.length > 0 ? d3.extent(data, d => d.x) : [0, 100])
+      .domain(validData.length > 0 ? d3.extent(validData, d => d.x) : [0, 100])
       .nice()
       .range([0, chartWidth]);
     
-    // Calcular dominio Y para ribbon (y1 e y2)
-    const y1Values = data.map(d => d.y1).filter(v => v != null);
-    const y2Values = data.map(d => d.y2).filter(v => v != null);
+    // Calcular dominio Y para ribbon (y1 e y2) - usar validData
+    const y1Values = validData.map(d => d.y1).filter(v => v != null);
+    const y2Values = validData.map(d => d.y2).filter(v => v != null);
     const allYValues = [...y1Values, ...y2Values];
     const yDomain = allYValues.length > 0
       ? [Math.min(...allYValues), Math.max(...allYValues)]
@@ -8174,7 +8224,7 @@
         .attr('stop-color', color2)
         .attr('stop-opacity', opacity);
       
-      // Área con gradiente
+      // Área con gradiente - usar validData
       const area = d3.area()
         .x(d => x(d.x))
         .y0(d => y(d.y1))
@@ -8182,11 +8232,11 @@
         .curve(d3.curveMonotoneX);
       
       g.append('path')
-        .datum(data)
+        .datum(validData)
         .attr('fill', `url(#${gradientId})`)
         .attr('d', area);
     } else {
-      // Área sólida
+      // Área sólida - usar validData
       const area = d3.area()
         .x(d => x(d.x))
         .y0(d => y(d.y1))
@@ -8194,14 +8244,14 @@
         .curve(d3.curveMonotoneX);
       
       g.append('path')
-        .datum(data)
+        .datum(validData)
         .attr('fill', color1)
         .attr('fill-opacity', opacity)
         .attr('d', area)
         .attr('class', 'bestlib-area');
     }
     
-    // Líneas opcionales
+    // Líneas opcionales - usar validData
     if (showLines) {
       const line1 = d3.line()
         .x(d => x(d.x))
@@ -8214,7 +8264,7 @@
         .curve(d3.curveMonotoneX);
       
       g.append('path')
-        .datum(data)
+        .datum(validData)
         .attr('fill', 'none')
         .attr('stroke', color1)
         .attr('stroke-width', 2)
@@ -8222,7 +8272,7 @@
         .attr('class', 'bestlib-line');
       
       g.append('path')
-        .datum(data)
+        .datum(validData)
         .attr('fill', 'none')
         .attr('stroke', color2)
         .attr('stroke-width', 2)
@@ -8260,7 +8310,24 @@
         dataType: typeof spec.data,
         specKeys: Object.keys(spec)
       });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para Hist2D</div>';
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: No hay datos para Hist2D</div>';
+      return;
+    }
+    
+    // Validar que los datos tengan la estructura correcta
+    const validData = data.filter(d => {
+      const hasX = d && typeof d.x === 'number' && !isNaN(d.x) && isFinite(d.x);
+      const hasY = d && typeof d.y === 'number' && !isNaN(d.y) && isFinite(d.y);
+      const hasValue = d && typeof d.value === 'number' && !isNaN(d.value) && isFinite(d.value);
+      return hasX && hasY && hasValue;
+    });
+    
+    if (validData.length === 0) {
+      console.error('[BESTLIB] renderHist2dD3: Datos inválidos', { 
+        originalLength: data.length, 
+        sampleData: data.slice(0, 3) 
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: Datos inválidos para Hist2D</div>';
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -8295,11 +8362,11 @@
     const xLabel = options.xLabel || spec.xLabel;
     const yLabel = options.yLabel || spec.yLabel;
     
-    // Calcular dominios desde bins para alineación correcta
-    const xBinStarts = data.map(d => d.x_bin_start).filter(v => v != null && !isNaN(v));
-    const xBinEnds = data.map(d => d.x_bin_end).filter(v => v != null && !isNaN(v));
-    const yBinStarts = data.map(d => d.y_bin_start).filter(v => v != null && !isNaN(v));
-    const yBinEnds = data.map(d => d.y_bin_end).filter(v => v != null && !isNaN(v));
+    // Calcular dominios desde bins para alineación correcta - usar validData
+    const xBinStarts = validData.map(d => d.x_bin_start).filter(v => v != null && !isNaN(v));
+    const xBinEnds = validData.map(d => d.x_bin_end).filter(v => v != null && !isNaN(v));
+    const yBinStarts = validData.map(d => d.y_bin_start).filter(v => v != null && !isNaN(v));
+    const yBinEnds = validData.map(d => d.y_bin_end).filter(v => v != null && !isNaN(v));
     
     const xDomain = xBinStarts.length > 0 && xBinEnds.length > 0
       ? [Math.min(...xBinStarts), Math.max(...xBinEnds)]
@@ -8318,13 +8385,13 @@
       .nice()
       .range([chartHeight, 0]);
     
-    const maxValue = d3.max(data, d => d.value) || 1;
+    const maxValue = d3.max(validData, d => d.value) || 1;
     const color = d3.scaleSequential(d3.interpolateBlues)
       .domain([0, maxValue]);
     
-    // Celdas del heatmap - asegurar que los bins estén bien alineados
+    // Celdas del heatmap - asegurar que los bins estén bien alineados - usar validData
     g.selectAll('.cell')
-      .data(data)
+      .data(validData)
       .enter()
       .append('rect')
       .attr('class', 'bestlib-heatmap-cell')
@@ -8382,7 +8449,23 @@
         dataType: typeof spec.data,
         specKeys: Object.keys(spec)
       });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para Polar</div>';
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: No hay datos para Polar Plot</div>';
+      return;
+    }
+    
+    // Validar que los datos tengan la estructura correcta (angle y radius)
+    const validData = data.filter(d => {
+      const hasAngle = d && typeof d.angle === 'number' && !isNaN(d.angle) && isFinite(d.angle);
+      const hasRadius = d && typeof d.radius === 'number' && !isNaN(d.radius) && isFinite(d.radius);
+      return hasAngle && hasRadius;
+    });
+    
+    if (validData.length === 0) {
+      console.error('[BESTLIB] renderPolarD3: Datos inválidos (angle y radius deben ser números)', { 
+        originalLength: data.length, 
+        sampleData: data.slice(0, 3) 
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: Datos inválidos para Polar Plot (angle y radius deben ser números)</div>';
       return;
     }
     
@@ -8418,8 +8501,8 @@
     const xLabel = options.xLabel || spec.xLabel;
     const yLabel = options.yLabel || spec.yLabel;
     
-    // Calcular coordenadas polares desde angle y radius (no usar x, y pre-calculados)
-    const maxRadius = d3.max(data, d => (d.radius !== undefined ? d.radius : Math.sqrt(d.x*d.x + d.y*d.y))) || 1;
+    // Calcular coordenadas polares desde angle y radius - usar validData
+    const maxRadius = d3.max(validData, d => (d.radius !== undefined ? d.radius : Math.sqrt(d.x*d.x + d.y*d.y))) || 1;
     const r = d3.scaleLinear()
       .domain([0, maxRadius])
       .range([0, radius]);
@@ -8453,9 +8536,9 @@
       }
     }
     
-    // Puntos - recalcular coordenadas desde angle y radius
+    // Puntos - recalcular coordenadas desde angle y radius - usar validData
     g.selectAll('.point')
-      .data(data)
+      .data(validData)
       .enter()
       .append('circle')
       .attr('class', 'bestlib-point')
@@ -8473,9 +8556,9 @@
       .attr('fill', color)
       .attr('opacity', 0.6);
     
-    // Líneas desde el centro
+    // Líneas desde el centro - usar validData
     g.selectAll('.line')
-      .data(data)
+      .data(validData)
       .enter()
       .append('line')
       .attr('x1', 0)
@@ -8548,7 +8631,23 @@
         dataType: typeof spec.data,
         specKeys: Object.keys(spec)
       });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para Funnel</div>';
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: No hay datos para Funnel Plot</div>';
+      return;
+    }
+    
+    // Validar que los datos tengan la estructura correcta (stage y value)
+    const validData = data.filter(d => {
+      const hasStage = d && d.stage !== undefined && d.stage !== null;
+      const hasValue = d && typeof d.value === 'number' && !isNaN(d.value) && isFinite(d.value) && d.value >= 0;
+      return hasStage && hasValue;
+    });
+    
+    if (validData.length === 0) {
+      console.error('[BESTLIB] renderFunnelD3: Datos inválidos (stage y value >= 0 requeridos)', { 
+        originalLength: data.length, 
+        sampleData: data.slice(0, 3) 
+      });
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: Datos inválidos para Funnel Plot (stage y value >= 0 requeridos)</div>';
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -8585,8 +8684,8 @@
     const xLabel = options.xLabel || spec.xLabel;
     const yLabel = options.yLabel || spec.yLabel;
     
-    const maxValue = d3.max(data, d => d.value) || 1;
-    const numStages = data.length;
+    const maxValue = d3.max(validData, d => d.value) || 1;
+    const numStages = validData.length;
     const stageHeight = chartHeight / numStages;
     const maxWidth = chartWidth * 0.8;
     
@@ -8595,17 +8694,17 @@
         .domain([0, maxValue])
         .range([0, maxWidth]);
       
-      data.forEach((d, i) => {
+      validData.forEach((d, i) => {
         const yPos = i * stageHeight;
         const barWidth = x(d.value);
         const centerX = chartWidth / 2;
         
-        // Trapecio (funnel shape)
+        // Trapecio (funnel shape) - usar validData
         const points = [
           [centerX - barWidth/2, yPos],
           [centerX + barWidth/2, yPos],
-          [centerX + (i < numStages - 1 ? x(data[i+1].value)/2 : 0), yPos + stageHeight],
-          [centerX - (i < numStages - 1 ? x(data[i+1].value)/2 : 0), yPos + stageHeight]
+          [centerX + (i < numStages - 1 ? x(validData[i+1].value)/2 : 0), yPos + stageHeight],
+          [centerX - (i < numStages - 1 ? x(validData[i+1].value)/2 : 0), yPos + stageHeight]
         ];
         
         g.append('polygon')

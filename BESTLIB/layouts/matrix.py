@@ -714,6 +714,40 @@ class MatrixLayout:
             if k.startswith('__') or k in valid_letters
         }
         
+        # Debug logging para verificar specs
+        if self._debug:
+            print(f"🔍 [MatrixLayout._prepare_repr_data] Debug de specs:")
+            print(f"   - Letras válidas en layout: {valid_letters}")
+            print(f"   - Letras en _map: {[k for k in active_map.keys() if not k.startswith('__')]}")
+            for letter in valid_letters:
+                if letter in filtered_map:
+                    spec = filtered_map[letter]
+                    spec_type = spec.get('type', 'unknown')
+                    has_data = 'data' in spec
+                    has_series = 'series' in spec
+                    data_info = ''
+                    if has_data:
+                        data = spec.get('data', [])
+                        if isinstance(data, list):
+                            data_info = f", data_len={len(data)}"
+                            if len(data) > 0:
+                                sample = data[0] if isinstance(data[0], dict) else data[0]
+                                data_info += f", sample_keys={list(sample.keys()) if isinstance(sample, dict) else type(sample)}"
+                        else:
+                            data_info = f", data_type={type(data).__name__}"
+                    if has_series:
+                        series = spec.get('series', {})
+                        if isinstance(series, dict):
+                            data_info += f", series_keys={list(series.keys())[:3]}"
+                            if series:
+                                first_key = list(series.keys())[0]
+                                first_val = series[first_key]
+                                if isinstance(first_val, list):
+                                    data_info += f", first_series_len={len(first_val)}"
+                    print(f"   - '{letter}': type={spec_type}, has_data={has_data}, has_series={has_series}{data_info}")
+                else:
+                    print(f"   - '{letter}': NO SPEC ENCONTRADO")
+        
         self._validate_mapping_letters(filtered_map)
         mapping_merged = {**filtered_map, **meta}
         if self._merge_opt is not None:
