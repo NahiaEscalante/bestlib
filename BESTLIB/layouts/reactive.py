@@ -3796,6 +3796,195 @@ class ReactiveMatrixLayout:
         sel.on_change(update)
         return self
 
+    def add_ridgeline(self, letter, column=None, category_col=None, bandwidth=None, linked_to=None, **kwargs):
+        """
+        Agrega ridgeline plot (joy plot).
+        
+        Args:
+            letter: Letra del layout ASCII
+            column: Nombre de columna numérica para las distribuciones
+            category_col: Nombre de columna categórica para separar las crestas
+            bandwidth: Ancho de banda para KDE (opcional)
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if column is None or category_col is None:
+            raise ValueError("Debe especificar 'column' y 'category_col' para ridgeline")
+        MatrixLayout.map_ridgeline(letter, self._data, column=column, category_col=category_col, bandwidth=bandwidth, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_ridgeline(letter, df, column=column, category_col=category_col, bandwidth=bandwidth, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
+
+    def add_ribbon(self, letter, x_col=None, y1_col=None, y2_col=None, linked_to=None, **kwargs):
+        """
+        Agrega ribbon plot (área entre líneas con gradiente).
+        
+        Args:
+            letter: Letra del layout ASCII
+            x_col: Nombre de columna para eje X
+            y1_col: Nombre de columna para límite inferior
+            y2_col: Nombre de columna para límite superior
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if x_col is None or y1_col is None or y2_col is None:
+            raise ValueError("Debe especificar 'x_col', 'y1_col' y 'y2_col' para ribbon")
+        MatrixLayout.map_ribbon(letter, self._data, x_col=x_col, y1_col=y1_col, y2_col=y2_col, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_ribbon(letter, df, x_col=x_col, y1_col=y1_col, y2_col=y2_col, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
+
+    def add_hist2d(self, letter, x_col=None, y_col=None, bins=20, linked_to=None, **kwargs):
+        """
+        Agrega 2D histogram.
+        
+        Args:
+            letter: Letra del layout ASCII
+            x_col: Nombre de columna para eje X
+            y_col: Nombre de columna para eje Y
+            bins: Número de bins (por defecto 20)
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if x_col is None or y_col is None:
+            raise ValueError("Debe especificar 'x_col' y 'y_col' para hist2d")
+        MatrixLayout.map_hist2d(letter, self._data, x_col=x_col, y_col=y_col, bins=bins, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_hist2d(letter, df, x_col=x_col, y_col=y_col, bins=bins, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
+
+    def add_polar(self, letter, angle_col=None, radius_col=None, angle_unit='rad', linked_to=None, **kwargs):
+        """
+        Agrega polar plot.
+        
+        Args:
+            letter: Letra del layout ASCII
+            angle_col: Nombre de columna para el ángulo
+            radius_col: Nombre de columna para el radio
+            angle_unit: Unidad del ángulo ('rad' o 'deg', por defecto 'rad')
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if angle_col is None or radius_col is None:
+            raise ValueError("Debe especificar 'angle_col' y 'radius_col' para polar plot")
+        MatrixLayout.map_polar(letter, self._data, angle_col=angle_col, radius_col=radius_col, angle_unit=angle_unit, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_polar(letter, df, angle_col=angle_col, radius_col=radius_col, angle_unit=angle_unit, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
+
+    def add_funnel(self, letter, stage_col=None, value_col=None, linked_to=None, **kwargs):
+        """
+        Agrega funnel plot.
+        
+        Args:
+            letter: Letra del layout ASCII
+            stage_col: Nombre de columna para las etapas del embudo
+            value_col: Nombre de columna para los valores
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if stage_col is None or value_col is None:
+            raise ValueError("Debe especificar 'stage_col' y 'value_col' para funnel plot")
+        MatrixLayout.map_funnel(letter, self._data, stage_col=stage_col, value_col=value_col, **kwargs)
+        if linked_to:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                return self
+            def update(items, count):
+                df = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else None)
+                if df is not None:
+                    try:
+                        MatrixLayout.map_funnel(letter, df, stage_col=stage_col, value_col=value_col, **kwargs)
+                    except Exception:
+                        pass
+            sel.on_change(update)
+        return self
+
     
     def display(self, ascii_layout=None):
         """

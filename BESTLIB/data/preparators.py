@@ -4,9 +4,72 @@ Preparadores de datos para diferentes tipos de gráficos
 from .validators import validate_scatter_data, validate_bar_data, validate_data_structure
 from ..core.exceptions import DataError
 from ._imports import ensure_pandas
+from datetime import datetime
 
 pd = ensure_pandas()
 HAS_PANDAS = pd is not None
+
+
+def _safe_to_number(value):
+    """
+    Convierte un valor a número de forma segura, manejando Timestamps, datetimes y otros tipos.
+    
+    Args:
+        value: Valor a convertir (puede ser int, float, Timestamp, datetime, string numérico, etc.)
+    
+    Returns:
+        float: Valor convertido a número
+    
+    Raises:
+        ValueError: Si el valor no se puede convertir a número
+    """
+    if value is None:
+        raise ValueError("Cannot convert None to number")
+    
+    # Si ya es un número, retornarlo directamente
+    if isinstance(value, (int, float)):
+        return float(value)
+    
+    # Manejar Timestamps de pandas
+    if HAS_PANDAS:
+        import pandas as pd
+        if isinstance(value, pd.Timestamp):
+            return float(value.timestamp())
+        if isinstance(value, pd.Period):
+            return float(value.to_timestamp().timestamp())
+        if pd.isna(value):
+            raise ValueError("Cannot convert NaN/NaT to number")
+    
+    # Manejar datetime estándar de Python
+    if isinstance(value, datetime):
+        return float(value.timestamp())
+    
+    # Manejar numpy datetime64 si está disponible
+    try:
+        import numpy as np
+        if isinstance(value, (np.datetime64, np.timedelta64)):
+            # Convertir a timestamp (segundos desde epoch)
+            return float(pd.Timestamp(value).timestamp()) if HAS_PANDAS else float(value.astype('datetime64[s]').astype('float64'))
+    except (ImportError, AttributeError):
+        pass
+    
+    # Intentar convertir string a float
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            # Intentar parsear como fecha
+            if HAS_PANDAS:
+                try:
+                    return float(pd.to_datetime(value).timestamp())
+                except:
+                    pass
+    
+    # Intentar conversión genérica
+    try:
+        return float(value)
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"Cannot convert {type(value).__name__} '{value}' to number: {e}")
 
 
 def prepare_scatter_data(data, x_col=None, y_col=None, category_col=None, size_col=None, color_col=None):
@@ -382,12 +445,16 @@ def prepare_line_data(data, x_col=None, y_col=None, series_col=None):
     
     Args:
         data: DataFrame de pandas o lista de diccionarios
-        x_col: Columna para eje X
+        x_col: Columna para eje X (soporta valores numéricos y temporales como Timestamp, datetime)
         y_col: Columna para eje Y
         series_col: Columna para series (opcional)
     
     Returns:
         dict: Datos preparados con 'series'
+    
+    Note:
+        Los valores de x_col que sean Timestamps, datetimes u otros tipos temporales
+        serán convertidos automáticamente a timestamps numéricos (segundos desde epoch).
     """
     if HAS_PANDAS and isinstance(data, pd.DataFrame):
         if x_col is None or y_col is None:
@@ -398,23 +465,23 @@ def prepare_line_data(data, x_col=None, y_col=None, series_col=None):
             series = {}
             for name in series_names:
                 sdf = df[df[series_col] == name].sort_values(by=x_col)
-                series[name] = [{'x': float(x), 'y': float(y), 'series': str(name)} for x, y in zip(sdf[x_col], sdf[y_col])]
+                series[name] = [{'x': _safe_to_number(x), 'y': _safe_to_number(y), 'series': str(name)} for x, y in zip(sdf[x_col], sdf[y_col])]
             return {'series': series}
         else:
             sdf = df.sort_values(by=x_col)
-            return {'series': {'default': [{'x': float(x), 'y': float(y)} for x, y in zip(sdf[x_col], sdf[y_col])]}}
+            return {'series': {'default': [{'x': _safe_to_number(x), 'y': _safe_to_number(y)} for x, y in zip(sdf[x_col], sdf[y_col])]}}
     else:
         items = [d for d in (data or []) if x_col in d and y_col in d]
         if series_col:
             series = {}
             for item in items:
                 key = str(item.get(series_col))
-                series.setdefault(key, []).append({'x': float(item[x_col]), 'y': float(item[y_col]), 'series': key})
+                series.setdefault(key, []).append({'x': _safe_to_number(item[x_col]), 'y': _safe_to_number(item[y_col]), 'series': key})
             for k in series:
                 series[k] = sorted(series[k], key=lambda p: p['x'])
             return {'series': series}
         else:
-            pts = sorted([{'x': float(i[x_col]), 'y': float(i[y_col])} for i in items], key=lambda p: p['x'])
+            pts = sorted([{'x': _safe_to_number(i[x_col]), 'y': _safe_to_number(i[y_col])} for i in items], key=lambda p: p['x'])
             return {'series': {'default': pts}}
 
 
