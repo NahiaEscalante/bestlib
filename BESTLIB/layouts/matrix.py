@@ -561,17 +561,10 @@ class MatrixLayout:
     @classmethod
     def map_grouped_barchart(cls, letter, data, main_col=None, sub_col=None, value_col=None, **kwargs):
         """Método helper para crear grouped bar chart"""
-        try:
-            from ..charts import ChartRegistry
-            chart = ChartRegistry.get('grouped_barchart')
-            spec = chart.get_spec(data, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
-        except Exception:
-            # Fallback: delegar a versión legacy
-            try:
-                from ...matrix import MatrixLayout as LegacyMatrixLayout
-                return LegacyMatrixLayout.map_grouped_barchart(letter, data, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
-            except Exception:
-                spec = {'type': 'grouped_barchart', 'data': [], **kwargs}
+        from ..charts import ChartRegistry
+        # IMPORTANTE: El chart está registrado como 'grouped_bar', no 'grouped_barchart'
+        chart = ChartRegistry.get('grouped_bar')
+        spec = chart.get_spec(data, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
         return cls._register_spec_legacy(letter, spec)
     
     @classmethod

@@ -1152,8 +1152,8 @@ class ReactiveMatrixLayout:
             kwargs['__is_primary_view__'] = True
             kwargs['interactive'] = True
         
-        # Crear gráfico inicial
-        MatrixLayout.map_grouped_barchart(letter, self._data, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
+        # Crear gráfico inicial - usar registro directo para evitar problemas de instancia
+        self._register_chart(letter, 'grouped_bar', self._data, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
         
         # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
         if letter in self._layout._map:
@@ -1189,7 +1189,7 @@ class ReactiveMatrixLayout:
             def update(items, count):
                 data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
                 try:
-                    MatrixLayout.map_grouped_barchart(letter, data_to_use, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
+                    self._register_chart(letter, 'grouped_bar', data_to_use, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
                 except Exception:
                     pass
             primary_selection.on_change(update)
@@ -2499,7 +2499,7 @@ class ReactiveMatrixLayout:
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
         # initial render
-        MatrixLayout.map_heatmap(letter, self._data, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
+        self._register_chart(letter, 'heatmap', self._data, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
         # link to selection
         if not self._scatter_selection_models:
             return self
@@ -2508,7 +2508,7 @@ class ReactiveMatrixLayout:
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
-                MatrixLayout.map_heatmap(letter, data_to_use, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
+                self._register_chart(letter, 'heatmap', data_to_use, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -2518,7 +2518,10 @@ class ReactiveMatrixLayout:
         from .matrix import MatrixLayout
         if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
             raise ValueError("add_correlation_heatmap requiere DataFrame")
-        MatrixLayout.map_correlation_heatmap(letter, self._data, **kwargs)
+        # Usar método de clase pero registrar directamente en la instancia correcta
+        spec = MatrixLayout.map_correlation_heatmap.__func__(MatrixLayout, letter, self._data, **kwargs)
+        if spec:
+            self._layout._map[letter] = spec
         # link
         if not self._scatter_selection_models:
             return self
@@ -2529,7 +2532,9 @@ class ReactiveMatrixLayout:
             if df is None:
                 return
             try:
-                MatrixLayout.map_correlation_heatmap(letter, df, **kwargs)
+                spec = MatrixLayout.map_correlation_heatmap.__func__(MatrixLayout, letter, df, **kwargs)
+                if spec:
+                    self._layout._map[letter] = spec
             except Exception:
                 pass
         sel.on_change(update)
@@ -2539,7 +2544,7 @@ class ReactiveMatrixLayout:
         from .matrix import MatrixLayout
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
-        MatrixLayout.map_line(letter, self._data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
+        self._register_chart(letter, 'line', self._data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
         if not self._scatter_selection_models:
             return self
         scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
@@ -2547,7 +2552,7 @@ class ReactiveMatrixLayout:
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
-                MatrixLayout.map_line(letter, data_to_use, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
+                self._register_chart(letter, 'line', data_to_use, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -2657,8 +2662,8 @@ class ReactiveMatrixLayout:
             kwargs['__is_primary_view__'] = True
             kwargs['interactive'] = True
         
-        # Crear pie chart inicial con todos los datos
-        MatrixLayout.map_pie(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
+        # Crear pie chart inicial con todos los datos - usar registro directo
+        self._register_chart(letter, 'pie', self._data, category_col=category_col, value_col=value_col, **kwargs)
         
         # Asegurar que __linked_to__ esté en el spec guardado (por si map_pie no lo copió)
         if not is_primary and linked_to:
@@ -3216,7 +3221,7 @@ class ReactiveMatrixLayout:
         from .matrix import MatrixLayout
         if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
             raise ValueError("add_radviz requiere DataFrame")
-        MatrixLayout.map_radviz(letter, self._data, features=features, class_col=class_col, **kwargs)
+        self._register_chart(letter, 'radviz', self._data, features=features, class_col=class_col, **kwargs)
         
         # Solo registrar callback si linked_to está especificado explícitamente
         if linked_to is None:
@@ -3236,7 +3241,7 @@ class ReactiveMatrixLayout:
             if df is None:
                 return
             try:
-                MatrixLayout.map_radviz(letter, df, features=features, class_col=class_col, **kwargs)
+                self._register_chart(letter, 'radviz', df, features=features, class_col=class_col, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -3259,7 +3264,7 @@ class ReactiveMatrixLayout:
         from .matrix import MatrixLayout
         if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
             raise ValueError("add_star_coordinates requiere DataFrame")
-        MatrixLayout.map_star_coordinates(letter, self._data, features=features, class_col=class_col, **kwargs)
+        self._register_chart(letter, 'star_coordinates', self._data, features=features, class_col=class_col, **kwargs)
         
         # Solo registrar callback si linked_to está especificado explícitamente
         if linked_to is None:
@@ -3279,7 +3284,7 @@ class ReactiveMatrixLayout:
             if df is None:
                 return
             try:
-                MatrixLayout.map_star_coordinates(letter, df, features=features, class_col=class_col, **kwargs)
+                self._register_chart(letter, 'star_coordinates', df, features=features, class_col=class_col, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -3302,7 +3307,7 @@ class ReactiveMatrixLayout:
         from .matrix import MatrixLayout
         if not (HAS_PANDAS and isinstance(self._data, pd.DataFrame)):
             raise ValueError("add_parallel_coordinates requiere DataFrame")
-        MatrixLayout.map_parallel_coordinates(letter, self._data, dimensions=dimensions, category_col=category_col, **kwargs)
+        self._register_chart(letter, 'parallel_coordinates', self._data, dimensions=dimensions, category_col=category_col, **kwargs)
         
         # Solo registrar callback si linked_to está especificado explícitamente
         if linked_to is None:
@@ -3322,7 +3327,7 @@ class ReactiveMatrixLayout:
             if df is None:
                 return
             try:
-                MatrixLayout.map_parallel_coordinates(letter, df, dimensions=dimensions, category_col=category_col, **kwargs)
+                self._register_chart(letter, 'parallel_coordinates', df, dimensions=dimensions, category_col=category_col, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -3361,8 +3366,9 @@ class ReactiveMatrixLayout:
             labels = sorted(list(set(y_true) | set(y_pred)))
             cm = confusion_matrix(y_true, y_pred, labels=labels, normalize='true' if normalize else None)
             cm_df = pd.DataFrame(cm, index=labels, columns=labels)
-            MatrixLayout.map_heatmap(
-                letter, cm_df.reset_index().melt(id_vars='index', var_name='Pred', value_name='Value'),
+            melted_data = cm_df.reset_index().melt(id_vars='index', var_name='Pred', value_name='Value')
+            self._register_chart(
+                letter, 'heatmap', melted_data,
                 x_col='Pred', y_col='index', value_col='Value',
                 colorMap=kwargs.get('colorMap', 'Blues'),
                 **kwargs
@@ -3408,7 +3414,7 @@ class ReactiveMatrixLayout:
         from .matrix import MatrixLayout
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
-        MatrixLayout.map_line_plot(letter, self._data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
+        self._register_chart(letter, 'line_plot', self._data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
         if linked_to is None:
             return self
         if linked_to in self._scatter_selection_models:
@@ -3420,7 +3426,7 @@ class ReactiveMatrixLayout:
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
-                MatrixLayout.map_line_plot(letter, data_to_use, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
+                self._register_chart(letter, 'line_plot', data_to_use, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -3443,7 +3449,7 @@ class ReactiveMatrixLayout:
         from .matrix import MatrixLayout
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
-        MatrixLayout.map_horizontal_bar(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
+        self._register_chart(letter, 'horizontal_bar', self._data, category_col=category_col, value_col=value_col, **kwargs)
         if linked_to is None:
             return self
         if linked_to in self._scatter_selection_models:
@@ -3455,7 +3461,7 @@ class ReactiveMatrixLayout:
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
-                MatrixLayout.map_horizontal_bar(letter, data_to_use, category_col=category_col, value_col=value_col, **kwargs)
+                self._register_chart(letter, 'horizontal_bar', data_to_use, category_col=category_col, value_col=value_col, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -3478,7 +3484,7 @@ class ReactiveMatrixLayout:
         from .matrix import MatrixLayout
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
-        MatrixLayout.map_hexbin(letter, self._data, x_col=x_col, y_col=y_col, **kwargs)
+        self._register_chart(letter, 'hexbin', self._data, x_col=x_col, y_col=y_col, **kwargs)
         if linked_to is None:
             return self
         if linked_to in self._scatter_selection_models:
@@ -3490,7 +3496,7 @@ class ReactiveMatrixLayout:
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
-                MatrixLayout.map_hexbin(letter, data_to_use, x_col=x_col, y_col=y_col, **kwargs)
+                self._register_chart(letter, 'hexbin', data_to_use, x_col=x_col, y_col=y_col, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -3515,7 +3521,7 @@ class ReactiveMatrixLayout:
         from .matrix import MatrixLayout
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
-        MatrixLayout.map_errorbars(letter, self._data, x_col=x_col, y_col=y_col, yerr=yerr, xerr=xerr, **kwargs)
+        self._register_chart(letter, 'errorbars', self._data, x_col=x_col, y_col=y_col, yerr=yerr, xerr=xerr, **kwargs)
         if linked_to is None:
             return self
         if linked_to in self._scatter_selection_models:
@@ -3527,7 +3533,7 @@ class ReactiveMatrixLayout:
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
-                MatrixLayout.map_errorbars(letter, data_to_use, x_col=x_col, y_col=y_col, yerr=yerr, xerr=xerr, **kwargs)
+                self._register_chart(letter, 'errorbars', data_to_use, x_col=x_col, y_col=y_col, yerr=yerr, xerr=xerr, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -3551,7 +3557,7 @@ class ReactiveMatrixLayout:
         from .matrix import MatrixLayout
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
-        MatrixLayout.map_fill_between(letter, self._data, x_col=x_col, y1=y1, y2=y2, **kwargs)
+        self._register_chart(letter, 'fill_between', self._data, x_col=x_col, y1=y1, y2=y2, **kwargs)
         if linked_to is None:
             return self
         if linked_to in self._scatter_selection_models:
@@ -3563,7 +3569,7 @@ class ReactiveMatrixLayout:
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
-                MatrixLayout.map_fill_between(letter, data_to_use, x_col=x_col, y1=y1, y2=y2, **kwargs)
+                self._register_chart(letter, 'fill_between', data_to_use, x_col=x_col, y1=y1, y2=y2, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -3586,7 +3592,7 @@ class ReactiveMatrixLayout:
         from .matrix import MatrixLayout
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
-        MatrixLayout.map_step(letter, self._data, x_col=x_col, y_col=y_col, **kwargs)
+        self._register_chart(letter, 'step_plot', self._data, x_col=x_col, y_col=y_col, **kwargs)
         if linked_to is None:
             return self
         if linked_to in self._scatter_selection_models:
@@ -3598,7 +3604,7 @@ class ReactiveMatrixLayout:
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
-                MatrixLayout.map_step(letter, data_to_use, x_col=x_col, y_col=y_col, **kwargs)
+                self._register_chart(letter, 'step_plot', data_to_use, x_col=x_col, y_col=y_col, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -3623,7 +3629,7 @@ class ReactiveMatrixLayout:
             raise ValueError("Debe usar set_data() primero")
         if column is None:
             raise ValueError("Debe especificar 'column' para KDE")
-        MatrixLayout.map_kde(letter, self._data, column=column, bandwidth=bandwidth, **kwargs)
+        self._register_chart(letter, 'kde', self._data, column=column, bandwidth=bandwidth, **kwargs)
         if linked_to is None:
             return self
         if linked_to in self._scatter_selection_models:
@@ -3635,7 +3641,7 @@ class ReactiveMatrixLayout:
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
-                MatrixLayout.map_kde(letter, data_to_use, column=column, bandwidth=bandwidth, **kwargs)
+                self._register_chart(letter, 'kde', data_to_use, column=column, bandwidth=bandwidth, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -3662,7 +3668,7 @@ class ReactiveMatrixLayout:
             raise ValueError("Debe usar set_data() primero")
         if column is None:
             raise ValueError("Debe especificar 'column' para distplot")
-        MatrixLayout.map_distplot(letter, self._data, column=column, bins=bins, kde=kde, rug=rug, **kwargs)
+        self._register_chart(letter, 'distplot', self._data, column=column, bins=bins, kde=kde, rug=rug, **kwargs)
         if linked_to is None:
             return self
         if linked_to in self._scatter_selection_models:
@@ -3674,7 +3680,7 @@ class ReactiveMatrixLayout:
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
-                MatrixLayout.map_distplot(letter, data_to_use, column=column, bins=bins, kde=kde, rug=rug, **kwargs)
+                self._register_chart(letter, 'distplot', data_to_use, column=column, bins=bins, kde=kde, rug=rug, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -3699,7 +3705,7 @@ class ReactiveMatrixLayout:
             raise ValueError("Debe usar set_data() primero")
         if column is None:
             raise ValueError("Debe especificar 'column' para rug plot")
-        MatrixLayout.map_rug(letter, self._data, column=column, axis=axis, **kwargs)
+        self._register_chart(letter, 'rug', self._data, column=column, axis=axis, **kwargs)
         if linked_to is None:
             return self
         if linked_to in self._scatter_selection_models:
@@ -3711,7 +3717,7 @@ class ReactiveMatrixLayout:
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
-                MatrixLayout.map_rug(letter, data_to_use, column=column, axis=axis, **kwargs)
+                self._register_chart(letter, 'rug', data_to_use, column=column, axis=axis, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -3736,7 +3742,7 @@ class ReactiveMatrixLayout:
             raise ValueError("Debe usar set_data() primero")
         if column is None:
             raise ValueError("Debe especificar 'column' para Q-Q plot")
-        MatrixLayout.map_qqplot(letter, self._data, column=column, dist=dist, **kwargs)
+        self._register_chart(letter, 'qqplot', self._data, column=column, dist=dist, **kwargs)
         if linked_to is None:
             return self
         if linked_to in self._scatter_selection_models:
@@ -3748,7 +3754,7 @@ class ReactiveMatrixLayout:
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
-                MatrixLayout.map_qqplot(letter, data_to_use, column=column, dist=dist, **kwargs)
+                self._register_chart(letter, 'qqplot', data_to_use, column=column, dist=dist, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
@@ -3772,7 +3778,7 @@ class ReactiveMatrixLayout:
             raise ValueError("Debe usar set_data() primero")
         if column is None:
             raise ValueError("Debe especificar 'column' para ECDF")
-        MatrixLayout.map_ecdf(letter, self._data, column=column, **kwargs)
+        self._register_chart(letter, 'ecdf', self._data, column=column, **kwargs)
         if linked_to is None:
             return self
         if linked_to in self._scatter_selection_models:
@@ -3784,7 +3790,7 @@ class ReactiveMatrixLayout:
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
-                MatrixLayout.map_ecdf(letter, data_to_use, column=column, **kwargs)
+                self._register_chart(letter, 'ecdf', data_to_use, column=column, **kwargs)
             except Exception:
                 pass
         sel.on_change(update)
