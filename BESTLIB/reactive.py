@@ -207,11 +207,18 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
     
     def update(self, items):
         """Actualiza los items manualmente desde Python"""
+        # SIEMPRE mostrar para debugging
+        print(f"🟡 [ReactiveData.update] Actualizando ID: {id(self)}")
+        print(f"   - Items type: {type(items)}")
+        print(f"   - Items count: {len(items) if hasattr(items, '__len__') else '?'}")
+        print(f"   - Callbacks registrados: {len(self._callbacks)}")
+        
         # CRÍTICO: Flag para evitar actualizaciones múltiples simultáneas
         # PERO: Solo bloquear si realmente hay una actualización en progreso
         # No bloquear si el flag existe pero está en False
         if hasattr(self, '_updating') and self._updating:
             # Ya hay una actualización en progreso, ignorar esta llamada
+            print(f"   ⚠️ Actualización ya en progreso, ignorando")
             return
         self._updating = True
         
@@ -224,6 +231,7 @@ class ReactiveData(widgets.Widget if HAS_WIDGETS else object):
             
             # Actualizar count primero
             new_count = len(items)
+            print(f"   - Nuevo count: {new_count}")
             
             # Solo actualizar si hay cambio real (evitar loops infinitos)
             if self.items != items or self.count != new_count:

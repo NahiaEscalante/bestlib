@@ -150,7 +150,7 @@ class ViolinChart(ChartBase):
             spec['category_col'] = category_col
         
         # Procesar figsize y otras opciones
-        from ..charts.spec_utils import process_figsize_in_kwargs
+        from ..utils.figsize import process_figsize_in_kwargs
         process_figsize_in_kwargs(kwargs)
         
         if kwargs:
