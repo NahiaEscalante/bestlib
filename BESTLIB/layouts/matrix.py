@@ -574,6 +574,49 @@ class MatrixLayout:
                 spec = {'type': 'grouped_barchart', 'data': [], **kwargs}
         return cls._register_spec_legacy(letter, spec)
     
+    @classmethod
+    def map_correlation_heatmap(cls, letter, data, **kwargs):
+        """
+        Calcula matriz de correlación (pearson) para columnas numéricas del DataFrame.
+        Las etiquetas X e Y están ordenadas de la misma manera para mantener consistencia.
+        """
+        if not (HAS_PANDAS and isinstance(data, pd.DataFrame)):
+            raise ValueError("map_correlation_heatmap requiere DataFrame de pandas")
+        num_df = data.select_dtypes(include=['number'])
+        if num_df.shape[1] == 0:
+            raise ValueError("No hay columnas numéricas para correlación")
+        corr = num_df.corr().fillna(0.0)
+        # Ordenar columnas alfabéticamente para consistencia
+        cols = sorted(corr.columns.tolist())
+        corr = corr.loc[cols, cols]  # Reordenar matriz de correlación
+        cells = []
+        # Crear celdas asegurando que x e y estén en el mismo orden
+        for i, xi in enumerate(cols):
+            for j, yj in enumerate(cols):
+                cells.append({'x': str(xi), 'y': str(yj), 'value': float(corr.loc[yj, xi])})
+        
+        # Procesar figsize si está en kwargs
+        from ..utils.figsize import process_figsize_in_kwargs
+        process_figsize_in_kwargs(kwargs)
+        
+        # Opción para mostrar valores numéricos (por defecto False)
+        showValues = kwargs.pop('showValues', False)
+        
+        spec = {
+            'type': 'heatmap',
+            'data': cells,
+            'cells': cells,
+            'xLabels': cols,
+            'yLabels': cols,
+            'x_labels': cols,
+            'y_labels': cols,
+            'isCorrelation': True,
+            'showValues': showValues,
+            'colorScale': 'diverging',
+            **kwargs
+        }
+        return cls._register_spec_legacy(letter, spec)
+    
     def set_mapping(self, mapping, merge=False):
         """
         Define un mapeo específico para esta instancia (sin afectar el global).

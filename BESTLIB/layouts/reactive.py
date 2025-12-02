@@ -3604,6 +3604,192 @@ class ReactiveMatrixLayout:
         sel.on_change(update)
         return self
 
+    def add_kde(self, letter, column=None, bandwidth=None, linked_to=None, **kwargs):
+        """
+        Agrega KDE (Kernel Density Estimation) chart.
+        
+        Args:
+            letter: Letra del layout ASCII
+            column: Nombre de columna para el KDE
+            bandwidth: Ancho de banda del kernel (opcional)
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if column is None:
+            raise ValueError("Debe especificar 'column' para KDE")
+        MatrixLayout.map_kde(letter, self._data, column=column, bandwidth=bandwidth, **kwargs)
+        if linked_to is None:
+            return self
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            return self
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_kde(letter, data_to_use, column=column, bandwidth=bandwidth, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+    
+    def add_distplot(self, letter, column=None, bins=30, kde=True, rug=False, linked_to=None, **kwargs):
+        """
+        Agrega distribution plot (histograma + KDE).
+        
+        Args:
+            letter: Letra del layout ASCII
+            column: Nombre de columna para el distplot
+            bins: Número de bins para el histograma
+            kde: Si incluir KDE superpuesto
+            rug: Si incluir rug plot
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if column is None:
+            raise ValueError("Debe especificar 'column' para distplot")
+        MatrixLayout.map_distplot(letter, self._data, column=column, bins=bins, kde=kde, rug=rug, **kwargs)
+        if linked_to is None:
+            return self
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            return self
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_distplot(letter, data_to_use, column=column, bins=bins, kde=kde, rug=rug, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+    
+    def add_rug(self, letter, column=None, axis='x', linked_to=None, **kwargs):
+        """
+        Agrega rug plot.
+        
+        Args:
+            letter: Letra del layout ASCII
+            column: Nombre de columna para el rug plot
+            axis: Eje donde dibujar ('x' o 'y')
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if column is None:
+            raise ValueError("Debe especificar 'column' para rug plot")
+        MatrixLayout.map_rug(letter, self._data, column=column, axis=axis, **kwargs)
+        if linked_to is None:
+            return self
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            return self
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_rug(letter, data_to_use, column=column, axis=axis, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+    
+    def add_qqplot(self, letter, column=None, dist='norm', linked_to=None, **kwargs):
+        """
+        Agrega Q-Q plot.
+        
+        Args:
+            letter: Letra del layout ASCII
+            column: Nombre de columna para el Q-Q plot
+            dist: Distribución teórica ('norm', 'expon', etc.)
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if column is None:
+            raise ValueError("Debe especificar 'column' para Q-Q plot")
+        MatrixLayout.map_qqplot(letter, self._data, column=column, dist=dist, **kwargs)
+        if linked_to is None:
+            return self
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            return self
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_qqplot(letter, data_to_use, column=column, dist=dist, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+    
+    def add_ecdf(self, letter, column=None, linked_to=None, **kwargs):
+        """
+        Agrega ECDF (Empirical Cumulative Distribution Function) chart.
+        
+        Args:
+            letter: Letra del layout ASCII
+            column: Nombre de columna para el ECDF
+            linked_to: Letra de la vista principal que debe actualizar este gráfico (opcional)
+            **kwargs: Argumentos adicionales
+        
+        Returns:
+            self para encadenamiento
+        """
+        from .matrix import MatrixLayout
+        if self._data is None:
+            raise ValueError("Debe usar set_data() primero")
+        if column is None:
+            raise ValueError("Debe especificar 'column' para ECDF")
+        MatrixLayout.map_ecdf(letter, self._data, column=column, **kwargs)
+        if linked_to is None:
+            return self
+        if linked_to in self._scatter_selection_models:
+            sel = self._scatter_selection_models[linked_to]
+        elif linked_to in self._primary_view_models:
+            sel = self._primary_view_models[linked_to]
+        else:
+            return self
+        def update(items, count):
+            data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
+            try:
+                MatrixLayout.map_ecdf(letter, data_to_use, column=column, **kwargs)
+            except Exception:
+                pass
+        sel.on_change(update)
+        return self
+
     
     def display(self, ascii_layout=None):
         """

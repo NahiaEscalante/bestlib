@@ -20,5 +20,23 @@ class GroupedBarChart(ChartBase):
     def get_spec(self, data, main_col=None, sub_col=None, value_col=None, **kwargs):
         self.validate_data(data, main_col=main_col, sub_col=sub_col, **kwargs)
         prepared = self.prepare_data(data, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
-        return {'type': self.chart_type, 'grouped': True, **prepared, **kwargs}
+        
+        # Crear datos planos para 'data' (compatibilidad con validate_spec)
+        flat_data = []
+        rows = prepared.get('rows', [])
+        groups = prepared.get('groups', [])
+        series = prepared.get('series', [])
+        
+        for row_idx, row in enumerate(rows):
+            for group_idx, group in enumerate(groups):
+                value = 0
+                if group_idx < len(series) and row_idx < len(series[group_idx]):
+                    value = series[group_idx][row_idx]
+                flat_data.append({
+                    'row': row,
+                    'group': group,
+                    'value': value
+                })
+        
+        return {'type': self.chart_type, 'grouped': True, 'data': flat_data, **prepared, **kwargs}
 

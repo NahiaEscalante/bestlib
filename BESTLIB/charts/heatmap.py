@@ -18,5 +18,6 @@ class HeatmapChart(ChartBase):
     
     def get_spec(self, data, x_col=None, y_col=None, value_col=None, **kwargs):
         prepared = self.prepare_data(data, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
-        return {'type': self.chart_type, **prepared, **kwargs}
+        # Agregar 'data' para compatibilidad con validate_spec
+        return {'type': self.chart_type, 'data': prepared['cells'], **prepared, **kwargs}
 

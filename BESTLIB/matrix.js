@@ -1565,11 +1565,13 @@
       renderPolarD3(container, spec, d3, divId);
     } else if (chartType === 'funnel') {
       renderFunnelD3(container, spec, d3, divId);
+    } else if (chartType === 'grouped_bar' || chartType === 'grouped_barchart') {
+      renderGroupedBarD3(container, spec, d3, divId);
     } else {
       // Tipo de gráfico no soportado aún, mostrar mensaje visible
       const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
         '<strong>Error: Gráfico tipo "' + chartType + '" no implementado aún</strong><br/>' +
-        '<small>Tipos soportados: bar, scatter, histogram, boxplot, heatmap, line, pie, violin, radviz, star_coordinates, parallel_coordinates, line_plot, horizontal_bar, hexbin, errorbars, fill_between, step_plot</small>' +
+        '<small>Tipos soportados: bar, scatter, histogram, boxplot, heatmap, line, pie, violin, radviz, star_coordinates, parallel_coordinates, line_plot, horizontal_bar, hexbin, errorbars, fill_between, step_plot, grouped_bar</small>' +
         '</div>';
       container.innerHTML = errorMsg;
       console.error('renderChartD3: Tipo de gráfico no soportado', { chartType, spec });
@@ -8672,6 +8674,184 @@
           .style('font-weight', '600')
           .text(d.stage);
       });
+    }
+  }
+
+  /**
+   * Grouped Bar Chart con D3.js
+   */
+  function renderGroupedBarD3(container, spec, d3, divId) {
+    const rows = spec.rows || [];
+    const groups = spec.groups || [];
+    const series = spec.series || [];
+    
+    if (rows.length === 0 || groups.length === 0) {
+      console.warn('[BESTLIB] renderGroupedBarD3: No hay datos suficientes', { rows, groups, series });
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No hay datos para mostrar</div>';
+      return;
+    }
+    
+    const dims = getChartDimensions(container, spec, 500, 400);
+    let width = dims.width;
+    let height = dims.height;
+    
+    const options = spec.options || {};
+    const margin = { top: 30, right: 120, bottom: 60, left: 60 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+    
+    container.innerHTML = '';
+    
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .attr('class', 'bestlib-chart bestlib-grouped-bar');
+    
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    // Escala X para grupos principales (rows)
+    const x0 = d3.scaleBand()
+      .domain(rows)
+      .rangeRound([0, chartWidth])
+      .paddingInner(0.1);
+    
+    // Escala X para subgrupos (groups)
+    const x1 = d3.scaleBand()
+      .domain(groups)
+      .rangeRound([0, x0.bandwidth()])
+      .padding(0.05);
+    
+    // Escala Y
+    const maxValue = d3.max(series, s => d3.max(s)) || 1;
+    const y = d3.scaleLinear()
+      .domain([0, maxValue])
+      .nice()
+      .rangeRound([chartHeight, 0]);
+    
+    // Colores
+    const colorMap = options.colorMap || spec.colorMap;
+    let color;
+    if (colorMap && typeof colorMap === 'object') {
+      color = d => colorMap[d] || d3.schemeCategory10[groups.indexOf(d) % 10];
+    } else {
+      color = d3.scaleOrdinal()
+        .domain(groups)
+        .range(d3.schemeCategory10);
+    }
+    
+    // Dibujar barras
+    const rowGroups = g.append('g')
+      .selectAll('g')
+      .data(rows)
+      .join('g')
+      .attr('transform', d => `translate(${x0(d)},0)`);
+    
+    rowGroups.selectAll('rect')
+      .data((d, rowIdx) => groups.map((group, groupIdx) => ({
+        key: group,
+        value: series[groupIdx] && series[groupIdx][rowIdx] !== undefined ? series[groupIdx][rowIdx] : 0,
+        rowIdx: rowIdx,
+        groupIdx: groupIdx
+      })))
+      .join('rect')
+      .attr('x', d => x1(d.key))
+      .attr('y', d => y(d.value))
+      .attr('width', x1.bandwidth())
+      .attr('height', d => chartHeight - y(d.value))
+      .attr('fill', d => typeof color === 'function' ? color(d.key) : color)
+      .attr('class', 'bestlib-bar')
+      .on('mouseover', function(event, d) {
+        d3.select(this).attr('opacity', 0.8);
+        // Mostrar tooltip
+        const tooltip = d3.select(container)
+          .append('div')
+          .attr('class', 'bestlib-tooltip')
+          .style('position', 'absolute')
+          .style('background', 'rgba(0,0,0,0.8)')
+          .style('color', '#fff')
+          .style('padding', '8px 12px')
+          .style('border-radius', '4px')
+          .style('font-size', '12px')
+          .style('pointer-events', 'none')
+          .style('z-index', '1000')
+          .html(`<strong>${d.key}</strong><br/>Valor: ${d.value}`);
+        
+        const rect = container.getBoundingClientRect();
+        tooltip
+          .style('left', (event.clientX - rect.left + 10) + 'px')
+          .style('top', (event.clientY - rect.top - 10) + 'px');
+      })
+      .on('mouseout', function() {
+        d3.select(this).attr('opacity', 1);
+        d3.select(container).selectAll('.bestlib-tooltip').remove();
+      });
+    
+    // Eje X
+    const xAxisG = g.append('g')
+      .attr('transform', `translate(0,${chartHeight})`)
+      .call(d3.axisBottom(x0));
+    
+    applyUnifiedAxisStyles(xAxisG);
+    
+    // Eje Y
+    const yAxisG = g.append('g')
+      .call(d3.axisLeft(y));
+    
+    applyUnifiedAxisStyles(yAxisG);
+    
+    // Leyenda
+    const legend = svg.append('g')
+      .attr('transform', `translate(${width - margin.right + 10}, ${margin.top})`);
+    
+    groups.forEach((group, i) => {
+      const legendItem = legend.append('g')
+        .attr('transform', `translate(0, ${i * 22})`);
+      
+      legendItem.append('rect')
+        .attr('width', 16)
+        .attr('height', 16)
+        .attr('fill', typeof color === 'function' ? color(group) : color)
+        .attr('rx', 2);
+      
+      legendItem.append('text')
+        .attr('x', 22)
+        .attr('y', 12)
+        .attr('font-size', '11px')
+        .attr('fill', '#333')
+        .text(group);
+    });
+    
+    // Labels de ejes
+    const xLabel = options.xLabel || spec.xLabel;
+    const yLabel = options.yLabel || spec.yLabel;
+    
+    if (xLabel) {
+      const styles = getUnifiedStyles();
+      svg.append('text')
+        .attr('x', margin.left + chartWidth / 2)
+        .attr('y', height - 10)
+        .attr('text-anchor', 'middle')
+        .attr('class', 'bestlib-axis-label bestlib-axis-label-x')
+        .style('font-size', `${styles.labelFontSize}px`)
+        .style('font-weight', styles.labelFontWeight)
+        .style('fill', styles.textColor)
+        .text(xLabel);
+    }
+    
+    if (yLabel) {
+      const styles = getUnifiedStyles();
+      svg.append('text')
+        .attr('x', -(margin.top + chartHeight / 2))
+        .attr('y', 15)
+        .attr('text-anchor', 'middle')
+        .attr('transform', 'rotate(-90)')
+        .attr('class', 'bestlib-axis-label bestlib-axis-label-y')
+        .style('font-size', `${styles.labelFontSize}px`)
+        .style('font-weight', styles.labelFontWeight)
+        .style('fill', styles.textColor)
+        .text(yLabel);
     }
   }
 

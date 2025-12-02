@@ -77,7 +77,7 @@ class StepPlotChart(ChartBase):
             **kwargs: Otros parámetros
         
         Returns:
-            tuple: (datos_procesados, datos_originales)
+            dict: Diccionario con 'series' (prepare_line_data devuelve dict, no tupla)
         """
         # Ordenar por x_col para step plot
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
@@ -86,13 +86,14 @@ class StepPlotChart(ChartBase):
             # Para listas, ordenar manualmente
             data_sorted = sorted(data, key=lambda d: d.get(x_col, 0))
         
-        processed_data, original_data = prepare_line_data(
+        # prepare_line_data devuelve {'series': {...}}, no una tupla
+        line_data = prepare_line_data(
             data_sorted,
             x_col=x_col,
             y_col=y_col
         )
         
-        return processed_data, original_data
+        return line_data
     
     def get_spec(self, data, x_col=None, y_col=None, **kwargs):
         """
@@ -110,13 +111,18 @@ class StepPlotChart(ChartBase):
         # Validar datos
         self.validate_data(data, x_col=x_col, y_col=y_col, **kwargs)
         
-        # Preparar datos
-        processed_data, original_data = self.prepare_data(
+        # Preparar datos (devuelve dict con 'series')
+        prepared_data = self.prepare_data(
             data,
             x_col=x_col,
             y_col=y_col,
             **kwargs
         )
+        
+        # Extraer puntos de todas las series para 'data'
+        all_points = []
+        for series_points in prepared_data.get('series', {}).values():
+            all_points.extend(series_points)
         
         # Procesar figsize si está en kwargs
         process_figsize_in_kwargs(kwargs)
@@ -130,7 +136,8 @@ class StepPlotChart(ChartBase):
         # Construir spec
         spec = {
             'type': self.chart_type,
-            'data': processed_data,
+            'data': all_points,
+            'series': prepared_data.get('series', {}),
         }
         
         # Agregar encoding

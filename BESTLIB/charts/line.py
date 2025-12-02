@@ -19,5 +19,11 @@ class LineChart(ChartBase):
     def get_spec(self, data, x_col=None, y_col=None, series_col=None, **kwargs):
         self.validate_data(data, x_col=x_col, y_col=y_col, **kwargs)
         line_data = self.prepare_data(data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
-        return {'type': self.chart_type, **line_data, **kwargs}
+        
+        # Extraer puntos de todas las series para 'data' (compatibilidad con validate_spec)
+        all_points = []
+        for series_points in line_data.get('series', {}).values():
+            all_points.extend(series_points)
+        
+        return {'type': self.chart_type, 'data': all_points, **line_data, **kwargs}
 

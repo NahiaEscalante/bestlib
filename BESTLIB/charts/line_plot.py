@@ -126,10 +126,16 @@ class LinePlotChart(ChartBase):
         if 'yLabel' not in kwargs and y_col:
             kwargs['yLabel'] = y_col
         
+        # Extraer puntos de todas las series para 'data' (compatibilidad con validate_spec)
+        all_points = []
+        for series_points in line_data.get('series', {}).values():
+            all_points.extend(series_points)
+        
         # Construir spec
         # line_data ya contiene 'series', así que lo desempacamos directamente
         spec = {
             'type': self.chart_type,
+            'data': all_points,  # Agregar 'data' para compatibilidad
         }
         spec.update(line_data)  # Agregar 'series' al spec
         
