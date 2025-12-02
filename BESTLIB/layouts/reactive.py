@@ -2212,40 +2212,55 @@ class ReactiveMatrixLayout:
                     y_label = spec.get('yLabel', '')
                     
                     # JavaScript para actualizar el boxplot
+                    div_id = boxplot_params.get('layout_div_id', '')
                     js_update = f"""
                     (function() {{
-                        console.log('🟢 [BESTLIB] Actualizando boxplot {letter}...');
-                        
-                        // Buscar la celda del boxplot
-                        const cells = document.querySelectorAll('.matrix-cell');
-                        console.log('   - Celdas encontradas:', cells.length);
-                        
-                        let targetCell = null;
-                        for (const cell of cells) {{
-                            const letterSpan = cell.querySelector('.cell-letter');
-                            if (letterSpan && letterSpan.textContent.trim() === '{letter}') {{
-                                targetCell = cell;
-                                console.log('   - Celda encontrada para letra {letter}');
-                                break;
+                        // Usar setTimeout para asegurar que el DOM esté listo
+                        setTimeout(function() {{
+                            console.log('🟢 [BESTLIB] Actualizando boxplot {letter}...');
+                            
+                            // Buscar el contenedor del layout
+                            let container = document.getElementById('{div_id}');
+                            if (!container) {{
+                                container = document.querySelector('.bestlib-matrix-container');
                             }}
-                        }}
-                        
-                        if (!targetCell) {{
-                            console.log('   ❌ No se encontró celda para letra {letter}');
-                            return;
-                        }}
-                        if (!window.d3) {{
-                            console.log('   ❌ D3.js no está disponible');
-                            return;
-                        }}
-                        
-                        // Obtener dimensiones originales
-                        const svg = d3.select(targetCell).select('svg');
-                        if (svg.empty()) {{
-                            console.log('   ❌ No se encontró SVG en la celda');
-                            return;
-                        }}
-                        console.log('   ✅ SVG encontrado, actualizando...');
+                            if (!container) {{
+                                container = document;
+                            }}
+                            console.log('   - Container:', container.id || 'document');
+                            
+                            // Buscar la celda por data-letter (más confiable)
+                            let targetCell = container.querySelector('.matrix-cell[data-letter="{letter}"]');
+                            
+                            if (!targetCell) {{
+                                // Fallback: buscar en todo el documento
+                                targetCell = document.querySelector('.matrix-cell[data-letter="{letter}"]');
+                            }}
+                            
+                            if (!targetCell) {{
+                                console.log('   ❌ No se encontró celda para letra {letter}');
+                                // Debug: mostrar todas las celdas disponibles
+                                const allCells = document.querySelectorAll('.matrix-cell');
+                                console.log('   - Total celdas:', allCells.length);
+                                allCells.forEach((c, i) => {{
+                                    console.log('      Celda', i, ':', c.getAttribute('data-letter'));
+                                }});
+                                return;
+                            }}
+                            console.log('   ✅ Celda encontrada para letra {letter}');
+                            
+                            if (!window.d3) {{
+                                console.log('   ❌ D3.js no está disponible');
+                                return;
+                            }}
+                            
+                            // Obtener dimensiones originales
+                            const svg = d3.select(targetCell).select('svg');
+                            if (svg.empty()) {{
+                                console.log('   ❌ No se encontró SVG en la celda');
+                                return;
+                            }}
+                            console.log('   ✅ SVG encontrado');
                         
                         const originalWidth = parseInt(svg.attr('width')) || 400;
                         const originalHeight = parseInt(svg.attr('height')) || 300;
@@ -2365,6 +2380,9 @@ class ReactiveMatrixLayout:
                                 .style('font-size', '12px')
                                 .text('{y_label}');
                         }}
+                            
+                            console.log('   ✅ Boxplot {letter} renderizado completamente');
+                        }}, 100); // Fin del setTimeout
                     }})();
                     """
                     
