@@ -2210,179 +2210,172 @@ class ReactiveMatrixLayout:
                     title = spec.get('title', '')
                     x_label = spec.get('xLabel', '')
                     y_label = spec.get('yLabel', '')
+                    div_id = boxplot_params.get('layout_div_id', '')
                     
                     # JavaScript para actualizar el boxplot
-                    div_id = boxplot_params.get('layout_div_id', '')
                     js_update = f"""
                     (function() {{
-                        // Usar setTimeout para asegurar que el DOM esté listo
                         setTimeout(function() {{
                             console.log('🟢 [BESTLIB] Actualizando boxplot {letter}...');
                             
                             // Buscar el contenedor del layout
                             let container = document.getElementById('{div_id}');
-                            if (!container) {{
-                                container = document.querySelector('.bestlib-matrix-container');
-                            }}
-                            if (!container) {{
-                                container = document;
-                            }}
+                            if (!container) container = document.querySelector('.bestlib-matrix-container');
+                            if (!container) container = document;
                             console.log('   - Container:', container.id || 'document');
                             
-                            // Buscar la celda por data-letter (más confiable)
+                            // Buscar la celda por data-letter
                             let targetCell = container.querySelector('.matrix-cell[data-letter="{letter}"]');
-                            
-                            if (!targetCell) {{
-                                // Fallback: buscar en todo el documento
-                                targetCell = document.querySelector('.matrix-cell[data-letter="{letter}"]');
-                            }}
+                            if (!targetCell) targetCell = document.querySelector('.matrix-cell[data-letter="{letter}"]');
                             
                             if (!targetCell) {{
                                 console.log('   ❌ No se encontró celda para letra {letter}');
-                                // Debug: mostrar todas las celdas disponibles
-                                const allCells = document.querySelectorAll('.matrix-cell');
-                                console.log('   - Total celdas:', allCells.length);
-                                allCells.forEach((c, i) => {{
-                                    console.log('      Celda', i, ':', c.getAttribute('data-letter'));
-                                }});
                                 return;
                             }}
-                            console.log('   ✅ Celda encontrada para letra {letter}');
+                            console.log('   ✅ Celda encontrada');
                             
                             if (!window.d3) {{
-                                console.log('   ❌ D3.js no está disponible');
+                                console.log('   ❌ D3.js no disponible');
                                 return;
                             }}
                             
-                            // Obtener dimensiones originales
                             const svg = d3.select(targetCell).select('svg');
                             if (svg.empty()) {{
-                                console.log('   ❌ No se encontró SVG en la celda');
+                                console.log('   ❌ SVG no encontrado');
                                 return;
                             }}
                             console.log('   ✅ SVG encontrado');
-                        
-                        const originalWidth = parseInt(svg.attr('width')) || 400;
-                        const originalHeight = parseInt(svg.attr('height')) || 300;
-                        
-                        // Limpiar contenido anterior
-                        svg.selectAll('*').remove();
-                        
-                        // Datos del boxplot
-                        const boxData = {box_data_json};
-                        if (!boxData || boxData.length === 0) return;
-                        
-                        // Configuración
-                        const margin = {{top: 50, right: 30, bottom: 70, left: 60}};
-                        const width = originalWidth - margin.left - margin.right;
-                        const height = originalHeight - margin.top - margin.bottom;
-                        
-                        // Crear grupo principal
-                        const g = svg.append('g')
-                            .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
-                        
-                        // Escalas
-                        const categories = boxData.map(d => d.category);
-                        const xScale = d3.scaleBand()
-                            .domain(categories)
-                            .range([0, width])
-                            .padding(0.3);
-                        
-                        const allValues = boxData.flatMap(d => [d.min, d.max]);
-                        const yScale = d3.scaleLinear()
-                            .domain([d3.min(allValues), d3.max(allValues)])
-                            .nice()
-                            .range([height, 0]);
-                        
-                        // Dibujar boxplots
-                        boxData.forEach(d => {{
-                            const x = xScale(d.category);
-                            const boxWidth = xScale.bandwidth();
                             
-                            // Línea vertical (min-max)
-                            g.append('line')
-                                .attr('x1', x + boxWidth/2)
-                                .attr('x2', x + boxWidth/2)
-                                .attr('y1', yScale(d.min))
-                                .attr('y2', yScale(d.max))
-                                .attr('stroke', '#333')
-                                .attr('stroke-width', 1);
+                            const originalWidth = parseInt(svg.attr('width')) || 400;
+                            const originalHeight = parseInt(svg.attr('height')) || 300;
+                            console.log('   - Dimensiones:', originalWidth, 'x', originalHeight);
                             
-                            // Caja (Q1-Q3)
-                            g.append('rect')
-                                .attr('x', x)
-                                .attr('y', yScale(d.q3))
-                                .attr('width', boxWidth)
-                                .attr('height', yScale(d.q1) - yScale(d.q3))
-                                .attr('fill', '#4a90e2')
-                                .attr('stroke', '#333')
-                                .attr('stroke-width', 1);
+                            svg.selectAll('*').remove();
                             
-                            // Mediana
-                            g.append('line')
-                                .attr('x1', x)
-                                .attr('x2', x + boxWidth)
-                                .attr('y1', yScale(d.median))
-                                .attr('y2', yScale(d.median))
-                                .attr('stroke', '#fff')
-                                .attr('stroke-width', 2);
+                            const boxData = {box_data_json};
+                            console.log('   - Datos:', JSON.stringify(boxData));
                             
-                            // Whiskers
-                            [d.min, d.max].forEach(val => {{
+                            // Validar datos
+                            const validData = boxData.filter(d => {{
+                                return d && 
+                                    typeof d.min === 'number' && !isNaN(d.min) &&
+                                    typeof d.max === 'number' && !isNaN(d.max) &&
+                                    typeof d.q1 === 'number' && !isNaN(d.q1) &&
+                                    typeof d.q3 === 'number' && !isNaN(d.q3) &&
+                                    typeof d.median === 'number' && !isNaN(d.median);
+                            }});
+                            
+                            if (validData.length === 0) {{
+                                console.log('   ❌ No hay datos válidos');
+                                svg.append('text')
+                                    .attr('x', originalWidth/2)
+                                    .attr('y', originalHeight/2)
+                                    .attr('text-anchor', 'middle')
+                                    .text('Sin datos válidos');
+                                return;
+                            }}
+                            console.log('   ✅ Datos válidos:', validData.length);
+                            
+                            const margin = {{top: 50, right: 30, bottom: 70, left: 60}};
+                            const width = originalWidth - margin.left - margin.right;
+                            const height = originalHeight - margin.top - margin.bottom;
+                            
+                            const g = svg.append('g')
+                                .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
+                            
+                            const categories = validData.map(d => d.category);
+                            const xScale = d3.scaleBand()
+                                .domain(categories)
+                                .range([0, width])
+                                .padding(0.3);
+                            
+                            const allValues = validData.flatMap(d => [d.min, d.max]);
+                            const yScale = d3.scaleLinear()
+                                .domain([d3.min(allValues), d3.max(allValues)])
+                                .nice()
+                                .range([height, 0]);
+                            
+                            validData.forEach(d => {{
+                                const x = xScale(d.category);
+                                const boxWidth = xScale.bandwidth();
+                                
                                 g.append('line')
-                                    .attr('x1', x + boxWidth * 0.25)
-                                    .attr('x2', x + boxWidth * 0.75)
-                                    .attr('y1', yScale(val))
-                                    .attr('y2', yScale(val))
+                                    .attr('x1', x + boxWidth/2)
+                                    .attr('x2', x + boxWidth/2)
+                                    .attr('y1', yScale(d.min))
+                                    .attr('y2', yScale(d.max))
                                     .attr('stroke', '#333')
                                     .attr('stroke-width', 1);
+                                
+                                g.append('rect')
+                                    .attr('x', x)
+                                    .attr('y', yScale(d.q3))
+                                    .attr('width', boxWidth)
+                                    .attr('height', yScale(d.q1) - yScale(d.q3))
+                                    .attr('fill', '#4a90e2')
+                                    .attr('stroke', '#333')
+                                    .attr('stroke-width', 1);
+                                
+                                g.append('line')
+                                    .attr('x1', x)
+                                    .attr('x2', x + boxWidth)
+                                    .attr('y1', yScale(d.median))
+                                    .attr('y2', yScale(d.median))
+                                    .attr('stroke', '#fff')
+                                    .attr('stroke-width', 2);
+                                
+                                [d.min, d.max].forEach(val => {{
+                                    g.append('line')
+                                        .attr('x1', x + boxWidth * 0.25)
+                                        .attr('x2', x + boxWidth * 0.75)
+                                        .attr('y1', yScale(val))
+                                        .attr('y2', yScale(val))
+                                        .attr('stroke', '#333')
+                                        .attr('stroke-width', 1);
+                                }});
                             }});
-                        }});
-                        
-                        // Ejes
-                        g.append('g')
-                            .attr('transform', `translate(0,${{height}})`)
-                            .call(d3.axisBottom(xScale))
-                            .selectAll('text')
-                            .attr('transform', 'rotate(-45)')
-                            .style('text-anchor', 'end');
-                        
-                        g.append('g')
-                            .call(d3.axisLeft(yScale));
-                        
-                        // Título
-                        if ('{title}') {{
-                            svg.append('text')
-                                .attr('x', originalWidth / 2)
-                                .attr('y', 20)
-                                .attr('text-anchor', 'middle')
-                                .style('font-size', '14px')
-                                .style('font-weight', 'bold')
-                                .text('{title}');
-                        }}
-                        
-                        // Etiquetas de ejes
-                        if ('{x_label}') {{
-                            svg.append('text')
-                                .attr('x', originalWidth / 2)
-                                .attr('y', originalHeight - 10)
-                                .attr('text-anchor', 'middle')
-                                .style('font-size', '12px')
-                                .text('{x_label}');
-                        }}
-                        
-                        if ('{y_label}') {{
-                            svg.append('text')
-                                .attr('transform', 'rotate(-90)')
-                                .attr('x', -originalHeight / 2)
-                                .attr('y', 15)
-                                .attr('text-anchor', 'middle')
-                                .style('font-size', '12px')
-                                .text('{y_label}');
-                        }}
                             
-                            console.log('   ✅ Boxplot {letter} renderizado completamente');
-                        }}, 100); // Fin del setTimeout
+                            g.append('g')
+                                .attr('transform', `translate(0,${{height}})`)
+                                .call(d3.axisBottom(xScale))
+                                .selectAll('text')
+                                .attr('transform', 'rotate(-45)')
+                                .style('text-anchor', 'end');
+                            
+                            g.append('g')
+                                .call(d3.axisLeft(yScale));
+                            
+                            if ('{title}') {{
+                                svg.append('text')
+                                    .attr('x', originalWidth / 2)
+                                    .attr('y', 20)
+                                    .attr('text-anchor', 'middle')
+                                    .style('font-size', '14px')
+                                    .style('font-weight', 'bold')
+                                    .text('{title}');
+                            }}
+                            
+                            if ('{x_label}') {{
+                                svg.append('text')
+                                    .attr('x', originalWidth / 2)
+                                    .attr('y', originalHeight - 10)
+                                    .attr('text-anchor', 'middle')
+                                    .style('font-size', '12px')
+                                    .text('{x_label}');
+                            }}
+                            
+                            if ('{y_label}') {{
+                                svg.append('text')
+                                    .attr('transform', 'rotate(-90)')
+                                    .attr('x', -originalHeight / 2)
+                                    .attr('y', 15)
+                                    .attr('text-anchor', 'middle')
+                                    .style('font-size', '12px')
+                                    .text('{y_label}');
+                            }}
+                            
+                            console.log('   ✅ Boxplot {letter} renderizado');
+                        }}, 100);
                     }})();
                     """
                     
