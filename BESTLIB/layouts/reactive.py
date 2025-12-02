@@ -306,14 +306,8 @@ class ReactiveMatrixLayout:
         
         def scatter_handler(payload):
             """Handler que actualiza el SelectionModel de este scatter plot Y el modelo principal"""
-            # SIEMPRE mostrar para debugging
-            print(f"🔵 [scatter_handler] Evento recibido para scatter '{scatter_letter_capture}'")
-            print(f"   - Payload keys: {list(payload.keys())}")
-            
             # ✅ CORRECCIÓN: Validar items primero
             items = payload.get('items', [])
-            print(f"   - Items count: {len(items)}")
-            
             if not isinstance(items, list):
                 if self._debug or MatrixLayout._debug:
                     print(f"⚠️ [ReactiveMatrixLayout] items no es lista: {type(items)}")
@@ -322,14 +316,11 @@ class ReactiveMatrixLayout:
             # ✅ CORRECCIÓN: Filtrado más flexible
             # Aceptar tanto __scatter_letter__ como __view_letter__ para compatibilidad
             event_scatter_letter = payload.get('__scatter_letter__') or payload.get('__view_letter__')
-            print(f"   - Event letter: {event_scatter_letter}")
-            
             if event_scatter_letter is not None and event_scatter_letter != scatter_letter_capture:
                 # Este evento no es para este scatter plot, ignorar
-                print(f"⏭️ [scatter_handler] Evento ignorado (esperado '{scatter_letter_capture}')")
+                if self._debug or MatrixLayout._debug:
+                    print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{scatter_letter_capture}', recibido '{event_scatter_letter}'")
                 return
-            
-            print(f"   ✅ Evento aceptado, actualizando SelectionModel ID: {id(scatter_selection_capture)}")
             
             if self._debug or MatrixLayout._debug:
                 print(f"✅ [ReactiveMatrixLayout] Evento recibido para scatter '{scatter_letter_capture}': {len(items)} items")
@@ -346,9 +337,7 @@ class ReactiveMatrixLayout:
             
             # Actualizar el SelectionModel específico de este scatter plot
             # Esto disparará los callbacks registrados (como update_histogram, update_boxplot)
-            print(f"   - Callbacks registrados en SelectionModel: {len(scatter_selection_capture._callbacks)}")
             scatter_selection_capture.update(data_to_update)
-            print(f"   - SelectionModel.update() completado")
             
             # IMPORTANTE: También actualizar el selection_model principal para que selected_data se actualice
             # Esto asegura que los datos seleccionados estén disponibles globalmente
@@ -381,11 +370,11 @@ class ReactiveMatrixLayout:
         
         # Crear scatter plot spec con identificadores incluidos
         scatter_spec = self._register_chart(
-            letter, 
+            letter,
             'scatter',
-            self._data, 
-            x_col=x_col, 
-            y_col=y_col, 
+            self._data,
+            x_col=x_col,
+            y_col=y_col,
             category_col=category_col,
             **kwargs_with_identifier  # ✅ interactive ya está aquí
         )
@@ -2188,19 +2177,12 @@ class ReactiveMatrixLayout:
         # Función de actualización del boxplot (con actualización del DOM)
         def update_boxplot(items, count):
             """Actualiza el boxplot cuando cambia la selección"""
-            # SIEMPRE mostrar este mensaje para debugging
-            print(f"🟢 [update_boxplot] Callback ejecutado para boxplot '{letter}'")
-            print(f"   - Items count: {count}")
-            print(f"   - Primary letter: {primary_letter}")
-            print(f"   - SelectionModel ID: {id(primary_selection)}")
-            
             if self._debug or MatrixLayout._debug:
                 print(f"   🔄 Boxplot '{letter}' callback ejecutándose con {count} items")
             
             try:
                 # Usar el helper para extraer datos filtrados
                 data_to_use = self._extract_filtered_data(items)
-                print(f"   - Data filtrada: {len(data_to_use) if hasattr(data_to_use, '__len__') else 'N/A'} items")
                 
                 # Regenerar spec con datos filtrados
                 kwargs_update = boxplot_params['kwargs'].copy()
@@ -2216,52 +2198,54 @@ class ReactiveMatrixLayout:
                     value_col=column,
                     **kwargs_update
                 )
-                print(f"   - Spec registrado")
                 
                 # CRÍTICO: Actualizar el DOM con JavaScript
                 spec = self._layout._map.get(letter)
-                print(f"   - Spec obtenido: {spec is not None}")
-                if spec:
-                    print(f"   - Spec tiene data: {spec.get('data') is not None}")
-                    print(f"   - Data length: {len(spec.get('data', []))}")
-                
                 if spec and spec.get('data'):
-                    print(f"   - Generando JavaScript para actualizar DOM...")
                     import json
                     from IPython.display import Javascript, display
                     
                     # Preparar datos para JavaScript
-                    try:
-                        box_data_json = json.dumps(spec['data'])
-                        print(f"   - JSON generado: {len(box_data_json)} caracteres")
-                    except Exception as e:
-                        print(f"   ❌ Error generando JSON: {e}")
-                        raise
-                    
+                    box_data_json = json.dumps(spec['data'])
                     title = spec.get('title', '')
                     x_label = spec.get('xLabel', '')
                     y_label = spec.get('yLabel', '')
-                    print(f"   - Metadatos: title={bool(title)}, xLabel={bool(x_label)}, yLabel={bool(y_label)}")
                     
                     # JavaScript para actualizar el boxplot
                     js_update = f"""
                     (function() {{
+                        console.log('🟢 [BESTLIB] Actualizando boxplot {letter}...');
+                        
                         // Buscar la celda del boxplot
                         const cells = document.querySelectorAll('.matrix-cell');
+                        console.log('   - Celdas encontradas:', cells.length);
+                        
                         let targetCell = null;
                         for (const cell of cells) {{
                             const letterSpan = cell.querySelector('.cell-letter');
                             if (letterSpan && letterSpan.textContent.trim() === '{letter}') {{
                                 targetCell = cell;
+                                console.log('   - Celda encontrada para letra {letter}');
                                 break;
                             }}
                         }}
                         
-                        if (!targetCell || !window.d3) return;
+                        if (!targetCell) {{
+                            console.log('   ❌ No se encontró celda para letra {letter}');
+                            return;
+                        }}
+                        if (!window.d3) {{
+                            console.log('   ❌ D3.js no está disponible');
+                            return;
+                        }}
                         
                         // Obtener dimensiones originales
                         const svg = d3.select(targetCell).select('svg');
-                        if (svg.empty()) return;
+                        if (svg.empty()) {{
+                            console.log('   ❌ No se encontró SVG en la celda');
+                            return;
+                        }}
+                        console.log('   ✅ SVG encontrado, actualizando...');
                         
                         const originalWidth = parseInt(svg.attr('width')) || 400;
                         const originalHeight = parseInt(svg.attr('height')) || 300;
@@ -2381,27 +2365,20 @@ class ReactiveMatrixLayout:
                                 .style('font-size', '12px')
                                 .text('{y_label}');
                         }}
-                }})();
+                    }})();
                     """
                     
                     # Ejecutar JavaScript
-                    print(f"   - Ejecutando JavaScript ({len(js_update)} caracteres)...")
-                    try:
-                        display(Javascript(js_update), display_id=f'boxplot-update-{letter}', update=True)
-                        print(f"   ✅ JavaScript ejecutado")
-                    except Exception as e:
-                        print(f"   ❌ Error ejecutando JavaScript: {e}")
-                        raise
+                    display(Javascript(js_update), display_id=f'boxplot-update-{letter}', update=True)
                 
                 if self._debug or MatrixLayout._debug:
                     print(f"   ✅ Boxplot '{letter}' actualizado en DOM")
-                else:
-                    print(f"   ✅ Boxplot '{letter}' actualizado en DOM")
                     
             except Exception as e:
-                print(f"❌ Error actualizando boxplot: {e}")
-                import traceback
-                traceback.print_exc()
+                if self._debug or MatrixLayout._debug:
+                    print(f"⚠️ Error actualizando boxplot: {e}")
+                    import traceback
+                    traceback.print_exc()
         
         # Registrar callback en el SelectionModel de la vista principal
         primary_selection.on_change(update_boxplot)
@@ -3764,7 +3741,7 @@ class ReactiveMatrixLayout:
                 if var_name == selection_var and view_letter in self._primary_view_models:
                     return self._primary_view_models[view_letter].get_items()
             return self._empty_selection()
-            return self.selection_model.get_items()
+        return self.selection_model.get_items()
     
     def set_selection(self, selection_var_name, items):
         """
