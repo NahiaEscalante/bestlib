@@ -2200,6 +2200,7 @@ class ReactiveMatrixLayout:
             try:
                 # Usar el helper para extraer datos filtrados
                 data_to_use = self._extract_filtered_data(items)
+                print(f"   - Data filtrada: {len(data_to_use) if hasattr(data_to_use, '__len__') else 'N/A'} items")
                 
                 # Regenerar spec con datos filtrados
                 kwargs_update = boxplot_params['kwargs'].copy()
@@ -2215,9 +2216,15 @@ class ReactiveMatrixLayout:
                     value_col=column,
                     **kwargs_update
                 )
+                print(f"   - Spec registrado")
                 
                 # CRÍTICO: Actualizar el DOM con JavaScript
                 spec = self._layout._map.get(letter)
+                print(f"   - Spec obtenido: {spec is not None}")
+                if spec:
+                    print(f"   - Spec tiene data: {spec.get('data') is not None}")
+                    print(f"   - Data length: {len(spec.get('data', []))}")
+                
                 if spec and spec.get('data'):
                     import json
                     from IPython.display import Javascript, display
