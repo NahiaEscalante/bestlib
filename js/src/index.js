@@ -928,49 +928,68 @@
    * @param {object} axisSelection - Selección D3 del eje
    */
   function applyUnifiedAxisStyles(axisSelection) {
+    const styles = getUnifiedStyles();
     axisSelection.selectAll('text')
       .style('font-size', '11px')
       .style('font-weight', '600')
-      .style('fill', '#000000')
+      .style('fill', styles.textColor)
       .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
       .attr('class', 'bestlib-axis-text');
     
     axisSelection.selectAll('line, path')
-      .style('stroke', '#000000')
+      .style('stroke', styles.textColor)
       .style('stroke-width', '2px')
       .attr('class', 'bestlib-axis');
   }
   
   /**
-   * Obtiene valores de estilo unificados
+   * Obtiene el valor de una variable CSS de forma segura
+   * @param {string} name - Nombre de la variable CSS (ej: '--chart-primary-color')
+   * @param {string} fallback - Valor por defecto si la variable no existe
+   * @returns {string} Valor de la variable CSS o fallback
+   */
+  function getCSSVariable(name, fallback) {
+    try {
+      const root = document.documentElement;
+      const value = getComputedStyle(root).getPropertyValue(name).trim();
+      return value || fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+  
+  /**
+   * Obtiene valores de estilo unificados leyendo variables CSS
    * @returns {object} Objeto con valores de estilo estándar
    */
   function getUnifiedStyles() {
     return {
-      primaryColor: '#4a90e2',
-      primaryHover: '#357abd',
-      selectionColor: '#ff6b35',
-      textColor: '#000000',
-      textSecondary: '#666666',
-      lineWidth: 2,
-      lineWidthThick: 2.5,
-      lineWidthThin: 1.5,
-      axisWidth: 2,
-      pointRadius: 4,
-      pointRadiusHover: 6,
-      pointRadiusSelected: 6,
-      pointStrokeWidth: 1.5,
-      opacityDefault: 1,
-      opacityHover: 0.85,
-      opacitySelected: 1,
-      opacityUnselected: 0.3,
-      opacityFill: 0.3,
-      labelFontSize: 13,
-      labelFontWeight: 700,
-      tickFontSize: 11,
-      tickFontWeight: 600,
-      transitionDuration: 300,
-      transitionDurationSlow: 500
+      primaryColor: getCSSVariable('--chart-primary-color', '#4a90e2'),
+      primaryHover: getCSSVariable('--chart-primary-hover', '#357abd'),
+      selectionColor: getCSSVariable('--chart-selection-color', '#ff6b35'),
+      textColor: getCSSVariable('--chart-text-color', '#000000'),
+      textSecondary: getCSSVariable('--chart-text-secondary', '#666666'),
+      backgroundColor: getCSSVariable('--chart-background', '#ffffff'),
+      gridColor: getCSSVariable('--chart-grid-color', '#e0e0e0'),
+      lineWidth: parseFloat(getCSSVariable('--chart-line-width', '2px')) || 2,
+      lineWidthThick: parseFloat(getCSSVariable('--chart-line-width-thick', '2.5px')) || 2.5,
+      lineWidthThin: parseFloat(getCSSVariable('--chart-line-width-thin', '1.5px')) || 1.5,
+      axisWidth: parseFloat(getCSSVariable('--chart-axis-width', '2px')) || 2,
+      pointRadius: parseFloat(getCSSVariable('--chart-point-radius', '4px')) || 4,
+      pointRadiusHover: parseFloat(getCSSVariable('--chart-point-radius-hover', '6px')) || 6,
+      pointRadiusSelected: parseFloat(getCSSVariable('--chart-point-radius-selected', '6px')) || 6,
+      pointStrokeWidth: parseFloat(getCSSVariable('--chart-point-stroke-width', '1.5px')) || 1.5,
+      opacityDefault: parseFloat(getCSSVariable('--chart-opacity-default', '1')) || 1,
+      opacityHover: parseFloat(getCSSVariable('--chart-opacity-hover', '0.85')) || 0.85,
+      opacitySelected: parseFloat(getCSSVariable('--chart-opacity-selected', '1')) || 1,
+      opacityUnselected: parseFloat(getCSSVariable('--chart-opacity-unselected', '0.3')) || 0.3,
+      opacityFill: parseFloat(getCSSVariable('--chart-opacity-fill', '0.3')) || 0.3,
+      labelFontSize: parseFloat(getCSSVariable('--chart-label-font-size', '13px')) || 13,
+      labelFontWeight: parseInt(getCSSVariable('--chart-label-font-weight', '700')) || 700,
+      tickFontSize: parseFloat(getCSSVariable('--chart-tick-font-size', '11px')) || 11,
+      tickFontWeight: parseInt(getCSSVariable('--chart-tick-font-weight', '600')) || 600,
+      transitionDuration: parseFloat(getCSSVariable('--chart-transition-duration', '300ms')) || 300,
+      transitionDurationSlow: parseFloat(getCSSVariable('--chart-transition-duration-slow', '500ms')) || 500
     };
   }
   
@@ -3042,7 +3061,8 @@
       .call(d3.drag()
         .on('start', function(event, d) {
           event.sourceEvent.stopPropagation(); // Evitar conflictos con otros eventos
-          d3.select(this).attr('fill', '#ff6b35').attr('r', 8);
+          const styles = getUnifiedStyles();
+          d3.select(this).attr('fill', styles.selectionColor).attr('r', 8);
         })
         .on('drag', function(event, d) {
           event.sourceEvent.stopPropagation();
@@ -4219,6 +4239,7 @@
         
         // Función para actualizar visualización de líneas según selección
         function updateLineVisualization() {
+          const styles = getUnifiedStyles();
           g.selectAll('.pcline').each(function(d, i) {
             const line = d3.select(this);
             const isSelected = selectedLineIndices.has(i);
@@ -4230,7 +4251,7 @@
               line
                 .attr('stroke-width', 4)
                 .attr('opacity', 1)
-                .attr('stroke', '#ff6b35'); // Color naranja para selección
+                .attr('stroke', styles.selectionColor); // Color de selección del tema
             } else {
               // Línea no seleccionada: color normal según categoría
               const lineColor = (() => {
@@ -4238,9 +4259,9 @@
                   if (categoryCol && d[categoryCol] && categories.includes(d[categoryCol])) {
                     return color(d[categoryCol]);
                   }
-                  return '#4a90e2';
+                  return styles.primaryColor;
                 } catch (err) {
-                  return '#4a90e2';
+                  return styles.primaryColor;
                 }
               })();
               
@@ -5335,10 +5356,11 @@
       xAxis.call(xAxisGenerator);
       
       // Estilizar etiquetas del eje X
+      const styles = getUnifiedStyles();
       xAxis.selectAll('text')
         .style('font-size', needsRotation ? '10px' : '11px')
         .style('font-weight', '600')
-        .style('fill', '#000000')
+        .style('fill', styles.textColor)
         .style('font-family', 'Arial, sans-serif')
         .attr('transform', rotationAngle !== 0 ? `rotate(${rotationAngle})` : null)
         .style('text-anchor', rotationAngle !== 0 ? 'end' : 'middle')
@@ -5370,13 +5392,14 @@
       const titleY = margin.top - 10;
       const titleX = chartWidth / 2;
       
+      const styles = getUnifiedStyles();
       svg.append('text')
         .attr('x', titleX + margin.left)
         .attr('y', titleY)
         .attr('text-anchor', 'middle')
         .style('font-size', `${titleFontSize}px`)
         .style('font-weight', '700')
-        .style('fill', '#000000')
+        .style('fill', styles.textColor)
         .style('font-family', 'Arial, sans-serif')
         .text(spec.title);
     }
@@ -5579,13 +5602,14 @@
 
     // axes for grouped version (renderizar por defecto a menos que axes === false)
     if (spec.axes !== false) {
+      const styles = getUnifiedStyles();
       const xAxis = g.append('g').attr('transform', `translate(0,${chartHeight})`).call(d3.axisBottom(x0));
-      xAxis.selectAll('text').style('font-size', '12px').style('font-weight', '600').style('fill', '#000000');
-      xAxis.selectAll('line, path').style('stroke', '#000000').style('stroke-width', '1.5px');
+      xAxis.selectAll('text').style('font-size', '12px').style('font-weight', '600').style('fill', styles.textColor);
+      xAxis.selectAll('line, path').style('stroke', styles.textColor).style('stroke-width', '1.5px');
       
       const yAxis = g.append('g').call(d3.axisLeft(y2));
-      yAxis.selectAll('text').style('font-size', '12px').style('font-weight', '600').style('fill', '#000000');
-      yAxis.selectAll('line, path').style('stroke', '#000000').style('stroke-width', '1.5px');
+      yAxis.selectAll('text').style('font-size', '12px').style('font-weight', '600').style('fill', styles.textColor);
+      yAxis.selectAll('line, path').style('stroke', styles.textColor).style('stroke-width', '1.5px');
       
       // Renderizar etiquetas de ejes usando función helper
       renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
@@ -5690,14 +5714,15 @@
         .attr('transform', `translate(0,${chartHeight})`)
         .call(d3.axisBottom(x));
       
+      const styles = getUnifiedStyles();
       xAxis.selectAll('text')
         .style('font-size', '12px')
         .style('font-weight', '600')
-        .style('fill', '#000000')  // NEGRO
+        .style('fill', styles.textColor)
         .style('font-family', 'Arial, sans-serif');
       
       xAxis.selectAll('line, path')
-        .style('stroke', '#000000')
+        .style('stroke', styles.textColor)
         .style('stroke-width', '1.5px');
       
       const yAxis = g.append('g')
@@ -5706,11 +5731,11 @@
       yAxis.selectAll('text')
         .style('font-size', '12px')
         .style('font-weight', '600')
-        .style('fill', '#000000')  // NEGRO
+        .style('fill', styles.textColor)
         .style('font-family', 'Arial, sans-serif');
       
       yAxis.selectAll('line, path')
-        .style('stroke', '#000000')
+        .style('stroke', styles.textColor)
         .style('stroke-width', '1.5px');
       
       // Renderizar etiquetas de ejes usando función helper
@@ -5890,7 +5915,7 @@
             .attr('class', 'dot bestlib-point')
             .attr('r', baseRadius)
             .attr('fill', baseColor)
-            .attr('stroke', '#ffffff')
+            .attr('stroke', styles.backgroundColor)
             .attr('stroke-width', styles.pointStrokeWidth)
             .attr('opacity', 0.6);
         }
@@ -5945,7 +5970,7 @@
       .attr('cy', d => y(d.y))
       .attr('r', d => getRadius(d))
       .attr('fill', d => getBaseColor(d))
-      .attr('stroke', '#ffffff')
+      .attr('stroke', styles.backgroundColor)
       .attr('stroke-width', styles.pointStrokeWidth)
       .attr('opacity', 0.6)
       .attr('stroke', 'none')

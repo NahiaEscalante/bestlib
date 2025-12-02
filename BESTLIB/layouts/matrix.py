@@ -62,6 +62,7 @@ class MatrixLayout:
     _debug = False  # Modo debug para ver mensajes detallados
     _safe_html = True
     _instances = weakref.WeakSet()
+    _current_theme = 'light'  # Tema actual: 'light', 'dark', o 'christmas'
     
     def __init__(self, ascii_layout=None, figsize=None, row_heights=None, 
                  col_widths=None, gap=None, cell_padding=None, max_width=None):
@@ -107,6 +108,7 @@ class MatrixLayout:
         self._gap = gap
         self._cell_padding = cell_padding
         self._max_width = max_width
+        self._instance_theme = None  # Tema específico de esta instancia (None = usar tema global)
         
         # Validar y parsear layout usando LayoutEngine
         try:
@@ -127,6 +129,59 @@ class MatrixLayout:
                            Si False, solo muestra errores críticos.
         """
         cls._debug = bool(enabled)
+    
+    @classmethod
+    def set_theme(cls, theme_name: str):
+        """
+        Establece el tema global para todas las nuevas instancias de MatrixLayout.
+        
+        Args:
+            theme_name (str): Nombre del tema. Valores válidos: 'light', 'dark', 'christmas'
+        
+        Raises:
+            ValueError: Si el nombre del tema no es válido
+        
+        Ejemplo:
+            MatrixLayout.set_theme('dark')  # Cambiar a modo oscuro
+            layout = MatrixLayout("ABC")  # Esta instancia usará modo oscuro
+        """
+        valid_themes = ['light', 'dark', 'christmas']
+        if theme_name not in valid_themes:
+            raise ValueError(f"Tema inválido: {theme_name}. Temas válidos: {valid_themes}")
+        cls._current_theme = theme_name
+    
+    @classmethod
+    def get_theme(cls):
+        """
+        Obtiene el tema actual.
+        
+        Returns:
+            str: Nombre del tema actual ('light', 'dark', o 'christmas')
+        """
+        return cls._current_theme
+    
+    def set_theme(self, theme_name: str):
+        """
+        Establece el tema para esta instancia específica.
+        
+        Args:
+            theme_name (str): Nombre del tema. Valores válidos: 'light', 'dark', 'christmas'
+        
+        Returns:
+            self: Para permitir encadenamiento de métodos
+        
+        Raises:
+            ValueError: Si el nombre del tema no es válido
+        
+        Ejemplo:
+            layout = MatrixLayout("ABC")
+            layout.set_theme('christmas')  # Solo esta instancia usará tema navidad
+        """
+        valid_themes = ['light', 'dark', 'christmas']
+        if theme_name not in valid_themes:
+            raise ValueError(f"Tema inválido: {theme_name}. Temas válidos: {valid_themes}")
+        self._instance_theme = theme_name
+        return self
         EventManager.set_debug(enabled)
         CommManager.set_debug(enabled)
     
@@ -771,6 +826,10 @@ class MatrixLayout:
         """Representación HTML del layout (compatible con Jupyter Notebook clásico)"""
         data = self._prepare_repr_data()
         
+        # Determinar tema a usar (instancia específica o global)
+        theme = getattr(self, '_instance_theme', None) or self._current_theme
+        theme_class = f"bestlib-theme-{theme}" if theme != 'light' else ""
+        
         # Generar JavaScript usando JSBuilder
         render_js = JSBuilder.build_render_call(
             self.div_id,
@@ -783,7 +842,8 @@ class MatrixLayout:
             self.div_id,
             data['css_code'],
             render_js,
-            data['inline_style']
+            data['inline_style'],
+            theme_class
         )
         
         return html
@@ -791,6 +851,10 @@ class MatrixLayout:
     def _repr_mimebundle_(self, include=None, exclude=None):
         """Representación MIME bundle del layout (compatible con JupyterLab)"""
         import sys
+        
+        # Determinar tema a usar (instancia específica o global)
+        theme = getattr(self, '_instance_theme', None) or self._current_theme
+        theme_class = f"bestlib-theme-{theme}" if theme != 'light' else ""
         
         # Detectar si estamos en Colab
         is_colab = "google.colab" in sys.modules
@@ -810,7 +874,8 @@ class MatrixLayout:
             self.div_id,
             data['css_code'],
             "",  # JS va en bundle separado
-            data['inline_style']
+            data['inline_style'],
+            theme_class
         )
         
         # Generar JavaScript completo usando JSBuilder
@@ -846,12 +911,17 @@ class MatrixLayout:
             
             data = self._prepare_repr_data(ascii_layout)
             
+            # Determinar tema a usar (instancia específica o global)
+            theme = getattr(self, '_instance_theme', None) or self._current_theme
+            theme_class = f"bestlib-theme-{theme}" if theme != 'light' else ""
+            
             # Generar HTML completo (incluye wrapper seguro de D3.js)
             html_content = HTMLGenerator.generate_full_html(
                 self.div_id,
                 data['css_code'],
                 "",  # JS va separado
-                data['inline_style']
+                data['inline_style'],
+                theme_class
             )
             
             # Generar JavaScript usando JSBuilder

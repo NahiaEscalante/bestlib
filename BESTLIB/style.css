@@ -636,3 +636,112 @@
   stroke-width: 2px;
 }
 
+/* ==========================================
+ * SISTEMA DE TEMAS
+ * ========================================== */
+
+/* Modo Oscuro */
+.bestlib-theme-dark {
+  /* Colores principales */
+  --chart-primary-color: #60a5fa;
+  --chart-primary-hover: #3b82f6;
+  --chart-secondary-color: #4ade80;
+  --chart-selection-color: #f59e0b;
+  --chart-background: #1a1a1a;
+  --chart-text-color: #ffffff;
+  --chart-text-secondary: #a3a3a3;
+  --chart-grid-color: #3a3a3a;
+  
+  /* Paleta de colores para categorías */
+  --chart-color-1: #60a5fa;
+  --chart-color-2: #4ade80;
+  --chart-color-3: #f59e0b;
+  --chart-color-4: #ef4444;
+  --chart-color-5: #a78bfa;
+  --chart-color-6: #06b6d4;
+  --chart-color-7: #f97316;
+  --chart-color-8: #ec4899;
+  
+  /* Variables de matriz */
+  --matrix-cell-background: #1a1a1a;
+  --matrix-cell-inner-background: #1a1a1a;
+  --matrix-cell-border-color: #3a3a3a;
+  --matrix-cell-inner-border-color: #3a3a3a;
+  
+  /* Transiciones suaves */
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+.bestlib-theme-dark .matrix-cell {
+  background: #1a1a1a !important;
+  border-color: #3a3a3a !important;
+}
+
+.bestlib-theme-dark .matrix-layout > div {
+  background: #1a1a1a;
+  border-color: #3a3a3a;
+}
+
+/* Modo Navidad */
+.bestlib-theme-christmas {
+  /* Colores principales navideños */
+  --chart-primary-color: #BD3634;
+  --chart-primary-hover: #7E121D;
+  --chart-secondary-color: #034F1B;
+  --chart-selection-color: #BD3634;
+  --chart-background: #E6DCB1;
+  --chart-text-color: #034F1B;
+  --chart-text-secondary: #7E121D;
+  --chart-grid-color: #CEAC5C;
+  
+  /* Paleta de colores navideña */
+  --chart-color-1: #BD3634;
+  --chart-color-2: #034F1B;
+  --chart-color-3: #CEAC5C;
+  --chart-color-4: #7E121D;
+  --chart-color-5: #E6DCB1;
+  --chart-color-6: #BD3634;
+  --chart-color-7: #034F1B;
+  --chart-color-8: #CEAC5C;
+  
+  /* Variables de matriz navideñas */
+  --matrix-cell-background: #E6DCB1;
+  --matrix-cell-inner-background: #E6DCB1;
+  --matrix-cell-border-color: #034F1B;
+  --matrix-cell-inner-border-color: #034F1B;
+  
+  /* Transiciones suaves */
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+.bestlib-theme-christmas .matrix-cell {
+  background: #E6DCB1 !important;
+  border-color: #034F1B !important;
+}
+
+.bestlib-theme-christmas .matrix-layout > div {
+  background: #E6DCB1;
+  border-color: #034F1B;
+}
+
+/* Aplicar transiciones a elementos que cambian con el tema */
+.matrix-layout,
+.matrix-cell,
+.bestlib-axis,
+.bestlib-axis text,
+.bestlib-axis line,
+.bestlib-axis path,
+.bestlib-grid,
+.bestlib-axis-label,
+.bestlib-line,
+.bestlib-point,
+.bestlib-bar,
+.bestlib-area,
+.bestlib-marker {
+  transition: background-color 0.3s ease, 
+              color 0.3s ease, 
+              border-color 0.3s ease, 
+              stroke 0.3s ease, 
+              fill 0.3s ease;
+}
+

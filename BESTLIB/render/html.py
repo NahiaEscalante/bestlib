@@ -11,21 +11,26 @@ class HTMLGenerator:
     """
     
     @staticmethod
-    def generate_container(div_id, inline_style=""):
+    def generate_container(div_id, inline_style="", theme_class=""):
         """
         Genera el contenedor HTML para un layout.
         
         Args:
             div_id (str): ID del contenedor
             inline_style (str): Estilos inline opcionales
+            theme_class (str): Clase CSS del tema (ej: 'bestlib-theme-dark')
         
         Returns:
             str: HTML del contenedor
         """
+        classes = "matrix-layout"
+        if theme_class:
+            classes += f" {theme_class}"
+        
         if inline_style:
-            return f'<div id="{div_id}" class="matrix-layout" {inline_style}></div>'
+            return f'<div id="{div_id}" class="{classes}" {inline_style}></div>'
         else:
-            return f'<div id="{div_id}" class="matrix-layout"></div>'
+            return f'<div id="{div_id}" class="{classes}"></div>'
     
     @staticmethod
     def generate_style_tag(css_code):
@@ -54,7 +59,7 @@ class HTMLGenerator:
         return f"<script>{js_code}</script>"
     
     @staticmethod
-    def generate_full_html(div_id, css_code, js_code, inline_style=""):
+    def generate_full_html(div_id, css_code, js_code, inline_style="", theme_class=""):
         """
         Genera HTML completo con CSS y JS.
         
@@ -63,6 +68,7 @@ class HTMLGenerator:
             css_code (str): Código CSS
             js_code (str): Código JavaScript
             inline_style (str): Estilos inline opcionales
+            theme_class (str): Clase CSS del tema (ej: 'bestlib-theme-dark')
         
         Returns:
             str: HTML completo
@@ -87,7 +93,7 @@ class HTMLGenerator:
 </script>"""
         
         style_tag = HTMLGenerator.generate_style_tag(css_code)
-        container = HTMLGenerator.generate_container(div_id, inline_style)
+        container = HTMLGenerator.generate_container(div_id, inline_style, theme_class)
         script_tag = HTMLGenerator.generate_script_tag(js_code)
         
         return f"{d3_loader}\n{style_tag}\n{container}\n{script_tag}"
