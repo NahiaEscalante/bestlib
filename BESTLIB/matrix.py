@@ -1,3 +1,30 @@
+"""
+Legacy compatibility wrapper for MatrixLayout.
+"""
+from warnings import warn
+from .layouts.matrix import MatrixLayout as _MatrixLayout
+
+warn(
+    "Importar MatrixLayout desde BESTLIB.matrix está deprecado. "
+    "Usa BESTLIB.layouts.matrix.MatrixLayout.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+
+class MatrixLayout(_MatrixLayout):
+    """Mantiene compatibilidad con el import legacy."""
+    
+    def __init__(self, *args, **kwargs):
+        warn(
+            "MatrixLayout desde BESTLIB.matrix es legacy; migra a BESTLIB.layouts.matrix.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+__all__ = ["MatrixLayout"]
 import uuid
 import json
 import os

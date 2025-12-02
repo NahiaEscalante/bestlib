@@ -7,6 +7,8 @@ from BESTLIB.matrix import MatrixLayout
 MatrixLayout.set_debug(True)  # Opcional: ver mensajes
 ```
 
+> Nota: El módulo legacy `LinkedViews` está deprecado. Para vistas enlazadas usa `ReactiveMatrixLayout`.
+
 ## 1️⃣ Elementos Visuales Simples
 
 ### Círculo

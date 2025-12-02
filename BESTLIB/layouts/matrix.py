@@ -2,6 +2,7 @@
 MatrixLayout - Refactorizado para usar módulos modulares
 """
 import uuid
+import copy
 import weakref
 from ..core.events import EventManager
 from ..core.comm import CommManager
@@ -11,6 +12,7 @@ from ..render.builder import JSBuilder
 from ..render.assets import AssetManager
 from ..utils.figsize import figsize_to_pixels, process_figsize_in_kwargs
 from ..core.exceptions import LayoutError
+from ..charts.spec_utils import validate_spec
 
 try:
     import ipywidgets as widgets
@@ -60,6 +62,7 @@ class MatrixLayout:
     _debug = False  # Modo debug para ver mensajes detallados
     _map = {}
     _safe_html = True
+    _instances = weakref.WeakSet()
     
     def __init__(self, ascii_layout=None, figsize=None, row_heights=None, 
                  col_widths=None, gap=None, cell_padding=None, max_width=None):
@@ -81,6 +84,8 @@ class MatrixLayout:
         
         self.ascii_layout = ascii_layout
         self.div_id = "matrix-" + str(uuid.uuid4())
+        self._map = copy.deepcopy(self.__class__._map)
+        self.__class__._instances.add(self)
         
         # Usar CommManager para registro de instancia
         CommManager.register_instance(self.div_id, self)
@@ -214,11 +219,59 @@ class MatrixLayout:
     def __del__(self):
         """Limpia la referencia cuando se destruye la instancia"""
         CommManager.unregister_instance(self.div_id)
+        try:
+            self.__class__._instances.discard(self)
+        except Exception:
+            pass
     
     @classmethod
     def map(cls, mapping):
-        """Mapea gráficos a letras del layout"""
-        cls._map = mapping
+        """Mapea gráficos a letras del layout (sobrescribe el mapeo global)."""
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        cls._map.clear()
+        cls._map.update(copy.deepcopy(mapping))
+        cls._broadcast_full_map()
+        return cls._map
+    
+    @classmethod
+    def _broadcast_full_map(cls):
+        """Propaga el mapeo completo a todas las instancias activas."""
+        for inst in list(cls._instances):
+            try:
+                inst._map = copy.deepcopy(cls._map)
+            except ReferenceError:
+                continue
+    
+    @classmethod
+    def _broadcast_spec(cls, letter, spec):
+        """Propaga un spec puntual a todas las instancias."""
+        for inst in list(cls._instances):
+            try:
+                inst._map[letter] = copy.deepcopy(spec)
+            except ReferenceError:
+                continue
+    
+    @classmethod
+    def _register_spec(cls, letter, spec):
+        """Registra un spec en el mapeo global y lo propaga."""
+        if not hasattr(cls, '_map') or cls._map is None:
+            cls._map = {}
+        validate_spec(spec)
+        cls._map[letter] = spec
+        cls._broadcast_spec(letter, spec)
+        return spec
+    
+    @classmethod
+    def update_spec_metadata(cls, letter, **metadata):
+        """Actualiza metadata en un spec y lo propaga."""
+        if not hasattr(cls, '_map') or cls._map is None:
+            return
+        spec = cls._map.get(letter)
+        if not spec:
+            return
+        spec.update(metadata)
+        cls._broadcast_spec(letter, spec)
     
     # Métodos map_* delegados al sistema de gráficos
     @classmethod
@@ -229,10 +282,7 @@ class MatrixLayout:
         chart = ChartRegistry.get('scatter')
         spec = chart.get_spec(data, **kwargs)
         
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_barchart(cls, letter, data, **kwargs):
@@ -242,10 +292,7 @@ class MatrixLayout:
         chart = ChartRegistry.get('bar')
         spec = chart.get_spec(data, **kwargs)
         
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_line_plot(cls, letter, data, **kwargs):
@@ -255,10 +302,7 @@ class MatrixLayout:
         chart = ChartRegistry.get('line_plot')
         spec = chart.get_spec(data, **kwargs)
         
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_horizontal_bar(cls, letter, data, **kwargs):
@@ -268,10 +312,7 @@ class MatrixLayout:
         chart = ChartRegistry.get('horizontal_bar')
         spec = chart.get_spec(data, **kwargs)
         
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_hexbin(cls, letter, data, **kwargs):
@@ -281,10 +322,7 @@ class MatrixLayout:
         chart = ChartRegistry.get('hexbin')
         spec = chart.get_spec(data, **kwargs)
         
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_errorbars(cls, letter, data, **kwargs):
@@ -294,10 +332,7 @@ class MatrixLayout:
         chart = ChartRegistry.get('errorbars')
         spec = chart.get_spec(data, **kwargs)
         
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_fill_between(cls, letter, data, **kwargs):
@@ -307,10 +342,7 @@ class MatrixLayout:
         chart = ChartRegistry.get('fill_between')
         spec = chart.get_spec(data, **kwargs)
         
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_step(cls, letter, data, x_col=None, y_col=None, **kwargs):
@@ -326,10 +358,7 @@ class MatrixLayout:
                 return LegacyMatrixLayout.map_step(letter, data, x_col=x_col, y_col=y_col, **kwargs)
             except Exception:
                 spec = {'type': 'step_plot', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_kde(cls, letter, data, **kwargs):
@@ -337,10 +366,7 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('kde')
         spec = chart.get_spec(data, **kwargs)
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_distplot(cls, letter, data, **kwargs):
@@ -348,10 +374,7 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('distplot')
         spec = chart.get_spec(data, **kwargs)
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_rug(cls, letter, data, **kwargs):
@@ -359,10 +382,7 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('rug')
         spec = chart.get_spec(data, **kwargs)
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_qqplot(cls, letter, data, **kwargs):
@@ -370,10 +390,7 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('qqplot')
         spec = chart.get_spec(data, **kwargs)
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_ecdf(cls, letter, data, **kwargs):
@@ -381,10 +398,7 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('ecdf')
         spec = chart.get_spec(data, **kwargs)
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_ridgeline(cls, letter, data, **kwargs):
@@ -392,10 +406,7 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('ridgeline')
         spec = chart.get_spec(data, **kwargs)
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_ribbon(cls, letter, data, **kwargs):
@@ -403,10 +414,7 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('ribbon')
         spec = chart.get_spec(data, **kwargs)
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_hist2d(cls, letter, data, **kwargs):
@@ -414,10 +422,7 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('hist2d')
         spec = chart.get_spec(data, **kwargs)
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_polar(cls, letter, data, **kwargs):
@@ -425,10 +430,7 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('polar')
         spec = chart.get_spec(data, **kwargs)
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_funnel(cls, letter, data, **kwargs):
@@ -436,10 +438,7 @@ class MatrixLayout:
         from ..charts import ChartRegistry
         chart = ChartRegistry.get('funnel')
         spec = chart.get_spec(data, **kwargs)
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_histogram(cls, letter, data, value_col=None, bins=10, **kwargs):
@@ -455,10 +454,7 @@ class MatrixLayout:
                 return LegacyMatrixLayout.map_histogram(letter, data, value_col=value_col, bins=bins, **kwargs)
             except Exception:
                 spec = {'type': 'histogram', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_pie(cls, letter, data, category_col=None, value_col=None, **kwargs):
@@ -474,10 +470,7 @@ class MatrixLayout:
                 return LegacyMatrixLayout.map_pie(letter, data, category_col=category_col, value_col=value_col, **kwargs)
             except Exception:
                 spec = {'type': 'pie', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_boxplot(cls, letter, data, category_col=None, value_col=None, column=None, **kwargs):
@@ -496,10 +489,7 @@ class MatrixLayout:
                 return LegacyMatrixLayout.map_boxplot(letter, data, category_col=category_col, value_col=value_col, column=column, **kwargs)
             except Exception:
                 spec = {'type': 'boxplot', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_line(cls, letter, data, x_col=None, y_col=None, series_col=None, **kwargs):
@@ -515,10 +505,7 @@ class MatrixLayout:
                 return LegacyMatrixLayout.map_line(letter, data, x_col=x_col, y_col=y_col, series_col=series_col, **kwargs)
             except Exception:
                 spec = {'type': 'line', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_heatmap(cls, letter, data, x_col=None, y_col=None, value_col=None, **kwargs):
@@ -534,10 +521,7 @@ class MatrixLayout:
                 return LegacyMatrixLayout.map_heatmap(letter, data, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
             except Exception:
                 spec = {'type': 'heatmap', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_violin(cls, letter, data, value_col=None, category_col=None, bins=20, **kwargs):
@@ -553,10 +537,7 @@ class MatrixLayout:
                 return LegacyMatrixLayout.map_violin(letter, data, value_col=value_col, category_col=category_col, bins=bins, **kwargs)
             except Exception:
                 spec = {'type': 'violin', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_radviz(cls, letter, data, features=None, class_col=None, **kwargs):
@@ -572,10 +553,7 @@ class MatrixLayout:
                 return LegacyMatrixLayout.map_radviz(letter, data, features=features, class_col=class_col, **kwargs)
             except Exception:
                 spec = {'type': 'radviz', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_star_coordinates(cls, letter, data, features=None, class_col=None, **kwargs):
@@ -591,10 +569,7 @@ class MatrixLayout:
                 return LegacyMatrixLayout.map_star_coordinates(letter, data, features=features, class_col=class_col, **kwargs)
             except Exception:
                 spec = {'type': 'star_coordinates', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_parallel_coordinates(cls, letter, data, dimensions=None, category_col=None, **kwargs):
@@ -610,10 +585,7 @@ class MatrixLayout:
                 return LegacyMatrixLayout.map_parallel_coordinates(letter, data, dimensions=dimensions, category_col=category_col, **kwargs)
             except Exception:
                 spec = {'type': 'parallel_coordinates', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
     
     @classmethod
     def map_grouped_barchart(cls, letter, data, main_col=None, sub_col=None, value_col=None, **kwargs):
@@ -629,10 +601,45 @@ class MatrixLayout:
                 return LegacyMatrixLayout.map_grouped_barchart(letter, data, main_col=main_col, sub_col=sub_col, value_col=value_col, **kwargs)
             except Exception:
                 spec = {'type': 'grouped_barchart', 'data': [], **kwargs}
-        if not hasattr(cls, '_map') or cls._map is None:
-            cls._map = {}
-        cls._map[letter] = spec
-        return spec
+        return cls._register_spec(letter, spec)
+    
+    def set_mapping(self, mapping, merge=False):
+        """
+        Define un mapeo específico para esta instancia (sin afectar el global).
+        """
+        mapping_copy = copy.deepcopy(mapping)
+        if merge and hasattr(self, '_map'):
+            self._map.update(mapping_copy)
+        else:
+            self._map = mapping_copy
+        return self
+    
+    def _layout_letters(self):
+        """Retorna las letras únicas definidas en el layout ASCII."""
+        if not hasattr(self, '_grid') or not getattr(self._grid, 'cells', None):
+            return set()
+        letters = set()
+        for cell in self._grid.cells.values():
+            letter = cell.get('letter')
+            if letter and letter.strip():
+                letters.add(letter)
+        return letters
+    
+    def _validate_mapping_letters(self, mapping):
+        """
+        Valida que el mapping cubra solo las letras definidas en el layout.
+        """
+        valid_letters = self._layout_letters()
+        mapped_letters = {k for k in mapping.keys() if not k.startswith('__')}
+        extra = mapped_letters - valid_letters
+        missing = valid_letters - mapped_letters
+        if extra:
+            raise LayoutError(
+                "Se encontraron gráficos asignados a letras inexistentes en el layout: "
+                f"{sorted(extra)}"
+            )
+        if missing and self._debug:
+            print(f"⚠️ [MatrixLayout] Letras sin gráfico asignado: {sorted(missing)}")
     
     def _prepare_repr_data(self, layout_to_use=None):
         """
@@ -691,7 +698,9 @@ class MatrixLayout:
                 meta["__figsize__"] = figsize_px
         
         # Combinar mapping con metadata
-        mapping_merged = {**self._map, **meta}
+        active_map = copy.deepcopy(getattr(self, '_map', {}))
+        self._validate_mapping_letters(active_map)
+        mapping_merged = {**active_map, **meta}
         if self._merge_opt is not None:
             mapping_merged["__merge__"] = self._merge_opt
         

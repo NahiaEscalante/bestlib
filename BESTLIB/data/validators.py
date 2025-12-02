@@ -1,32 +1,11 @@
 """
 Validadores de datos para BESTLIB
 """
-# Import de pandas de forma defensiva para evitar errores de importación circular
-HAS_PANDAS = False
-pd = None
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    import sys
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in sys.modules.keys() if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    import pandas as pd
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
-
 from ..core.exceptions import DataError
+from ._imports import ensure_pandas
+
+pd = ensure_pandas()
+HAS_PANDAS = pd is not None
 
 
 def validate_data_structure(data, required_type=None):

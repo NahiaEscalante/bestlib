@@ -187,6 +187,7 @@ class ReactiveMatrixLayout:
         self._primary_view_types = {}  # {view_letter: 'scatter'|'barchart'|'histogram'|'grouped_barchart'} - Tipo de vista
         # Sistema para guardar selecciones en variables Python accesibles
         self._selection_variables = {}  # {view_letter: variable_name} - Variables donde guardar selecciones
+        self._selection_store = {}
     
     def set_data(self, data):
         """
@@ -197,6 +198,11 @@ class ReactiveMatrixLayout:
         """
         self._data = data
         return self
+    
+    def _empty_selection(self):
+        if HAS_PANDAS and pd is not None:
+            return pd.DataFrame()
+        return []
     
     def add_scatter(self, letter, data=None, x_col=None, y_col=None, category_col=None, interactive=True, selection_var=None, **kwargs):
         """
@@ -225,21 +231,8 @@ class ReactiveMatrixLayout:
             if not hasattr(self, '_selection_variables'):
                 self._selection_variables = {}
             self._selection_variables[letter] = selection_var
-            # Crear variable en el namespace del usuario (inicializar como DataFrame vacío)
-            import __main__
-            if HAS_PANDAS:
-                pd_module = globals().get('pd')
-                if pd_module is None:
-                    import sys
-                    if 'pandas' in sys.modules:
-                        pd_module = sys.modules['pandas']
-                    else:
-                        import pandas as pd_module
-                        globals()['pd'] = pd_module
-                empty_df = pd_module.DataFrame() if pd_module is not None else []
-            else:
-                empty_df = []
-            setattr(__main__, selection_var, empty_df)
+            empty_value = self._empty_selection()
+            self._selection_store[selection_var] = empty_value
             if self._debug or MatrixLayout._debug:
                 df_type = "DataFrame" if HAS_PANDAS else "lista"
                 print(f"📦 Variable '{selection_var}' creada para guardar selecciones de scatter '{letter}' como {df_type}")
@@ -340,9 +333,12 @@ class ReactiveMatrixLayout:
         
         # Asegurar que los identificadores estén en el spec guardado
         if scatter_spec:
-            scatter_spec['__scatter_letter__'] = letter
-            scatter_spec['__selection_model_id__'] = id(scatter_selection)
-            MatrixLayout._map[letter] = scatter_spec
+            metadata = {
+                '__scatter_letter__': letter,
+                '__selection_model_id__': id(scatter_selection)
+            }
+            scatter_spec.update(metadata)
+            MatrixLayout.update_spec_metadata(letter, **metadata)
             
             # Debug: verificar que el spec tiene los identificadores
             if self._debug or MatrixLayout._debug:
@@ -425,23 +421,7 @@ class ReactiveMatrixLayout:
             # Guardar variable de selección si se especifica
             if selection_var:
                 self._selection_variables[letter] = selection_var
-                # Crear variable en el namespace del usuario (inicializar como DataFrame vacío)
-                import __main__
-                # Asegurar que pd esté disponible (usar el del módulo global)
-                if HAS_PANDAS:
-                    # Usar globals() para evitar UnboundLocalError
-                    pd_module = globals().get('pd')
-                    if pd_module is None:
-                        import sys
-                        if 'pandas' in sys.modules:
-                            pd_module = sys.modules['pandas']
-                        else:
-                            import pandas as pd_module
-                            globals()['pd'] = pd_module
-                    empty_df = pd_module.DataFrame() if pd_module is not None else []
-                else:
-                    empty_df = []
-                setattr(__main__, selection_var, empty_df)
+                self._selection_store[selection_var] = self._empty_selection()
                 if self._debug or MatrixLayout._debug:
                     df_type = "DataFrame" if HAS_PANDAS else "lista"
                     print(f"📦 Variable '{selection_var}' creada para guardar selecciones de bar chart '{letter}' como {df_type}")
@@ -520,9 +500,7 @@ class ReactiveMatrixLayout:
                     
                     # Guardar en variable Python si se especificó (como DataFrame)
                     if selection_var:
-                        import __main__
-                        # Guardar como DataFrame para facilitar el trabajo del usuario
-                        setattr(__main__, selection_var, items_df if items_df is not None else items)
+                        self.set_selection(selection_var, items_df if items_df is not None else items)
                         if self._debug or MatrixLayout._debug:
                             count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
                             print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
@@ -615,15 +593,16 @@ class ReactiveMatrixLayout:
         # Esto es necesario para que JavaScript pueda identificar el gráfico correctamente
         if letter in MatrixLayout._map:
             if is_primary:
-                # Para vista principal, asegurar que tenga los identificadores
-                MatrixLayout._map[letter]['__view_letter__'] = letter
-                MatrixLayout._map[letter]['__is_primary_view__'] = True
-                MatrixLayout._map[letter]['interactive'] = True
+                MatrixLayout.update_spec_metadata(
+                    letter,
+                    __view_letter__=letter,
+                    __is_primary_view__=True,
+                    interactive=True
+                )
                 if self._debug or MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Bar chart '{letter}' configurado como vista principal con __view_letter__={letter}")
             elif linked_to:
-                # Para vista enlazada, asegurar que tenga __linked_to__
-                MatrixLayout._map[letter]['__linked_to__'] = linked_to
+                MatrixLayout.update_spec_metadata(letter, __linked_to__=linked_to)
         
         # Registrar vista para sistema de enlace
         view_id = f"barchart_{letter}"
@@ -1055,21 +1034,7 @@ class ReactiveMatrixLayout:
             
             if selection_var:
                 self._selection_variables[letter] = selection_var
-                import __main__
-                # Asegurar que pd esté disponible (usar el del módulo global)
-                if HAS_PANDAS:
-                    pd_module = globals().get('pd')
-                    if pd_module is None:
-                        import sys
-                        if 'pandas' in sys.modules:
-                            pd_module = sys.modules['pandas']
-                        else:
-                            import pandas as pd_module
-                            globals()['pd'] = pd_module
-                    empty_df = pd_module.DataFrame() if pd_module is not None else []
-                else:
-                    empty_df = []
-                setattr(__main__, selection_var, empty_df)
+                self._selection_store[selection_var] = self._empty_selection()
                 if self._debug or MatrixLayout._debug:
                     df_type = "DataFrame" if HAS_PANDAS else "lista"
                     print(f"📦 Variable '{selection_var}' creada para guardar selecciones de grouped bar chart '{letter}' como {df_type}")
@@ -1105,9 +1070,7 @@ class ReactiveMatrixLayout:
                 self._selected_data = items_df if items_df is not None else items
                 
                 if selection_var:
-                    import __main__
-                    # Guardar como DataFrame para facilitar el trabajo del usuario
-                    setattr(__main__, selection_var, items_df if items_df is not None else items)
+                    self.set_selection(selection_var, items_df if items_df is not None else items)
                     if self._debug or MatrixLayout._debug:
                         count_msg = f"{len(items_df)} filas" if items_df is not None and hasattr(items_df, '__len__') else f"{len(items)} items"
                         print(f"💾 Selección guardada en variable '{selection_var}' como DataFrame: {count_msg}")
@@ -1124,15 +1087,16 @@ class ReactiveMatrixLayout:
         # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
         if letter in MatrixLayout._map:
             if is_primary:
-                # Para vista principal, asegurar que tenga los identificadores
-                MatrixLayout._map[letter]['__view_letter__'] = letter
-                MatrixLayout._map[letter]['__is_primary_view__'] = True
-                MatrixLayout._map[letter]['interactive'] = True
+                MatrixLayout.update_spec_metadata(
+                    letter,
+                    __view_letter__=letter,
+                    __is_primary_view__=True,
+                    interactive=True
+                )
                 if self._debug or MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Grouped bar chart '{letter}' configurado como vista principal con __view_letter__={letter}")
             elif linked_to:
-                # Para vista enlazada, asegurar que tenga __linked_to__
-                MatrixLayout._map[letter]['__linked_to__'] = linked_to
+                MatrixLayout.update_spec_metadata(letter, __linked_to__=linked_to)
         
         # Si es vista enlazada, configurar callback
         if not is_primary:
@@ -1289,21 +1253,7 @@ class ReactiveMatrixLayout:
             # Guardar variable de selección si se especifica
             if selection_var:
                 self._selection_variables[letter] = selection_var
-                import __main__
-                # Asegurar que pd esté disponible (usar el del módulo global)
-                if HAS_PANDAS:
-                    pd_module = globals().get('pd')
-                    if pd_module is None:
-                        import sys
-                        if 'pandas' in sys.modules:
-                            pd_module = sys.modules['pandas']
-                        else:
-                            import pandas as pd_module
-                            globals()['pd'] = pd_module
-                    empty_df = pd_module.DataFrame() if pd_module is not None else []
-                else:
-                    empty_df = []
-                setattr(__main__, selection_var, empty_df)
+                self._selection_store[selection_var] = self._empty_selection()
                 if self._debug or MatrixLayout._debug:
                     df_type = "DataFrame" if HAS_PANDAS else "lista"
                     print(f"📦 Variable '{selection_var}' creada para guardar selecciones de histogram '{letter}' como {df_type}")
@@ -1406,11 +1356,12 @@ class ReactiveMatrixLayout:
             # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
             # Usar el spec retornado en lugar de acceder directamente a _map para evitar problemas de sincronización
             if spec and letter in MatrixLayout._map:
-                # Actualizar el spec en _map directamente
-                MatrixLayout._map[letter]['__view_letter__'] = letter
-                MatrixLayout._map[letter]['__is_primary_view__'] = True
-                MatrixLayout._map[letter]['interactive'] = True
-                
+                MatrixLayout.update_spec_metadata(
+                    letter,
+                    __view_letter__=letter,
+                    __is_primary_view__=True,
+                    interactive=True
+                )
                 # ✅ DEBUG: Verificar que el spec tiene datos
                 if self._debug or MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Histogram '{letter}' configurado como vista principal con __view_letter__={letter}")
@@ -1916,7 +1867,7 @@ class ReactiveMatrixLayout:
         
         # ✅ CORRECCIÓN CRÍTICA: Asegurar que __linked_to__ esté en el spec guardado (solo para vistas enlazadas)
         if letter in MatrixLayout._map and linked_to:
-            MatrixLayout._map[letter]['__linked_to__'] = linked_to
+            MatrixLayout.update_spec_metadata(letter, __linked_to__=linked_to)
         
         return self
     
@@ -1971,20 +1922,7 @@ class ReactiveMatrixLayout:
             # Guardar variable de selección si se especifica
             if selection_var:
                 self._selection_variables[letter] = selection_var
-                import __main__
-                if HAS_PANDAS:
-                    pd_module = globals().get('pd')
-                    if pd_module is None:
-                        import sys
-                        if 'pandas' in sys.modules:
-                            pd_module = sys.modules['pandas']
-                        else:
-                            import pandas as pd_module
-                            globals()['pd'] = pd_module
-                    empty_df = pd_module.DataFrame() if pd_module is not None else []
-                else:
-                    empty_df = []
-                setattr(__main__, selection_var, empty_df)
+                self._selection_store[selection_var] = self._empty_selection()
                 if self._debug or MatrixLayout._debug:
                     df_type = "DataFrame" if HAS_PANDAS else "lista"
                     print(f"📦 Variable '{selection_var}' creada para guardar selecciones de boxplot '{letter}' como {df_type}")
@@ -2046,9 +1984,12 @@ class ReactiveMatrixLayout:
             
             # ✅ CORRECCIÓN CRÍTICA: Asegurar que __view_letter__ esté en el spec guardado
             if letter in MatrixLayout._map:
-                MatrixLayout._map[letter]['__view_letter__'] = letter
-                MatrixLayout._map[letter]['__is_primary_view__'] = True
-                MatrixLayout._map[letter]['interactive'] = True
+                MatrixLayout.update_spec_metadata(
+                    letter,
+                    __view_letter__=letter,
+                    __is_primary_view__=True,
+                    interactive=True
+                )
                 if self._debug or MatrixLayout._debug:
                     print(f"✅ [ReactiveMatrixLayout] Boxplot '{letter}' configurado como vista principal con __view_letter__={letter}")
             
@@ -2110,7 +2051,7 @@ class ReactiveMatrixLayout:
         
         # ✅ CORRECCIÓN CRÍTICA: Asegurar que __linked_to__ esté en el spec guardado
         if letter in MatrixLayout._map and primary_letter is not None:
-            MatrixLayout._map[letter]['__linked_to__'] = primary_letter
+            MatrixLayout.update_spec_metadata(letter, __linked_to__=primary_letter)
         
         # Guardar parámetros
         boxplot_params = {
@@ -2690,7 +2631,7 @@ class ReactiveMatrixLayout:
             # Asegurar que __linked_to__ esté en el spec si fue agregado antes
             if '__linked_to__' in kwargs:
                 boxplot_spec['__linked_to__'] = kwargs['__linked_to__']
-            MatrixLayout._map[letter] = boxplot_spec
+            MatrixLayout._register_spec(letter, boxplot_spec)
         
         return self
     
@@ -2875,21 +2816,7 @@ class ReactiveMatrixLayout:
             # Guardar variable de selección si se especifica
             if selection_var:
                 self._selection_variables[letter] = selection_var
-                import __main__
-                # Asegurar que pd esté disponible (usar el del módulo global)
-                if HAS_PANDAS:
-                    pd_module = globals().get('pd')
-                    if pd_module is None:
-                        import sys
-                        if 'pandas' in sys.modules:
-                            pd_module = sys.modules['pandas']
-                        else:
-                            import pandas as pd_module
-                            globals()['pd'] = pd_module
-                    empty_df = pd_module.DataFrame() if pd_module is not None else []
-                else:
-                    empty_df = []
-                setattr(__main__, selection_var, empty_df)
+                self._selection_store[selection_var] = self._empty_selection()
                 if self._debug or MatrixLayout._debug:
                     df_type = "DataFrame" if HAS_PANDAS else "lista"
                     print(f"📦 Variable '{selection_var}' creada para guardar selecciones de pie chart '{letter}' como {df_type}")
@@ -2945,7 +2872,7 @@ class ReactiveMatrixLayout:
         # Asegurar que __linked_to__ esté en el spec guardado (por si map_pie no lo copió)
         if not is_primary and linked_to:
             if letter in MatrixLayout._map:
-                MatrixLayout._map[letter]['__linked_to__'] = linked_to
+                MatrixLayout.update_spec_metadata(letter, __linked_to__=linked_to)
         
         # Si es vista enlazada, configurar callback
         if not is_primary:
@@ -3929,25 +3856,13 @@ class ReactiveMatrixLayout:
             selected = layout.get_selection()  # Retorna selection_model.get_items()
         """
         if selection_var:
-            # Buscar la variable en el namespace del usuario
-            import __main__
-            if hasattr(__main__, selection_var):
-                return getattr(__main__, selection_var)
-            else:
-                # Si no existe, buscar en _selection_variables para encontrar la letra correspondiente
-                for view_letter, var_name in self._selection_variables.items():
-                    if var_name == selection_var:
-                        # Retornar la selección del modelo de esa vista
-                        if view_letter in self._primary_view_models:
-                            return self._primary_view_models[view_letter].get_items()
-                # Si no se encuentra, retornar DataFrame vacío
-                if HAS_PANDAS:
-                    return pd.DataFrame()
-                else:
-                    return []
-        else:
-            # Retornar selección del modelo principal
-            return self.selection_model.get_items()
+            if selection_var in self._selection_store:
+                return self._selection_store[selection_var]
+            for view_letter, var_name in self._selection_variables.items():
+                if var_name == selection_var and view_letter in self._primary_view_models:
+                    return self._primary_view_models[view_letter].get_items()
+            return self._empty_selection()
+        return self.selection_model.get_items()
     
     def set_selection(self, selection_var_name, items):
         """
@@ -3957,11 +3872,15 @@ class ReactiveMatrixLayout:
             selection_var_name (str): Nombre de la variable donde guardar la selección.
             items (list or pd.DataFrame): Los items a guardar.
         """
-        import __main__
-        setattr(__main__, selection_var_name, items)
+        self._selection_store[selection_var_name] = items
         if self._debug or MatrixLayout._debug:
-            count_msg = f"{len(items)} filas" if HAS_PANDAS and isinstance(items, pd.DataFrame) else f"{len(items)} items"
-            print(f"💾 Selección guardada en variable '{selection_var_name}': {count_msg}")
+            if HAS_PANDAS and isinstance(items, pd.DataFrame):
+                count_msg = f"{len(items)} filas"
+            elif hasattr(items, '__len__'):
+                count_msg = f"{len(items)} items"
+            else:
+                count_msg = "0 items"
+            print(f"💾 Selección guardada para '{selection_var_name}': {count_msg}")
 
 
 # ==========================

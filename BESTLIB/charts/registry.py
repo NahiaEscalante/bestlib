@@ -4,6 +4,7 @@ Registry de gráficos para BESTLIB
 from typing import Dict, Type, List
 from .base import ChartBase
 from ..core.exceptions import ChartError
+from ..core.registry import Registry as CoreRegistry
 
 
 class ChartRegistry:
@@ -34,6 +35,10 @@ class ChartRegistry:
             pass
         
         cls._charts[chart_type] = chart_class
+        
+        # Mantener Registry central sincronizado
+        if CoreRegistry:
+            CoreRegistry.register('chart', chart_type, chart_class)
     
     @classmethod
     def get(cls, chart_type: str) -> ChartBase:
@@ -50,11 +55,15 @@ class ChartRegistry:
             ChartError: Si el tipo no está registrado
         """
         if chart_type not in cls._charts:
-            available = list(cls._charts.keys())
-            raise ChartError(
-                f"Chart type '{chart_type}' not registered. "
-                f"Available types: {available}"
-            )
+            # Revisar Registry central por si fue registrado allí primero
+            if CoreRegistry and CoreRegistry.is_registered('chart', chart_type):
+                cls._charts[chart_type] = CoreRegistry.get('chart', chart_type)
+            else:
+                available = list(cls._charts.keys())
+                raise ChartError(
+                    f"Chart type '{chart_type}' not registered. "
+                    f"Available types: {available}"
+                )
         
         chart_class = cls._charts[chart_type]
         return chart_class()

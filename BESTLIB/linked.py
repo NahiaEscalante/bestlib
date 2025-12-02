@@ -1,11 +1,9 @@
 ﻿"""
-Sistema de Vistas Enlazadas (Linked Views) para BESTLIB
-Permite que múltiples visualizaciones se actualicen automáticamente
+Sistema de Vistas Enlazadas legacy (Linked Views).
 
-NOTA: Este módulo está siendo reemplazado por ReactiveMatrixLayout que integra
-LinkedViews dentro de la matriz ASCII. Se mantiene por compatibilidad.
+⚠️ Deprecated: Usa BESTLIB.layouts.reactive.ReactiveMatrixLayout.
 """
-
+from warnings import warn
 from .matrix import MatrixLayout
 from collections import Counter
 
@@ -55,6 +53,12 @@ class LinkedViews:
     """
     
     def __init__(self):
+        warn(
+            "LinkedViews está deprecado y será eliminado en versiones futuras. "
+            "Migra a ReactiveMatrixLayout.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._views = {}  # {view_id: view_config}
         self._data = []  # Datos originales
         self._selected_data = []  # Datos seleccionados

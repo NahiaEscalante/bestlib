@@ -11,7 +11,7 @@
 ## ✨ Características Principales
 
 - 🎨 **30+ tipos de gráficos** - Scatter, bar, histogram, boxplot, heatmap, line, pie, violin, radviz, kde, polar y más
-- 🔗 **Vistas enlazadas** - Sincronización automática entre múltiples gráficos
+- 🔗 **Vistas enlazadas** - `ReactiveMatrixLayout` sincroniza automáticamente múltiples gráficos (LinkedViews legacy)
 - ⚡ **Sistema reactivo** - Actualización automática sin re-ejecutar celdas
 - 🖱️ **Interactividad completa** - Brush selection, click events, tooltips personalizables
 - 📐 **Layouts ASCII** - Define la disposición de gráficos con texto simple
@@ -140,6 +140,20 @@ pip install ipython ipywidgets pandas numpy
 ```
 
 **Opcional:** `scikit-learn` (solo para `add_confusion_matrix()`)
+
+### 🛠️ Assets JS
+
+El código fuente de `matrix.js` vive en `js/src/index.js`. Para regenerar el bundle:
+
+```bash
+cd js
+npm install
+npm run build
+```
+
+### 📦 Releases
+
+Para publicar una versión ejecuta los pasos descritos en [`docs/RELEASE.md`](docs/RELEASE.md).
 
 ## 🤝 Contribuciones
 

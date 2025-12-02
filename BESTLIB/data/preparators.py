@@ -1,33 +1,12 @@
 """
 Preparadores de datos para diferentes tipos de gráficos
 """
-# Import de pandas de forma defensiva para evitar errores de importación circular
-HAS_PANDAS = False
-pd = None
-try:
-    # Verificar que pandas no esté parcialmente inicializado
-    import sys
-    if 'pandas' in sys.modules:
-        try:
-            pd_test = sys.modules['pandas']
-            _ = pd_test.__version__
-        except (AttributeError, ImportError):
-            del sys.modules['pandas']
-            modules_to_remove = [k for k in sys.modules.keys() if k.startswith('pandas.')]
-            for mod in modules_to_remove:
-                try:
-                    del sys.modules[mod]
-                except:
-                    pass
-    import pandas as pd
-    _ = pd.__version__
-    HAS_PANDAS = True
-except (ImportError, AttributeError, ModuleNotFoundError, Exception):
-    HAS_PANDAS = False
-    pd = None
-
 from .validators import validate_scatter_data, validate_bar_data, validate_data_structure
 from ..core.exceptions import DataError
+from ._imports import ensure_pandas
+
+pd = ensure_pandas()
+HAS_PANDAS = pd is not None
 
 
 def prepare_scatter_data(data, x_col=None, y_col=None, category_col=None, size_col=None, color_col=None):

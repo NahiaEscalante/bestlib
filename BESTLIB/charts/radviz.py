@@ -1,5 +1,13 @@
-"""Radviz Chart - Placeholder"""
+"""Radviz Chart"""
 from .base import ChartBase
+from ..core.exceptions import ChartError, DataError
+
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
+    pd = None
 
 
 class RadvizChart(ChartBase):
@@ -7,12 +15,45 @@ class RadvizChart(ChartBase):
     def chart_type(self):
         return 'radviz'
     
-    def validate_data(self, data, **kwargs):
-        pass
+    def validate_data(self, data, features=None, **kwargs):
+        if not features:
+            raise ChartError("features es requerido para radviz")
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            missing = [f for f in features if f not in data.columns]
+            if missing:
+                raise DataError(f"Faltan columnas para radviz: {missing}")
     
-    def prepare_data(self, data, **kwargs):
-        return []
+    def prepare_data(self, data, features=None, class_col=None, **kwargs):
+        records = []
+        if HAS_PANDAS and isinstance(data, pd.DataFrame):
+            cols = list(features)
+            if class_col:
+                cols.append(class_col)
+            subset = data[cols].dropna()
+            records = subset.to_dict('records')
+        else:
+            for item in data or []:
+                if not all(f in item for f in features):
+                    continue
+                rec = {f: item[f] for f in features}
+                if class_col:
+                    rec[class_col] = item.get(class_col)
+                records.append(rec)
+        return records
     
-    def get_spec(self, data, **kwargs):
-        return {'type': self.chart_type, 'data': [], **kwargs}
+    def get_spec(self, data, features=None, class_col=None, **kwargs):
+        self.validate_data(data, features=features)
+        radviz_data = self.prepare_data(data, features=features, class_col=class_col)
+        if not radviz_data:
+            raise ChartError("No se pudieron preparar datos para radviz")
+        spec = {
+            'type': self.chart_type,
+            'data': radviz_data,
+            'features': features,
+        }
+        if class_col:
+            spec['class_col'] = class_col
+        if kwargs:
+            spec['options'] = kwargs
+        return spec
 
