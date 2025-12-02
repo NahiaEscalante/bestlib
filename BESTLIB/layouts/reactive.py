@@ -2255,8 +2255,18 @@ class ReactiveMatrixLayout:
                             const boxData = {box_data_json};
                             console.log('   - Datos:', JSON.stringify(boxData));
                             
-                            // Validar datos
-                            const validData = boxData.filter(d => {{
+                            // Normalizar y validar datos (soportar min/max o lower/upper)
+                            const validData = boxData.map(d => {{
+                                if (!d) return null;
+                                return {{
+                                    category: d.category,
+                                    min: d.min !== undefined ? d.min : d.lower,
+                                    max: d.max !== undefined ? d.max : d.upper,
+                                    q1: d.q1,
+                                    q3: d.q3,
+                                    median: d.median
+                                }};
+                            }}).filter(d => {{
                                 return d && 
                                     typeof d.min === 'number' && !isNaN(d.min) &&
                                     typeof d.max === 'number' && !isNaN(d.max) &&
