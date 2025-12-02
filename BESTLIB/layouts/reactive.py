@@ -2193,10 +2193,10 @@ class ReactiveMatrixLayout:
             print(f"   - Items count: {count}")
             print(f"   - Primary letter: {primary_letter}")
             print(f"   - SelectionModel ID: {id(primary_selection)}")
-                
-                if self._debug or MatrixLayout._debug:
-                    print(f"   🔄 Boxplot '{letter}' callback ejecutándose con {count} items")
-                
+            
+            if self._debug or MatrixLayout._debug:
+                print(f"   🔄 Boxplot '{letter}' callback ejecutándose con {count} items")
+            
             try:
                 # Usar el helper para extraer datos filtrados
                 data_to_use = self._extract_filtered_data(items)
