@@ -204,6 +204,41 @@ class ReactiveMatrixLayout:
             return pd.DataFrame()
         return []
     
+    def _extract_filtered_data(self, items):
+        """
+        Extrae datos filtrados desde items de selección.
+        Maneja _original_rows, _original_row, y items directos.
+        
+        Args:
+            items: Lista de items de selección
+        
+        Returns:
+            DataFrame de pandas o lista de diccionarios con los datos filtrados
+        """
+        if not items:
+            return self._data
+        
+        processed_items = []
+        for item in items:
+            if isinstance(item, dict):
+                if '_original_rows' in item:
+                    processed_items.extend(item['_original_rows'])
+                elif '_original_row' in item:
+                    processed_items.append(item['_original_row'])
+                else:
+                    processed_items.append(item)
+            else:
+                processed_items.append(item)
+        
+        if HAS_PANDAS and processed_items:
+            import pandas as pd
+            try:
+                return pd.DataFrame(processed_items)
+            except Exception:
+                return processed_items
+        
+        return processed_items if processed_items else self._data
+    
     def _register_chart(self, letter, chart_type, data, **kwargs):
         """
         Helper para registrar un chart en el layout interno usando el método de instancia.
@@ -555,14 +590,14 @@ class ReactiveMatrixLayout:
             # CRÍTICO: Si linked_to es None, NO enlazar automáticamente (gráfico estático)
             if linked_to is None:
                 # Crear bar chart estático sin enlazar
-                MatrixLayout.map_barchart(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
+                self._register_chart(letter, 'bar', self._data, category_col=category_col, value_col=value_col, **kwargs)
                 return self
             
             # Validar que linked_to no sea el string "None"
             if isinstance(linked_to, str) and linked_to.lower() == 'none':
                 linked_to = None
                 # Crear bar chart estático sin enlazar
-                MatrixLayout.map_barchart(letter, self._data, category_col=category_col, value_col=value_col, **kwargs)
+                self._register_chart(letter, 'bar', self._data, category_col=category_col, value_col=value_col, **kwargs)
                 return self
             
             # Buscar en scatter plots primero (compatibilidad hacia atrás)
@@ -600,8 +635,9 @@ class ReactiveMatrixLayout:
             kwargs.pop('__linked_to__', None)  # Remover si existe
         
         # Crear bar chart inicial con todos los datos
-        MatrixLayout.map_barchart(
+        self._register_chart(
             letter,
+            'bar',
             self._data,
             category_col=category_col,
             value_col=value_col,
@@ -768,12 +804,20 @@ class ReactiveMatrixLayout:
                             }}
                         }}
                         
-                        // CRÍTICO: Calcular dimensiones una sola vez de manera consistente
-                        const dims = window.getChartDimensions ? 
-                            window.getChartDimensions(targetCell, {{ type: 'barchart' }}, 400, 350) :
-                            {{ width: Math.max(targetCell.clientWidth || 400, 200), height: 350 }};
-                        const width = dims.width;
-                        const height = dims.height;
+                        // CRÍTICO: Usar dimensiones fijas para evitar crecimiento acumulativo
+                        // Guardar dimensiones originales en la primera ejecución
+                        if (!targetCell.dataset.originalWidth) {{
+                            const svg = targetCell.querySelector('svg');
+                            if (svg) {{
+                                targetCell.dataset.originalWidth = svg.getAttribute('width') || '400';
+                                targetCell.dataset.originalHeight = svg.getAttribute('height') || '350';
+                            }} else {{
+                                targetCell.dataset.originalWidth = '400';
+                                targetCell.dataset.originalHeight = '350';
+                            }}
+                        }}
+                        const width = parseInt(targetCell.dataset.originalWidth);
+                        const height = parseInt(targetCell.dataset.originalHeight);
                         
                         // CRÍTICO: NO limpiar toda la celda si no es necesario
                         // Solo limpiar si es la primera renderización o si realmente es necesario
@@ -1364,7 +1408,7 @@ class ReactiveMatrixLayout:
                     letter,
                     'histogram',
                     initial_data,
-                    column=column,
+                    value_col=column,
                     bins=bins,
                     **histogram_kwargs
                 )
@@ -1418,7 +1462,7 @@ class ReactiveMatrixLayout:
                     letter,
                     'histogram',
                     initial_data,
-                    column=column,
+                    value_col=column,
                     bins=bins,
                     **kwargs
                 )
@@ -1432,7 +1476,7 @@ class ReactiveMatrixLayout:
                     letter,
                     'histogram',
                     initial_data,
-                    column=column,
+                    value_col=column,
                     bins=bins,
                     **kwargs
                 )
@@ -1911,7 +1955,7 @@ class ReactiveMatrixLayout:
             letter,
             'histogram',
             initial_data,
-            column=column,
+            value_col=column,
             bins=bins,
             **kwargs_with_linked
         )
@@ -2130,41 +2174,15 @@ class ReactiveMatrixLayout:
             'layout_div_id': self._layout.div_id
             }
         
-        # Función de actualización del boxplot (versión simplificada)
+        # Función de actualización del boxplot (con actualización del DOM)
         def update_boxplot(items, count):
             """Actualiza el boxplot cuando cambia la selección"""
             if self._debug or MatrixLayout._debug:
                 print(f"   🔄 Boxplot '{letter}' callback ejecutándose con {count} items")
             
             try:
-                # Determinar datos a usar
-                data_to_use = self._data
-                if items and len(items) > 0:
-                    # Extraer datos originales desde items
-                    processed_items = []
-                    for item in items:
-                        if isinstance(item, dict):
-                            if '_original_row' in item:
-                                processed_items.append(item['_original_row'])
-                            elif '_original_rows' in item:
-                                processed_items.extend(item['_original_rows'])
-                            else:
-                                processed_items.append(item)
-                        else:
-                            processed_items.append(item)
-                    
-                    if processed_items and HAS_PANDAS and pd is not None:
-                        try:
-                            data_to_use = pd.DataFrame(processed_items)
-                            # Verificar que la columna necesaria existe
-                            if column not in data_to_use.columns:
-                                if self._debug or MatrixLayout._debug:
-                                    print(f"⚠️ Columna '{column}' no encontrada, usando todos los datos")
-                                data_to_use = self._data
-                        except Exception as e:
-                            if self._debug or MatrixLayout._debug:
-                                print(f"⚠️ Error creando DataFrame: {e}")
-                            data_to_use = self._data
+                # Usar el helper para extraer datos filtrados
+                data_to_use = self._extract_filtered_data(items)
                 
                 # Regenerar spec con datos filtrados
                 kwargs_update = boxplot_params['kwargs'].copy()
@@ -2181,8 +2199,164 @@ class ReactiveMatrixLayout:
                     **kwargs_update
                 )
                 
+                # CRÍTICO: Actualizar el DOM con JavaScript
+                spec = self._layout._map.get(letter)
+                if spec and spec.get('data'):
+                    import json
+                    from IPython.display import Javascript, display
+                    
+                    # Preparar datos para JavaScript
+                    box_data_json = json.dumps(spec['data'])
+                    title = spec.get('title', '')
+                    x_label = spec.get('xLabel', '')
+                    y_label = spec.get('yLabel', '')
+                    
+                    # JavaScript para actualizar el boxplot
+                    js_update = f"""
+                    (function() {{
+                        // Buscar la celda del boxplot
+                        const cells = document.querySelectorAll('.matrix-cell');
+                        let targetCell = null;
+                        for (const cell of cells) {{
+                            const letterSpan = cell.querySelector('.cell-letter');
+                            if (letterSpan && letterSpan.textContent.trim() === '{letter}') {{
+                                targetCell = cell;
+                                break;
+                            }}
+                        }}
+                        
+                        if (!targetCell || !window.d3) return;
+                        
+                        // Obtener dimensiones originales
+                        const svg = d3.select(targetCell).select('svg');
+                        if (svg.empty()) return;
+                        
+                        const originalWidth = parseInt(svg.attr('width')) || 400;
+                        const originalHeight = parseInt(svg.attr('height')) || 300;
+                        
+                        // Limpiar contenido anterior
+                        svg.selectAll('*').remove();
+                        
+                        // Datos del boxplot
+                        const boxData = {box_data_json};
+                        if (!boxData || boxData.length === 0) return;
+                        
+                        // Configuración
+                        const margin = {{top: 50, right: 30, bottom: 70, left: 60}};
+                        const width = originalWidth - margin.left - margin.right;
+                        const height = originalHeight - margin.top - margin.bottom;
+                        
+                        // Crear grupo principal
+                        const g = svg.append('g')
+                            .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
+                        
+                        // Escalas
+                        const categories = boxData.map(d => d.category);
+                        const xScale = d3.scaleBand()
+                            .domain(categories)
+                            .range([0, width])
+                            .padding(0.3);
+                        
+                        const allValues = boxData.flatMap(d => [d.min, d.max]);
+                        const yScale = d3.scaleLinear()
+                            .domain([d3.min(allValues), d3.max(allValues)])
+                            .nice()
+                            .range([height, 0]);
+                        
+                        // Dibujar boxplots
+                        boxData.forEach(d => {{
+                            const x = xScale(d.category);
+                            const boxWidth = xScale.bandwidth();
+                            
+                            // Línea vertical (min-max)
+                            g.append('line')
+                                .attr('x1', x + boxWidth/2)
+                                .attr('x2', x + boxWidth/2)
+                                .attr('y1', yScale(d.min))
+                                .attr('y2', yScale(d.max))
+                                .attr('stroke', '#333')
+                                .attr('stroke-width', 1);
+                            
+                            // Caja (Q1-Q3)
+                            g.append('rect')
+                                .attr('x', x)
+                                .attr('y', yScale(d.q3))
+                                .attr('width', boxWidth)
+                                .attr('height', yScale(d.q1) - yScale(d.q3))
+                                .attr('fill', '#4a90e2')
+                                .attr('stroke', '#333')
+                                .attr('stroke-width', 1);
+                            
+                            // Mediana
+                            g.append('line')
+                                .attr('x1', x)
+                                .attr('x2', x + boxWidth)
+                                .attr('y1', yScale(d.median))
+                                .attr('y2', yScale(d.median))
+                                .attr('stroke', '#fff')
+                                .attr('stroke-width', 2);
+                            
+                            // Whiskers
+                            [d.min, d.max].forEach(val => {{
+                                g.append('line')
+                                    .attr('x1', x + boxWidth * 0.25)
+                                    .attr('x2', x + boxWidth * 0.75)
+                                    .attr('y1', yScale(val))
+                                    .attr('y2', yScale(val))
+                                    .attr('stroke', '#333')
+                                    .attr('stroke-width', 1);
+                            }});
+                        }});
+                        
+                        // Ejes
+                        g.append('g')
+                            .attr('transform', `translate(0,${{height}})`)
+                            .call(d3.axisBottom(xScale))
+                            .selectAll('text')
+                            .attr('transform', 'rotate(-45)')
+                            .style('text-anchor', 'end');
+                        
+                        g.append('g')
+                            .call(d3.axisLeft(yScale));
+                        
+                        // Título
+                        if ('{title}') {{
+                            svg.append('text')
+                                .attr('x', originalWidth / 2)
+                                .attr('y', 20)
+                                .attr('text-anchor', 'middle')
+                                .style('font-size', '14px')
+                                .style('font-weight', 'bold')
+                                .text('{title}');
+                        }}
+                        
+                        // Etiquetas de ejes
+                        if ('{x_label}') {{
+                            svg.append('text')
+                                .attr('x', originalWidth / 2)
+                                .attr('y', originalHeight - 10)
+                                .attr('text-anchor', 'middle')
+                                .style('font-size', '12px')
+                                .text('{x_label}');
+                        }}
+                        
+                        if ('{y_label}') {{
+                            svg.append('text')
+                                .attr('transform', 'rotate(-90)')
+                                .attr('x', -originalHeight / 2)
+                                .attr('y', 15)
+                                .attr('text-anchor', 'middle')
+                                .style('font-size', '12px')
+                                .text('{y_label}');
+                        }}
+                    }})();
+                    """
+                    
+                    # Ejecutar JavaScript
+                    display(Javascript(js_update), display_id=f'boxplot-update-{letter}', update=True)
+                
                 if self._debug or MatrixLayout._debug:
-                    print(f"   ✅ Boxplot '{letter}' spec actualizado")
+                    print(f"   ✅ Boxplot '{letter}' actualizado en DOM")
                     
             except Exception as e:
                 if self._debug or MatrixLayout._debug:
