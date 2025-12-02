@@ -12,6 +12,7 @@ def validate_spec(spec):
     - line/line_plot: usa 'series'
     - grouped_bar: usa 'rows', 'groups', 'series'
     - step_plot: usa 'series'
+    - ridgeline: usa 'series' (KDE por categoría)
     """
     if not isinstance(spec, dict):
         raise ChartError("El spec debe ser un diccionario")
@@ -19,12 +20,14 @@ def validate_spec(spec):
         raise ChartError("El spec debe incluir 'type'")
     
     # Tipos con campos alternativos a 'data'
+    # Estos gráficos pueden usar estructuras diferentes a 'data'
     alternative_fields = {
         'heatmap': ['cells', 'data'],
         'line': ['series', 'data'],
         'line_plot': ['series', 'data'],
         'grouped_bar': ['rows', 'series', 'data'],
         'step_plot': ['series', 'data'],
+        'ridgeline': ['series', 'data'],  # Ridgeline usa 'series' para KDE por categoría
     }
     
     chart_type = spec.get('type')

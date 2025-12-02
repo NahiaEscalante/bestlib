@@ -7901,6 +7901,16 @@
    * Ridgeline Plot con D3.js
    */
   function renderRidgelineD3(container, spec, d3, divId) {
+    // Debug logging detallado
+    console.log('[BESTLIB] renderRidgelineD3 llamado', {
+      hasSpec: !!spec,
+      specType: typeof spec,
+      specKeys: spec ? Object.keys(spec) : [],
+      hasSeries: spec && 'series' in spec,
+      seriesType: spec && spec.series ? typeof spec.series : 'undefined',
+      seriesKeys: spec && spec.series && typeof spec.series === 'object' ? Object.keys(spec.series) : []
+    });
+    
     const series = spec.series || {};
     if (!series || Object.keys(series).length === 0) {
       console.error('[BESTLIB] renderRidgelineD3: No hay series', { 
@@ -8231,6 +8241,17 @@
    * 2D Histogram con D3.js
    */
   function renderHist2dD3(container, spec, d3, divId) {
+    // Debug logging detallado
+    console.log('[BESTLIB] renderHist2dD3 llamado', {
+      hasSpec: !!spec,
+      specType: typeof spec,
+      specKeys: spec ? Object.keys(spec) : [],
+      hasData: spec && 'data' in spec,
+      dataType: spec && spec.data ? typeof spec.data : 'undefined',
+      dataIsArray: spec && spec.data ? Array.isArray(spec.data) : false,
+      dataLength: spec && spec.data && Array.isArray(spec.data) ? spec.data.length : 0
+    });
+    
     const data = spec.data || [];
     if (!data || data.length === 0) {
       console.error('[BESTLIB] renderHist2dD3: No hay datos', { 
@@ -8342,6 +8363,17 @@
    * Polar Plot con D3.js
    */
   function renderPolarD3(container, spec, d3, divId) {
+    // Debug logging detallado
+    console.log('[BESTLIB] renderPolarD3 llamado', {
+      hasSpec: !!spec,
+      specType: typeof spec,
+      specKeys: spec ? Object.keys(spec) : [],
+      hasData: spec && 'data' in spec,
+      dataType: spec && spec.data ? typeof spec.data : 'undefined',
+      dataIsArray: spec && spec.data ? Array.isArray(spec.data) : false,
+      dataLength: spec && spec.data && Array.isArray(spec.data) ? spec.data.length : 0
+    });
+    
     const data = spec.data || [];
     if (!data || data.length === 0) {
       console.error('[BESTLIB] renderPolarD3: No hay datos', { 
@@ -8497,6 +8529,17 @@
    * Funnel Plot con D3.js
    */
   function renderFunnelD3(container, spec, d3, divId) {
+    // Debug logging detallado
+    console.log('[BESTLIB] renderFunnelD3 llamado', {
+      hasSpec: !!spec,
+      specType: typeof spec,
+      specKeys: spec ? Object.keys(spec) : [],
+      hasData: spec && 'data' in spec,
+      dataType: spec && spec.data ? typeof spec.data : 'undefined',
+      dataIsArray: spec && spec.data ? Array.isArray(spec.data) : false,
+      dataLength: spec && spec.data && Array.isArray(spec.data) ? spec.data.length : 0
+    });
+    
     const data = spec.data || [];
     if (!data || data.length === 0) {
       console.error('[BESTLIB] renderFunnelD3: No hay datos', { 
@@ -8681,13 +8724,32 @@
    * Grouped Bar Chart con D3.js
    */
   function renderGroupedBarD3(container, spec, d3, divId) {
+    // Debug logging para diagnosticar problemas de visualización
+    console.log('[BESTLIB] renderGroupedBarD3 llamado', {
+      hasSpec: !!spec,
+      specType: typeof spec,
+      specKeys: spec ? Object.keys(spec) : [],
+      hasRows: spec && 'rows' in spec,
+      hasGroups: spec && 'groups' in spec,
+      hasSeries: spec && 'series' in spec
+    });
+    
     const rows = spec.rows || [];
     const groups = spec.groups || [];
     const series = spec.series || [];
     
+    console.log('[BESTLIB] renderGroupedBarD3 datos extraídos', {
+      rowsLength: rows.length,
+      groupsLength: groups.length,
+      seriesLength: series.length,
+      rowsType: Array.isArray(rows) ? 'array' : typeof rows,
+      groupsType: Array.isArray(groups) ? 'array' : typeof groups,
+      seriesType: Array.isArray(series) ? 'array' : typeof series
+    });
+    
     if (rows.length === 0 || groups.length === 0) {
-      console.warn('[BESTLIB] renderGroupedBarD3: No hay datos suficientes', { rows, groups, series });
-      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No hay datos para mostrar</div>';
+      console.warn('[BESTLIB] renderGroupedBarD3: No hay datos suficientes', { rows, groups, series, spec });
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No hay datos para mostrar en Grouped Bar Chart<br/><small>Rows: ' + rows.length + ', Groups: ' + groups.length + '</small></div>';
       return;
     }
     

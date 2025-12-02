@@ -3,7 +3,7 @@ Ribbon Plot Chart para BESTLIB
 Área entre dos líneas con gradiente
 """
 from .base import ChartBase
-from ..data.preparators import prepare_line_data
+from ..data.preparators import prepare_line_data, _safe_to_number
 from ..data.validators import validate_scatter_data
 from ..utils.figsize import process_figsize_in_kwargs
 from ..core.exceptions import ChartError, DataError
@@ -74,13 +74,17 @@ class RibbonChart(ChartBase):
         
         Args:
             data: DataFrame o lista de diccionarios
-            x_col: Nombre de columna para eje X
+            x_col: Nombre de columna para eje X (soporta valores numéricos y temporales)
             y1_col: Nombre de columna para línea superior
             y2_col: Nombre de columna para línea inferior
             **kwargs: Otros parámetros
         
         Returns:
             dict: Datos preparados con x, y1, y2
+        
+        Note:
+            Los valores de x_col que sean Timestamps, datetimes u otros tipos temporales
+            serán convertidos automáticamente a timestamps numéricos.
         """
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
             # Ordenar por x_col
@@ -88,9 +92,9 @@ class RibbonChart(ChartBase):
             ribbon_data = []
             for _, row in data_sorted.iterrows():
                 ribbon_data.append({
-                    'x': float(row[x_col]),
-                    'y1': float(row[y1_col]),
-                    'y2': float(row[y2_col])
+                    'x': _safe_to_number(row[x_col]),
+                    'y1': _safe_to_number(row[y1_col]),
+                    'y2': _safe_to_number(row[y2_col])
                 })
         else:
             # Para listas
@@ -98,9 +102,9 @@ class RibbonChart(ChartBase):
             ribbon_data = []
             for d in data_sorted:
                 ribbon_data.append({
-                    'x': float(d[x_col]),
-                    'y1': float(d[y1_col]),
-                    'y2': float(d[y2_col])
+                    'x': _safe_to_number(d[x_col]),
+                    'y1': _safe_to_number(d[y1_col]),
+                    'y2': _safe_to_number(d[y2_col])
                 })
         
         return {'data': ribbon_data}
