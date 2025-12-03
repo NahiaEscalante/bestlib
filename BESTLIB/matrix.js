@@ -8853,31 +8853,19 @@
    * Grouped Bar Chart con D3.js
    */
   function renderGroupedBarD3(container, spec, d3, divId) {
-    // Debug logging para diagnosticar problemas de visualización
-    console.log('[BESTLIB] renderGroupedBarD3 llamado', {
+    console.log('🔵 [BESTLIB] renderGroupedBarD3 LLAMADO!', {
+      divId: divId,
+      containerExists: !!container,
       hasSpec: !!spec,
-      specType: typeof spec,
-      specKeys: spec ? Object.keys(spec) : [],
-      hasRows: spec && 'rows' in spec,
-      hasGroups: spec && 'groups' in spec,
-      hasSeries: spec && 'series' in spec
+      specType: spec ? spec.type : 'NO SPEC',
+      rows: spec ? spec.rows : null,
+      groups: spec ? spec.groups : null,
+      seriesLength: spec && spec.series ? spec.series.length : 0
     });
     
     const rows = spec.rows || [];
     const groups = spec.groups || [];
     const series = spec.series || [];
-    
-    console.log('[BESTLIB] renderGroupedBarD3 datos extraídos', {
-      rowsLength: rows.length,
-      groupsLength: groups.length,
-      seriesLength: series.length,
-      rowsType: Array.isArray(rows) ? 'array' : typeof rows,
-      groupsType: Array.isArray(groups) ? 'array' : typeof groups,
-      seriesType: Array.isArray(series) ? 'array' : typeof series,
-      rowsData: rows,
-      groupsData: groups,
-      seriesData: series
-    });
     
     if (rows.length === 0 || groups.length === 0) {
       console.warn('[BESTLIB] renderGroupedBarD3: No hay datos suficientes', { rows, groups, series, spec });

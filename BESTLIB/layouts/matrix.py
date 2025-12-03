@@ -911,11 +911,8 @@ class MatrixLayout:
             from IPython.display import display as ipython_display, HTML, Javascript
             import sys
             
-            print(f"🔍 [MatrixLayout.display] Iniciando display para div_id={self.div_id}")
-            
             # Detectar si estamos en Colab
             is_colab = "google.colab" in sys.modules
-            print(f"🔍 [MatrixLayout.display] is_colab={is_colab}")
             
             # Cargar assets automáticamente en Colab
             from ..render.assets import AssetManager
@@ -925,7 +922,6 @@ class MatrixLayout:
             CommManager.register_comm()
             
             data = self._prepare_repr_data(ascii_layout)
-            print(f"🔍 [MatrixLayout.display] _prepare_repr_data completado")
             
             # Determinar tema a usar (instancia específica o global)
             theme = getattr(self, '_instance_theme', None) or self._current_theme
@@ -939,8 +935,6 @@ class MatrixLayout:
                 data['inline_style'],
                 theme_class
             )
-            print(f"🔍 [MatrixLayout.display] HTML generado: {len(html_content)} chars")
-            
             # Generar JavaScript usando JSBuilder
             # En Colab, esperar a que D3 esté disponible antes de renderizar
             js_content = JSBuilder.build_full_js(
@@ -950,13 +944,8 @@ class MatrixLayout:
                 data['mapping_merged'],
                 wait_for_d3=is_colab  # Esperar D3 solo en Colab
             )
-            print(f"🔍 [MatrixLayout.display] JS generado: {len(js_content)} chars")
-            
-            print(f"🔍 [MatrixLayout.display] Llamando a ipython_display(HTML)...")
             ipython_display(HTML(html_content))
-            print(f"🔍 [MatrixLayout.display] Llamando a ipython_display(Javascript)...")
             ipython_display(Javascript(js_content))
-            print(f"✅ [MatrixLayout.display] Display completado exitosamente")
             
             # En Colab, forzar que no se muestre el objeto retornando explícitamente None
             # y suprimiendo cualquier output posterior
