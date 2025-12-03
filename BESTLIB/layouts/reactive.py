@@ -4005,7 +4005,6 @@ class ReactiveMatrixLayout:
         
         # Solo mostrar una vez - el bar chart se actualiza automáticamente vía JavaScript
         self._layout.display()
-        return self
 
     # ==========================
     # Passthrough de Merge
