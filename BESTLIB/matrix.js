@@ -319,19 +319,8 @@
   // ==========================================
   
   function render(divId, asciiLayout, mapping) {
-    console.log('⭐ [BESTLIB] render() llamado', {
-      divId: divId,
-      asciiLayout: asciiLayout,
-      mappingKeys: mapping ? Object.keys(mapping).filter(k => !k.startsWith('__')) : []
-    });
-    
     const container = document.getElementById(divId);
-    if (!container) {
-      console.error('❌ [BESTLIB] Container no encontrado:', divId);
-      return;
-    }
-    
-    console.log('✅ [BESTLIB] Container encontrado');
+    if (!container) return;
 
     const rows = asciiLayout.trim().split("\n");
     const R = rows.length;
@@ -1498,16 +1487,6 @@
    * Renderiza gráficos con D3.js
    */
   function renderChartD3(container, spec, d3, divId) {
-    // Log SIEMPRE para debugging
-    console.log('🔴 [BESTLIB] renderChartD3 llamado', {
-      divId: divId,
-      hasSpec: !!spec,
-      specType: spec ? spec.type : 'NO SPEC',
-      specKeys: spec ? Object.keys(spec) : [],
-      containerExists: !!container,
-      hasD3: typeof d3 !== 'undefined'
-    });
-    
     // Validar que spec tenga type
     if (!spec || !spec.type) {
       const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
@@ -1520,10 +1499,9 @@
     }
     
     const chartType = spec.type;
-    console.log('[BESTLIB] Tipo de chart detectado:', chartType);
     
-    // Diagnóstico: verificar estructura de datos para gráficos avanzados (siempre activo para debugging)
-    if (['kde', 'distplot', 'rug', 'qqplot', 'ecdf', 'hist2d', 'polar', 'ridgeline', 'ribbon', 'funnel'].includes(chartType)) {
+    // Diagnóstico: verificar estructura de datos para gráficos avanzados (solo si debug activo)
+    if (window._bestlib_debug && ['kde', 'distplot', 'rug', 'qqplot', 'ecdf', 'hist2d', 'polar', 'ridgeline', 'ribbon', 'funnel'].includes(chartType)) {
       console.log(`[BESTLIB] renderChartD3: ${chartType}`, {
         hasData: 'data' in spec,
         dataType: spec.data ? (Array.isArray(spec.data) ? 'array' : typeof spec.data) : 'undefined',
@@ -8868,16 +8846,6 @@
    * Grouped Bar Chart con D3.js
    */
   function renderGroupedBarD3(container, spec, d3, divId) {
-    console.log('🔵 [BESTLIB] renderGroupedBarD3 LLAMADO!', {
-      divId: divId,
-      containerExists: !!container,
-      hasSpec: !!spec,
-      specType: spec ? spec.type : 'NO SPEC',
-      rows: spec ? spec.rows : null,
-      groups: spec ? spec.groups : null,
-      seriesLength: spec && spec.series ? spec.series.length : 0
-    });
-    
     const rows = spec.rows || [];
     const groups = spec.groups || [];
     const series = spec.series || [];
@@ -8961,19 +8929,32 @@
       .attr('class', 'bestlib-bar')
       .on('mouseover', function(event, d) {
         d3.select(this).attr('opacity', 0.8);
-        // Mostrar tooltip
+        
+        // Obtener el nombre de la región/categoría principal
+        const rowName = rows[d.rowIdx];
+        
+        // Mostrar tooltip con información completa
         const tooltip = d3.select(container)
           .append('div')
           .attr('class', 'bestlib-tooltip')
           .style('position', 'absolute')
-          .style('background', 'rgba(0,0,0,0.8)')
+          .style('background', 'rgba(0,0,0,0.9)')
           .style('color', '#fff')
-          .style('padding', '8px 12px')
-          .style('border-radius', '4px')
-          .style('font-size', '12px')
+          .style('padding', '10px 14px')
+          .style('border-radius', '6px')
+          .style('font-size', '13px')
+          .style('font-family', 'system-ui, -apple-system, sans-serif')
           .style('pointer-events', 'none')
           .style('z-index', '1000')
-          .html(`<strong>${d.key}</strong><br/>Valor: ${d.value}`);
+          .style('box-shadow', '0 4px 12px rgba(0,0,0,0.3)')
+          .style('line-height', '1.5')
+          .html(`
+            <div style="font-weight: 600; margin-bottom: 4px; color: #60a5fa;">${rowName}</div>
+            <div style="font-size: 12px;">
+              <span style="color: #d1d5db;">Producto:</span> <strong>${d.key}</strong><br/>
+              <span style="color: #d1d5db;">Valor:</span> <strong style="color: #fbbf24;">${d.value.toLocaleString()}</strong>
+            </div>
+          `);
         
         const rect = container.getBoundingClientRect();
         tooltip
