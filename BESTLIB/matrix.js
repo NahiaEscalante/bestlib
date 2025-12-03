@@ -7894,16 +7894,6 @@
    * Ridgeline Plot con D3.js
    */
   function renderRidgelineD3(container, spec, d3, divId) {
-    // Debug logging detallado
-    console.log('[BESTLIB] renderRidgelineD3 llamado', {
-      hasSpec: !!spec,
-      specType: typeof spec,
-      specKeys: spec ? Object.keys(spec) : [],
-      hasSeries: spec && 'series' in spec,
-      seriesType: spec && spec.series ? typeof spec.series : 'undefined',
-      seriesKeys: spec && spec.series && typeof spec.series === 'object' ? Object.keys(spec.series) : []
-    });
-    
     const series = spec.series || {};
     if (!series || Object.keys(series).length === 0) {
       console.error('[BESTLIB] renderRidgelineD3: No hay series', { 
@@ -7913,28 +7903,7 @@
         specKeys: Object.keys(spec),
         hasData: 'data' in spec
       });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: No hay series para Ridgeline Plot</div>';
-      return;
-    }
-    
-    // Validar que al menos una serie tenga datos válidos
-    const validSeriesKeys = Object.keys(series).filter(key => {
-      const serieData = series[key];
-      if (!Array.isArray(serieData) || serieData.length === 0) return false;
-      // Verificar que al menos un punto tenga x e y válidos
-      return serieData.some(d => {
-        const hasX = d && typeof d.x === 'number' && !isNaN(d.x) && isFinite(d.x);
-        const hasY = d && typeof d.y === 'number' && !isNaN(d.y) && isFinite(d.y);
-        return hasX && hasY;
-      });
-    });
-    
-    if (validSeriesKeys.length === 0) {
-      console.error('[BESTLIB] renderRidgelineD3: Todas las series están vacías o tienen datos inválidos', { 
-        seriesKeys: Object.keys(series),
-        sampleSeries: Object.keys(series).slice(0, 2).map(k => ({ key: k, length: series[k]?.length || 0, sample: series[k]?.slice(0, 2) }))
-      });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: Series vacías o datos inválidos para Ridgeline Plot</div>';
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay series para Ridgeline</div>';
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -7965,50 +7934,21 @@
     const options = spec.options || {};
     const overlap = options.overlap || 0.5;
     const opacity = options.opacity || 0.7;
-    
-    // Copiar xLabel/yLabel desde options al spec para renderAxisLabels
-    if (options.xLabel && !spec.xLabel) {
-      spec.xLabel = options.xLabel;
-    }
-    if (options.yLabel && !spec.yLabel) {
-      spec.yLabel = options.yLabel;
-    }
     const colorMap = options.colorMap || spec.colorMap || {};
     
     const categories = Object.keys(series);
     const numCategories = categories.length;
     const spacing = chartHeight / (numCategories + (numCategories - 1) * overlap);
     
-    // Calcular dominios - Python envía series en formato {cat: [{x, y}, ...]}
+    // Calcular dominios
     let xMin = Infinity, xMax = -Infinity, yMax = -Infinity;
-    
-    Object.keys(series).forEach(cat => {
-      const serie = series[cat];
-      if (Array.isArray(serie) && serie.length > 0) {
-        serie.forEach(d => {
-          if (d && typeof d === 'object' && d.hasOwnProperty('x') && d.hasOwnProperty('y')) {
-            const xVal = parseFloat(d.x);
-            const yVal = parseFloat(d.y);
-            if (!isNaN(xVal)) {
-              xMin = Math.min(xMin, xVal);
-              xMax = Math.max(xMax, xVal);
-            }
-            if (!isNaN(yVal)) {
-              yMax = Math.max(yMax, yVal);
-            }
-          }
-        });
-      }
+    Object.values(series).forEach(serie => {
+      serie.forEach(d => {
+        xMin = Math.min(xMin, d.x);
+        xMax = Math.max(xMax, d.x);
+        yMax = Math.max(yMax, d.y);
+      });
     });
-    
-    // Asegurar valores válidos
-    if (!isFinite(xMin) || !isFinite(xMax)) {
-      xMin = 0;
-      xMax = 100;
-    }
-    if (!isFinite(yMax) || yMax <= 0) {
-      yMax = 1;
-    }
     
     const x = d3.scaleLinear()
       .domain([xMin, xMax])
@@ -8022,11 +7962,6 @@
     // Dibujar cada serie
     categories.forEach((cat, idx) => {
       const serie = series[cat];
-      
-      if (!Array.isArray(serie) || serie.length === 0) {
-        console.warn(`[BESTLIB] renderRidgelineD3: Serie '${cat}' está vacía o no es un array`);
-        return;
-      }
       const yOffset = idx * spacing * (1 + overlap);
       const yScale = d3.scaleLinear()
         .domain([0, yMax])
@@ -8075,32 +8010,15 @@
         .text(cat);
     });
     
-    // Ejes - solo eje X para ridgeline (las categorías están en el lado izquierdo)
+    // Ejes
     if (spec.axes !== false) {
-      const xLabel = options.xLabel || spec.xLabel;
-      const yLabel = options.yLabel || spec.yLabel;
-      renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
-      // Nota: Ridgeline no tiene eje Y tradicional, pero podemos mostrar el label si se especifica
-      if (yLabel && svg) {
-        const styles = getUnifiedStyles();
-        const offset = 8;
-        const yLabelX = margin.left / 2 - offset;
-        const yLabelY = margin.top + chartHeight / 2;
-        
-        svg.append('text')
-          .attr('x', yLabelX)
-          .attr('y', yLabelY)
-          .attr('text-anchor', 'middle')
-          .attr('dominant-baseline', 'central')
-          .attr('class', 'bestlib-axis-label bestlib-axis-label-y')
-          .style('font-size', `${styles.labelFontSize}px`)
-          .style('font-weight', styles.labelFontWeight)
-          .style('fill', styles.textColor)
-          .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
-          .style('pointer-events', 'none')
-          .attr('transform', `rotate(-90 ${yLabelX} ${yLabelY})`)
-          .text(yLabel);
-      }
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x));
+      
+      applyUnifiedAxisStyles(xAxis);
+      
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
     }
   }
   
@@ -8108,38 +8026,9 @@
    * Ribbon Plot con D3.js
    */
   function renderRibbonD3(container, spec, d3, divId) {
-    // Debug logging detallado
-    console.log('[BESTLIB] renderRibbonD3 llamado', {
-      hasSpec: !!spec,
-      specType: typeof spec,
-      specKeys: spec ? Object.keys(spec) : [],
-      hasData: spec && 'data' in spec,
-      dataType: spec && spec.data ? typeof spec.data : 'undefined',
-      dataIsArray: spec && spec.data ? Array.isArray(spec.data) : false,
-      dataLength: spec && spec.data && Array.isArray(spec.data) ? spec.data.length : 0
-    });
-    
     const data = spec.data || [];
     if (!data || data.length === 0) {
-      console.error('[BESTLIB] renderRibbonD3: No hay datos', { spec });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: No hay datos para Ribbon Plot</div>';
-      return;
-    }
-    
-    // Validar que los datos tengan la estructura correcta
-    const validData = data.filter(d => {
-      const hasX = d && typeof d.x === 'number' && !isNaN(d.x) && isFinite(d.x);
-      const hasY1 = d && typeof d.y1 === 'number' && !isNaN(d.y1) && isFinite(d.y1);
-      const hasY2 = d && typeof d.y2 === 'number' && !isNaN(d.y2) && isFinite(d.y2);
-      return hasX && hasY1 && hasY2;
-    });
-    
-    if (validData.length === 0) {
-      console.error('[BESTLIB] renderRibbonD3: Datos inválidos (x, y1, y2 deben ser números válidos)', { 
-        originalLength: data.length, 
-        sampleData: data.slice(0, 3) 
-      });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: Datos inválidos para Ribbon Plot (x, y1, y2 deben ser números)</div>';
+      console.warn('[BESTLIB] renderRibbonD3: No hay datos', { spec });
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -8174,18 +8063,14 @@
     const showLines = options.showLines !== undefined ? options.showLines : true;
     const gradient = options.gradient !== undefined ? options.gradient : true;
     
-    // Obtener labels directamente desde options o spec (NO copiar al spec para evitar duplicación)
-    const xLabel = options.xLabel || spec.xLabel;
-    const yLabel = options.yLabel || spec.yLabel;
-    
     const x = d3.scaleLinear()
-      .domain(validData.length > 0 ? d3.extent(validData, d => d.x) : [0, 100])
+      .domain(data.length > 0 ? d3.extent(data, d => d.x) : [0, 100])
       .nice()
       .range([0, chartWidth]);
     
-    // Calcular dominio Y para ribbon (y1 e y2) - usar validData
-    const y1Values = validData.map(d => d.y1).filter(v => v != null);
-    const y2Values = validData.map(d => d.y2).filter(v => v != null);
+    // Calcular dominio Y para ribbon (y1 e y2)
+    const y1Values = data.map(d => d.y1).filter(v => v != null);
+    const y2Values = data.map(d => d.y2).filter(v => v != null);
     const allYValues = [...y1Values, ...y2Values];
     const yDomain = allYValues.length > 0
       ? [Math.min(...allYValues), Math.max(...allYValues)]
@@ -8217,7 +8102,7 @@
         .attr('stop-color', color2)
         .attr('stop-opacity', opacity);
       
-      // Área con gradiente - usar validData
+      // Área con gradiente
       const area = d3.area()
         .x(d => x(d.x))
         .y0(d => y(d.y1))
@@ -8225,11 +8110,11 @@
         .curve(d3.curveMonotoneX);
       
       g.append('path')
-        .datum(validData)
+        .datum(data)
         .attr('fill', `url(#${gradientId})`)
         .attr('d', area);
     } else {
-      // Área sólida - usar validData
+      // Área sólida
       const area = d3.area()
         .x(d => x(d.x))
         .y0(d => y(d.y1))
@@ -8237,14 +8122,14 @@
         .curve(d3.curveMonotoneX);
       
       g.append('path')
-        .datum(validData)
+        .datum(data)
         .attr('fill', color1)
         .attr('fill-opacity', opacity)
         .attr('d', area)
         .attr('class', 'bestlib-area');
     }
     
-    // Líneas opcionales - usar validData
+    // Líneas opcionales
     if (showLines) {
       const line1 = d3.line()
         .x(d => x(d.x))
@@ -8257,7 +8142,7 @@
         .curve(d3.curveMonotoneX);
       
       g.append('path')
-        .datum(validData)
+        .datum(data)
         .attr('fill', 'none')
         .attr('stroke', color1)
         .attr('stroke-width', 2)
@@ -8265,7 +8150,7 @@
         .attr('class', 'bestlib-line');
       
       g.append('path')
-        .datum(validData)
+        .datum(data)
         .attr('fill', 'none')
         .attr('stroke', color2)
         .attr('stroke-width', 2)
@@ -8273,10 +8158,20 @@
         .attr('class', 'bestlib-line');
     }
     
-    // Ejes usando funciones reutilizables
+    // Ejes
     if (spec.axes !== false) {
-      renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
-      renderYAxis(g, y, chartWidth, chartHeight, margin, yLabel, svg);
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x));
+      
+      applyUnifiedAxisStyles(xAxis);
+      
+      const yAxis = g.append('g')
+        .call(d3.axisLeft(y));
+      
+      applyUnifiedAxisStyles(yAxis);
+      
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
     }
   }
   
@@ -8284,17 +8179,6 @@
    * 2D Histogram con D3.js
    */
   function renderHist2dD3(container, spec, d3, divId) {
-    // Debug logging detallado
-    console.log('[BESTLIB] renderHist2dD3 llamado', {
-      hasSpec: !!spec,
-      specType: typeof spec,
-      specKeys: spec ? Object.keys(spec) : [],
-      hasData: spec && 'data' in spec,
-      dataType: spec && spec.data ? typeof spec.data : 'undefined',
-      dataIsArray: spec && spec.data ? Array.isArray(spec.data) : false,
-      dataLength: spec && spec.data && Array.isArray(spec.data) ? spec.data.length : 0
-    });
-    
     const data = spec.data || [];
     if (!data || data.length === 0) {
       console.error('[BESTLIB] renderHist2dD3: No hay datos', { 
@@ -8303,24 +8187,7 @@
         dataType: typeof spec.data,
         specKeys: Object.keys(spec)
       });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: No hay datos para Hist2D</div>';
-      return;
-    }
-    
-    // Validar que los datos tengan la estructura correcta
-    const validData = data.filter(d => {
-      const hasX = d && typeof d.x === 'number' && !isNaN(d.x) && isFinite(d.x);
-      const hasY = d && typeof d.y === 'number' && !isNaN(d.y) && isFinite(d.y);
-      const hasValue = d && typeof d.value === 'number' && !isNaN(d.value) && isFinite(d.value);
-      return hasX && hasY && hasValue;
-    });
-    
-    if (validData.length === 0) {
-      console.error('[BESTLIB] renderHist2dD3: Datos inválidos', { 
-        originalLength: data.length, 
-        sampleData: data.slice(0, 3) 
-      });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: Datos inválidos para Hist2D</div>';
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para Hist2D</div>';
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -8351,71 +8218,48 @@
     const options = spec.options || {};
     const colorScale = options.colorScale || 'Blues';
     
-    // Obtener labels directamente desde options o spec (NO copiar al spec para evitar duplicación)
-    const xLabel = options.xLabel || spec.xLabel;
-    const yLabel = options.yLabel || spec.yLabel;
-    
-    // Calcular dominios desde bins para alineación correcta - usar validData
-    const xBinStarts = validData.map(d => d.x_bin_start).filter(v => v != null && !isNaN(v));
-    const xBinEnds = validData.map(d => d.x_bin_end).filter(v => v != null && !isNaN(v));
-    const yBinStarts = validData.map(d => d.y_bin_start).filter(v => v != null && !isNaN(v));
-    const yBinEnds = validData.map(d => d.y_bin_end).filter(v => v != null && !isNaN(v));
-    
-    const xDomain = xBinStarts.length > 0 && xBinEnds.length > 0
-      ? [Math.min(...xBinStarts), Math.max(...xBinEnds)]
-      : [0, 100];
-    const yDomain = yBinStarts.length > 0 && yBinEnds.length > 0
-      ? [Math.min(...yBinStarts), Math.max(...yBinEnds)]
-      : [0, 100];
-    
     const x = d3.scaleLinear()
-      .domain(xDomain)
+      .domain(d3.extent(data, d => d.x) || [0, 100])
       .nice()
       .range([0, chartWidth]);
     
     const y = d3.scaleLinear()
-      .domain(yDomain)
+      .domain(d3.extent(data, d => d.y) || [0, 100])
       .nice()
       .range([chartHeight, 0]);
     
-    const maxValue = d3.max(validData, d => d.value) || 1;
+    const maxValue = d3.max(data, d => d.value) || 1;
     const color = d3.scaleSequential(d3.interpolateBlues)
       .domain([0, maxValue]);
     
-    // Celdas del heatmap - asegurar que los bins estén bien alineados - usar validData
+    // Celdas del heatmap
     g.selectAll('.cell')
-      .data(validData)
+      .data(data)
       .enter()
       .append('rect')
       .attr('class', 'bestlib-heatmap-cell')
-      .attr('x', d => {
-        const start = parseFloat(d.x_bin_start);
-        return isNaN(start) ? 0 : x(start);
-      })
-      .attr('y', d => {
-        const end = parseFloat(d.y_bin_end);
-        return isNaN(end) ? chartHeight : y(end);
-      })
-      .attr('width', d => {
-        const start = parseFloat(d.x_bin_start);
-        const end = parseFloat(d.x_bin_end);
-        if (isNaN(start) || isNaN(end)) return 0;
-        return Math.max(0, x(end) - x(start));
-      })
-      .attr('height', d => {
-        const start = parseFloat(d.y_bin_start);
-        const end = parseFloat(d.y_bin_end);
-        if (isNaN(start) || isNaN(end)) return 0;
-        return Math.max(0, y(start) - y(end));
-      })
+      .attr('x', d => x(d.x_bin_start))
+      .attr('y', d => y(d.y_bin_end))
+      .attr('width', d => x(d.x_bin_end) - x(d.x_bin_start))
+      .attr('height', d => y(d.y_bin_start) - y(d.y_bin_end))
       .attr('fill', d => color(d.value))
       .attr('stroke', '#fff')
       .attr('stroke-width', 0.5);
     
-    // Ejes usando funciones reutilizables
+    // Ejes
     if (spec.axes !== false) {
-      renderXAxis(g, x, chartHeight, chartWidth, margin, xLabel, svg);
-      renderYAxis(g, y, chartWidth, chartHeight, margin, yLabel, svg);
+      const xAxis = g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x));
+      
+      applyUnifiedAxisStyles(xAxis);
+      
+      const yAxis = g.append('g')
+        .call(d3.axisLeft(y));
+      
+      applyUnifiedAxisStyles(yAxis);
+      
+      renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
     }
   }
   
@@ -8423,17 +8267,6 @@
    * Polar Plot con D3.js
    */
   function renderPolarD3(container, spec, d3, divId) {
-    // Debug logging detallado
-    console.log('[BESTLIB] renderPolarD3 llamado', {
-      hasSpec: !!spec,
-      specType: typeof spec,
-      specKeys: spec ? Object.keys(spec) : [],
-      hasData: spec && 'data' in spec,
-      dataType: spec && spec.data ? typeof spec.data : 'undefined',
-      dataIsArray: spec && spec.data ? Array.isArray(spec.data) : false,
-      dataLength: spec && spec.data && Array.isArray(spec.data) ? spec.data.length : 0
-    });
-    
     const data = spec.data || [];
     if (!data || data.length === 0) {
       console.error('[BESTLIB] renderPolarD3: No hay datos', { 
@@ -8442,23 +8275,7 @@
         dataType: typeof spec.data,
         specKeys: Object.keys(spec)
       });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: No hay datos para Polar Plot</div>';
-      return;
-    }
-    
-    // Validar que los datos tengan la estructura correcta (angle y radius)
-    const validData = data.filter(d => {
-      const hasAngle = d && typeof d.angle === 'number' && !isNaN(d.angle) && isFinite(d.angle);
-      const hasRadius = d && typeof d.radius === 'number' && !isNaN(d.radius) && isFinite(d.radius);
-      return hasAngle && hasRadius;
-    });
-    
-    if (validData.length === 0) {
-      console.error('[BESTLIB] renderPolarD3: Datos inválidos (angle y radius deben ser números)', { 
-        originalLength: data.length, 
-        sampleData: data.slice(0, 3) 
-      });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: Datos inválidos para Polar Plot (angle y radius deben ser números)</div>';
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para Polar</div>';
       return;
     }
     
@@ -8466,13 +8283,8 @@
     let width = dims.width;
     let height = dims.height;
     
-    // Calcular tamaño con márgenes internos para que no se salga del padding
-    const isLargeDashboard = container.closest('.matrix-layout') && 
-                             container.closest('.matrix-layout').querySelectorAll('.matrix-cell').length >= 9;
-    const internalPadding = isLargeDashboard ? 30 : 40; // Padding interno para labels y grid
-    
     const size = Math.min(width, height);
-    const radius = Math.min(size - internalPadding, size - internalPadding) / 2;
+    const radius = Math.min(size - 40, size - 40) / 2;
     
     const svg = d3.select(container)
       .append('svg')
@@ -8490,12 +8302,8 @@
     const showGrid = options.showGrid !== undefined ? options.showGrid : true;
     const showLabels = options.showLabels !== undefined ? options.showLabels : true;
     
-    // Obtener labels directamente desde options o spec (Polar no usa ejes tradicionales, pero puede tener labels)
-    const xLabel = options.xLabel || spec.xLabel;
-    const yLabel = options.yLabel || spec.yLabel;
-    
-    // Calcular coordenadas polares desde angle y radius - usar validData
-    const maxRadius = d3.max(validData, d => (d.radius !== undefined ? d.radius : Math.sqrt(d.x*d.x + d.y*d.y))) || 1;
+    // Calcular coordenadas polares desde angle y radius (no usar x, y pre-calculados)
+    const maxRadius = d3.max(data, d => (d.radius !== undefined ? d.radius : Math.sqrt(d.x*d.x + d.y*d.y))) || 1;
     const r = d3.scaleLinear()
       .domain([0, maxRadius])
       .range([0, radius]);
@@ -8529,9 +8337,9 @@
       }
     }
     
-    // Puntos - recalcular coordenadas desde angle y radius - usar validData
+    // Puntos - recalcular coordenadas desde angle y radius
     g.selectAll('.point')
-      .data(validData)
+      .data(data)
       .enter()
       .append('circle')
       .attr('class', 'bestlib-point')
@@ -8549,9 +8357,9 @@
       .attr('fill', color)
       .attr('opacity', 0.6);
     
-    // Líneas desde el centro - usar validData
+    // Líneas desde el centro
     g.selectAll('.line')
-      .data(validData)
+      .data(data)
       .enter()
       .append('line')
       .attr('x1', 0)
@@ -8569,53 +8377,15 @@
       .attr('stroke', color)
       .attr('stroke-width', 1)
       .attr('opacity', 0.3);
-    
-    // Polar no tiene ejes tradicionales, pero puede mostrar labels si se especifican
-    if (xLabel || yLabel) {
-      const styles = getUnifiedStyles();
-      // Mostrar labels en el centro del gráfico polar
-      if (xLabel && svg) {
-        svg.append('text')
-          .attr('x', size / 2)
-          .attr('y', size - 10)
-          .attr('text-anchor', 'middle')
-          .attr('class', 'bestlib-axis-label bestlib-axis-label-x')
-          .style('font-size', `${styles.labelFontSize}px`)
-          .style('font-weight', styles.labelFontWeight)
-          .style('fill', styles.textColor)
-          .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
-          .text(xLabel);
-      }
-      if (yLabel && svg) {
-        svg.append('text')
-          .attr('x', size / 2)
-          .attr('y', 20)
-          .attr('text-anchor', 'middle')
-          .attr('class', 'bestlib-axis-label bestlib-axis-label-y')
-          .style('font-size', `${styles.labelFontSize}px`)
-          .style('font-weight', styles.labelFontWeight)
-          .style('fill', styles.textColor)
-          .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
-          .text(yLabel);
-      }
-    }
   }
   
   /**
    * Funnel Plot con D3.js
    */
+  /**
+   * Funnel Plot con D3.js
+   */
   function renderFunnelD3(container, spec, d3, divId) {
-    // Debug logging detallado
-    console.log('[BESTLIB] renderFunnelD3 llamado', {
-      hasSpec: !!spec,
-      specType: typeof spec,
-      specKeys: spec ? Object.keys(spec) : [],
-      hasData: spec && 'data' in spec,
-      dataType: spec && spec.data ? typeof spec.data : 'undefined',
-      dataIsArray: spec && spec.data ? Array.isArray(spec.data) : false,
-      dataLength: spec && spec.data && Array.isArray(spec.data) ? spec.data.length : 0
-    });
-    
     const data = spec.data || [];
     if (!data || data.length === 0) {
       console.error('[BESTLIB] renderFunnelD3: No hay datos', { 
@@ -8624,23 +8394,7 @@
         dataType: typeof spec.data,
         specKeys: Object.keys(spec)
       });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: No hay datos para Funnel Plot</div>';
-      return;
-    }
-    
-    // Validar que los datos tengan la estructura correcta (stage y value)
-    const validData = data.filter(d => {
-      const hasStage = d && d.stage !== undefined && d.stage !== null;
-      const hasValue = d && typeof d.value === 'number' && !isNaN(d.value) && isFinite(d.value) && d.value >= 0;
-      return hasStage && hasValue;
-    });
-    
-    if (validData.length === 0) {
-      console.error('[BESTLIB] renderFunnelD3: Datos inválidos (stage y value >= 0 requeridos)', { 
-        originalLength: data.length, 
-        sampleData: data.slice(0, 3) 
-      });
-      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f; background: #ffebee; border-radius: 4px;">Error: Datos inválidos para Funnel Plot (stage y value >= 0 requeridos)</div>';
+      container.innerHTML = '<div style="padding: 10px; color: #d32f2f; border: 1px solid #d32f2f;">Error: No hay datos para Funnel</div>';
       return;
     }
     const dims = getChartDimensions(container, spec, 400, 350);
@@ -8673,12 +8427,8 @@
     const color = options.color || spec.color || '#4a90e2';
     const opacity = options.opacity || 0.7;
     
-    // Obtener labels directamente desde options o spec (NO copiar al spec para evitar duplicación)
-    const xLabel = options.xLabel || spec.xLabel;
-    const yLabel = options.yLabel || spec.yLabel;
-    
-    const maxValue = d3.max(validData, d => d.value) || 1;
-    const numStages = validData.length;
+    const maxValue = d3.max(data, d => d.value) || 1;
+    const numStages = data.length;
     const stageHeight = chartHeight / numStages;
     const maxWidth = chartWidth * 0.8;
     
@@ -8687,17 +8437,17 @@
         .domain([0, maxValue])
         .range([0, maxWidth]);
       
-      validData.forEach((d, i) => {
+      data.forEach((d, i) => {
         const yPos = i * stageHeight;
         const barWidth = x(d.value);
         const centerX = chartWidth / 2;
         
-        // Trapecio (funnel shape) - usar validData
+        // Trapecio (funnel shape)
         const points = [
           [centerX - barWidth/2, yPos],
           [centerX + barWidth/2, yPos],
-          [centerX + (i < numStages - 1 ? x(validData[i+1].value)/2 : 0), yPos + stageHeight],
-          [centerX - (i < numStages - 1 ? x(validData[i+1].value)/2 : 0), yPos + stageHeight]
+          [centerX + (i < numStages - 1 ? x(data[i+1].value)/2 : 0), yPos + stageHeight],
+          [centerX - (i < numStages - 1 ? x(data[i+1].value)/2 : 0), yPos + stageHeight]
         ];
         
         g.append('polygon')
@@ -8720,57 +8470,16 @@
       });
       
       if (spec.axes !== false) {
-        const x = d3.scaleLinear()
+        const xAxis = d3.scaleLinear()
           .domain([0, maxValue])
           .range([0, maxWidth]);
         
-        // Crear grupo para el eje centrado
         const axisG = g.append('g')
           .attr('transform', `translate(${chartWidth/2 - maxWidth/2},${chartHeight})`)
           .call(d3.axisBottom(x));
         
         applyUnifiedAxisStyles(axisG);
-        
-        // Usar función reutilizable para labels
-        const xLabel = options.xLabel || spec.xLabel;
-        const yLabel = options.yLabel || spec.yLabel;
-        if (xLabel && svg) {
-          const styles = getUnifiedStyles();
-          const offset = 8;
-          const xLabelX = margin.left + chartWidth / 2;
-          const xLabelY = margin.top + chartHeight + margin.bottom - 10 + offset;
-          
-          svg.append('text')
-            .attr('x', xLabelX)
-            .attr('y', xLabelY)
-            .attr('text-anchor', 'middle')
-            .attr('class', 'bestlib-axis-label bestlib-axis-label-x')
-            .style('font-size', `${styles.labelFontSize}px`)
-            .style('font-weight', styles.labelFontWeight)
-            .style('fill', styles.textColor)
-            .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
-            .text(xLabel);
-        }
-        if (yLabel && svg) {
-          const styles = getUnifiedStyles();
-          const offset = 8;
-          const yLabelX = margin.left / 2 - offset;
-          const yLabelY = margin.top + chartHeight / 2;
-          
-          svg.append('text')
-            .attr('x', yLabelX)
-            .attr('y', yLabelY)
-            .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'central')
-            .attr('class', 'bestlib-axis-label bestlib-axis-label-y')
-            .style('font-size', `${styles.labelFontSize}px`)
-            .style('font-weight', styles.labelFontWeight)
-            .style('fill', styles.textColor)
-            .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif')
-            .style('pointer-events', 'none')
-            .attr('transform', `rotate(-90 ${yLabelX} ${yLabelY})`)
-            .text(yLabel);
-        }
+        renderAxisLabels(g, spec, chartWidth, chartHeight, margin, svg);
       }
     } else {
       // Horizontal (similar pero rotado)
