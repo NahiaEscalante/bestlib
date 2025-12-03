@@ -128,7 +128,13 @@ class RidgelineChart(ChartBase):
                         {'x': float(x), 'y': float(y)} 
                         for x, y in zip(bin_centers, hist)
                     ]
-        else:
+            
+            # 🔍 DEBUG: Ver datos preparados
+            print(f"🔍 [DEBUG] prepare_ridgeline_data - Categorías: {list(result.keys())}")
+            for cat, points in result.items():
+                print(f"  {cat}: {len(points)} puntos, muestra: {points[:2]}")
+            
+            return {'series': result}
             # Para listas, agrupar manualmente
             from collections import defaultdict
             grouped = defaultdict(list)

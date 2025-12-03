@@ -1452,6 +1452,9 @@
    * Renderiza gráficos con D3.js
    */
   function renderChartD3(container, spec, d3, divId) {
+    // 🔍 DEBUG: Log de TODOS los specs que llegan
+    console.log('🔍 [DEBUG] renderChartD3 - Tipo:', spec?.type, 'Spec:', spec);
+    
     // Validar que spec tenga type
     if (!spec || !spec.type) {
       const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
@@ -1528,6 +1531,7 @@
     } else if (chartType === 'ecdf') {
       renderEcdfD3(container, spec, d3, divId);
     } else if (chartType === 'ridgeline') {
+      console.log('🎯 [DEBUG] Llamando a renderRidgelineD3 con spec:', spec);
       renderRidgelineD3(container, spec, d3, divId);
     } else if (chartType === 'ribbon') {
       renderRibbonD3(container, spec, d3, divId);
