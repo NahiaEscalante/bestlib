@@ -2691,6 +2691,15 @@
     
     const color = d3.scaleOrdinal(d3.schemeSet2).domain(categories);
 
+    // Tooltip para violin (opcional)
+    let violinTooltip = null;
+    const xLabel = spec.xLabel || 'Categoría';
+    const yLabel = spec.yLabel || 'Valor';
+    if (shouldShowTooltip(spec)) {
+      const tooltipId = `violin-tooltip-${divId}`;
+      violinTooltip = createOrGetTooltip(d3, tooltipId, 'violin-tooltip', false);
+    }
+
     // Contador de violines renderizados
     let renderedViolins = 0;
     const violinErrors = [];
@@ -2787,7 +2796,7 @@
         }
         
         // Dibujar violín completo (área cerrada simétrica)
-        g.append('path')
+        const violinPath = g.append('path')
           .attr('d', pathData)
           .attr('fill', color(category))
           .attr('opacity', 0.7)
@@ -2795,6 +2804,65 @@
           .attr('stroke-width', 1)
           .attr('stroke-linejoin', 'round')
           .attr('stroke-linecap', 'round');
+        
+        // Hover / tooltip por categoría
+        if (violinTooltip) {
+          // Calcular resumen simple de la distribución
+          const ys = safeProfile.map(p => p.y).filter(val => val != null && !isNaN(val));
+          const minVal = d3.min(ys);
+          const maxVal = d3.max(ys);
+          const medianVal = d3.median(ys);
+          
+          violinPath
+            .style('cursor', 'pointer')
+            .on('mouseenter', function(event) {
+              const mouseX = event.pageX || event.clientX || 0;
+              const mouseY = event.pageY || event.clientY || 0;
+              
+              d3.select(this)
+                .attr('opacity', 0.9)
+                .attr('stroke-width', 1.5);
+              
+              const minStr = formatTooltipNumber(minVal);
+              const maxStr = formatTooltipNumber(maxVal);
+              const medStr = formatTooltipNumber(medianVal);
+              
+              violinTooltip
+                .style('left', (mouseX + 10) + 'px')
+                .style('top', (mouseY - 10) + 'px')
+                .style('display', 'block')
+                .html(
+                  `<strong>${xLabel}:</strong> ${category}<br/>` +
+                  `<strong>${yLabel}:</strong><br/>` +
+                  `&nbsp;&nbsp;Mínimo: ${minStr}<br/>` +
+                  `&nbsp;&nbsp;Mediana aprox.: ${medStr}<br/>` +
+                  `&nbsp;&nbsp;Máximo: ${maxStr}`
+                )
+                .transition()
+                .duration(150)
+                .style('opacity', 1);
+            })
+            .on('mousemove', function(event) {
+              const mouseX = event.pageX || event.clientX || 0;
+              const mouseY = event.pageY || event.clientY || 0;
+              violinTooltip
+                .style('left', (mouseX + 10) + 'px')
+                .style('top', (mouseY - 10) + 'px');
+            })
+            .on('mouseleave', function() {
+              d3.select(this)
+                .attr('opacity', 0.7)
+                .attr('stroke-width', 1);
+              
+              violinTooltip
+                .transition()
+                .duration(150)
+                .style('opacity', 0)
+                .on('end', function() {
+                  violinTooltip.style('display', 'none');
+                });
+            });
+        }
         
         renderedViolins++;
       } catch (e) {
@@ -8056,13 +8124,76 @@
         .curve(d3.curveMonotoneX);
     }
     
-    g.append('path')
+    const kdePath = g.append('path')
       .datum(data)
       .attr('fill', 'none')
       .attr('stroke', color)
       .attr('stroke-width', strokeWidth)
       .attr('d', line)
       .attr('class', 'bestlib-line');
+    
+    // Tooltip para KDE (opcional)
+    let kdeTooltip = null;
+    if (shouldShowTooltip(spec)) {
+      const tooltipId = `kde-tooltip-${divId}`;
+      kdeTooltip = createOrGetTooltip(d3, tooltipId, 'kde-tooltip', false);
+    }
+    
+    if (kdeTooltip) {
+      g.selectAll('.kde-point')
+        .data(data)
+        .enter()
+        .append('circle')
+        .attr('class', 'kde-point')
+        .attr('cx', d => x(d.x))
+        .attr('cy', d => y(d.y))
+        .attr('r', 4)
+        .attr('fill', color)
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 1.5)
+        .attr('opacity', 0)
+        .style('cursor', 'pointer')
+        .on('mouseenter', function(event, d) {
+          const mouseX = event.pageX || event.clientX || 0;
+          const mouseY = event.pageY || event.clientY || 0;
+          
+          d3.select(this)
+            .attr('opacity', 1)
+            .attr('r', 6);
+          
+          kdeTooltip
+            .style('left', (mouseX + 10) + 'px')
+            .style('top', (mouseY - 10) + 'px')
+            .style('display', 'block')
+            .html(
+              `<strong>${xLabel}:</strong> ${formatTooltipNumber(d.x)}<br/>` +
+              `<strong>${yLabel}:</strong> ${formatTooltipNumber(d.y)}`
+            )
+            .transition()
+            .duration(150)
+            .style('opacity', 1);
+        })
+        .on('mousemove', function(event) {
+          const mouseX = event.pageX || event.clientX || 0;
+          const mouseY = event.pageY || event.clientY || 0;
+          kdeTooltip
+            .style('left', (mouseX + 10) + 'px')
+            .style('top', (mouseY - 10) + 'px');
+        })
+        .on('mouseleave', function() {
+          d3.select(this)
+            .attr('opacity', 0)
+            .attr('r', 4);
+          
+          kdeTooltip
+            .transition()
+            .duration(150)
+            .style('opacity', 0)
+            .on('end', function() {
+              kdeTooltip.style('display', 'none');
+            });
+        });
+    }
     
     // Ejes usando funciones reutilizables para evitar duplicación y asegurar labels
     if (spec.axes !== false) {
