@@ -3986,6 +3986,14 @@ class ReactiveMatrixLayout:
         return self
 
     
+    def _repr_html_(self):
+        """Representación HTML para Jupyter (delega al layout interno)"""
+        return self._layout._repr_html_()
+    
+    def _repr_mimebundle_(self, include=None, exclude=None):
+        """Representación MIME bundle para JupyterLab (delega al layout interno)"""
+        return self._layout._repr_mimebundle_(include=include, exclude=exclude)
+    
     def display(self, ascii_layout=None):
         """
         Muestra el layout.

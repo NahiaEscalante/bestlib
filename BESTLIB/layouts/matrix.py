@@ -957,6 +957,15 @@ class MatrixLayout:
             print(f"🔍 [MatrixLayout.display] Llamando a ipython_display(Javascript)...")
             ipython_display(Javascript(js_content))
             print(f"✅ [MatrixLayout.display] Display completado exitosamente")
+            
+            # En Colab, forzar que no se muestre el objeto retornando explícitamente None
+            # y suprimiendo cualquier output posterior
+            if is_colab:
+                from IPython.display import clear_output
+                # NO hacer clear_output() porque borraría el gráfico
+                # En su lugar, simplemente asegurarse de que None sea lo último
+                pass
+            
             return None
             
         except Exception as e:
