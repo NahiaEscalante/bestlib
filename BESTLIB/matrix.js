@@ -319,8 +319,19 @@
   // ==========================================
   
   function render(divId, asciiLayout, mapping) {
+    console.log('⭐ [BESTLIB] render() llamado', {
+      divId: divId,
+      asciiLayout: asciiLayout,
+      mappingKeys: mapping ? Object.keys(mapping).filter(k => !k.startsWith('__')) : []
+    });
+    
     const container = document.getElementById(divId);
-    if (!container) return;
+    if (!container) {
+      console.error('❌ [BESTLIB] Container no encontrado:', divId);
+      return;
+    }
+    
+    console.log('✅ [BESTLIB] Container encontrado');
 
     const rows = asciiLayout.trim().split("\n");
     const R = rows.length;
@@ -1486,11 +1497,13 @@
    */
   function renderChartD3(container, spec, d3, divId) {
     // Log SIEMPRE para debugging
-    console.log('[BESTLIB] renderChartD3 llamado', {
+    console.log('🔴 [BESTLIB] renderChartD3 llamado', {
       divId: divId,
       hasSpec: !!spec,
       specType: spec ? spec.type : 'NO SPEC',
-      specKeys: spec ? Object.keys(spec) : []
+      specKeys: spec ? Object.keys(spec) : [],
+      containerExists: !!container,
+      hasD3: typeof d3 !== 'undefined'
     });
     
     // Validar que spec tenga type
