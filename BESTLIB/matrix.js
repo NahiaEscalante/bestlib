@@ -1465,6 +1465,11 @@
     
     const chartType = spec.type;
     
+    // Log para gráficos problemáticos
+    if (['hist2d', 'polar', 'ridgeline', 'ribbon', 'funnel'].includes(chartType)) {
+      console.log(`🔍 [BESTLIB] Intentando renderizar ${chartType}`, { spec, divId });
+    }
+    
     // Diagnóstico: verificar estructura de datos para gráficos avanzados (solo si debug activo)
     if (window._bestlib_debug && ['kde', 'distplot', 'rug', 'qqplot', 'ecdf', 'hist2d', 'polar', 'ridgeline', 'ribbon', 'funnel'].includes(chartType)) {
       console.log(`[BESTLIB] renderChartD3: ${chartType}`, {
