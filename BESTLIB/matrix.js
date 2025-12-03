@@ -7706,8 +7706,8 @@
     const rugColor = options.rugColor || '#4a90e2';
     
     // Obtener labels directamente desde options o spec
-    const xLabel = options.xLabel || spec.xLabel;
-    const yLabel = options.yLabel || spec.yLabel;
+    const xLabel = options.xLabel || spec.xLabel || 'X';
+    const yLabel = options.yLabel || spec.yLabel || 'Densidad';
     
     // Combinar todos los datos para calcular dominios
     const allData = [...(histogram || []), ...(kde || [])];
@@ -7728,9 +7728,16 @@
       .nice()
       .range([chartHeight, 0]);
     
+    // Tooltip único para distplot (opcional)
+    let distTooltip = null;
+    if (shouldShowTooltip(spec)) {
+      const tooltipId = `distplot-tooltip-${divId}`;
+      distTooltip = createOrGetTooltip(d3, tooltipId, 'distplot-tooltip', false);
+    }
+    
     // Histograma
     if (histogram.length > 0) {
-      g.selectAll('.bar')
+      const bars = g.selectAll('.bar')
         .data(histogram)
         .enter()
         .append('rect')
@@ -7741,6 +7748,52 @@
         .attr('height', d => chartHeight - y(d.y))
         .attr('fill', color)
         .attr('opacity', 0.6);
+      
+      if (distTooltip) {
+        bars
+          .style('cursor', 'pointer')
+          .on('mouseenter', function(event, d) {
+            const mouseX = event.pageX || event.clientX || 0;
+            const mouseY = event.pageY || event.clientY || 0;
+            
+            d3.select(this)
+              .attr('opacity', 0.8);
+            
+            const binRange = `[${formatTooltipNumber(d.bin_start)}, ${formatTooltipNumber(d.bin_end)}]`;
+            const countStr = formatTooltipNumber(d.y);
+            
+            distTooltip
+              .style('left', (mouseX + 10) + 'px')
+              .style('top', (mouseY - 10) + 'px')
+              .style('display', 'block')
+              .html(
+                `<strong>${xLabel} (bin):</strong> ${binRange}<br/>` +
+                `<strong>${yLabel}:</strong> ${countStr}`
+              )
+              .transition()
+              .duration(150)
+              .style('opacity', 1);
+          })
+          .on('mousemove', function(event) {
+            const mouseX = event.pageX || event.clientX || 0;
+            const mouseY = event.pageY || event.clientY || 0;
+            distTooltip
+              .style('left', (mouseX + 10) + 'px')
+              .style('top', (mouseY - 10) + 'px');
+          })
+          .on('mouseleave', function() {
+            d3.select(this)
+              .attr('opacity', 0.6);
+            
+            distTooltip
+              .transition()
+              .duration(150)
+              .style('opacity', 0)
+              .on('end', function() {
+                distTooltip.style('display', 'none');
+              });
+          });
+      }
     }
     
     // KDE
@@ -7750,18 +7803,74 @@
         .y(d => y(d.y))
         .curve(d3.curveMonotoneX);
       
-      g.append('path')
+      const kdePath = g.append('path')
         .datum(kde)
         .attr('fill', 'none')
         .attr('stroke', kdeColor)
         .attr('stroke-width', 2)
         .attr('d', kdeLine)
         .attr('class', 'bestlib-line');
+      
+      if (distTooltip) {
+        g.selectAll('.distplot-kde-point')
+          .data(kde)
+          .enter()
+          .append('circle')
+          .attr('class', 'distplot-kde-point')
+          .attr('cx', d => x(d.x))
+          .attr('cy', d => y(d.y))
+          .attr('r', 4)
+          .attr('fill', kdeColor)
+          .attr('stroke', '#fff')
+          .attr('stroke-width', 1.5)
+          .attr('opacity', 0)
+          .style('cursor', 'pointer')
+          .on('mouseenter', function(event, d) {
+            const mouseX = event.pageX || event.clientX || 0;
+            const mouseY = event.pageY || event.clientY || 0;
+            
+            d3.select(this)
+              .attr('opacity', 1)
+              .attr('r', 6);
+            
+            distTooltip
+              .style('left', (mouseX + 10) + 'px')
+              .style('top', (mouseY - 10) + 'px')
+              .style('display', 'block')
+              .html(
+                `<strong>${xLabel}:</strong> ${formatTooltipNumber(d.x)}<br/>` +
+                `<strong>${yLabel}:</strong> ${formatTooltipNumber(d.y)}`
+              )
+              .transition()
+              .duration(150)
+              .style('opacity', 1);
+          })
+          .on('mousemove', function(event) {
+            const mouseX = event.pageX || event.clientX || 0;
+            const mouseY = event.pageY || event.clientY || 0;
+            distTooltip
+              .style('left', (mouseX + 10) + 'px')
+              .style('top', (mouseY - 10) + 'px');
+          })
+          .on('mouseleave', function() {
+            d3.select(this)
+              .attr('opacity', 0)
+              .attr('r', 4);
+            
+            distTooltip
+              .transition()
+              .duration(150)
+              .style('opacity', 0)
+              .on('end', function() {
+                distTooltip.style('display', 'none');
+              });
+          });
+      }
     }
     
     // Rug
     if (rug.length > 0) {
-      g.selectAll('.rug')
+      const rugLines = g.selectAll('.rug')
         .data(rug)
         .enter()
         .append('line')
@@ -7773,6 +7882,50 @@
         .attr('stroke', rugColor)
         .attr('stroke-width', 1)
         .attr('opacity', 0.6);
+      
+      if (distTooltip) {
+        rugLines
+          .style('cursor', 'pointer')
+          .on('mouseenter', function(event, d) {
+            const mouseX = event.pageX || event.clientX || 0;
+            const mouseY = event.pageY || event.clientY || 0;
+            
+            d3.select(this)
+              .attr('opacity', 1)
+              .attr('stroke-width', 2);
+            
+            distTooltip
+              .style('left', (mouseX + 10) + 'px')
+              .style('top', (mouseY - 10) + 'px')
+              .style('display', 'block')
+              .html(
+                `<strong>${xLabel} (rug):</strong> ${formatTooltipNumber(d.x)}`
+              )
+              .transition()
+              .duration(150)
+              .style('opacity', 1);
+          })
+          .on('mousemove', function(event) {
+            const mouseX = event.pageX || event.clientX || 0;
+            const mouseY = event.pageY || event.clientY || 0;
+            distTooltip
+              .style('left', (mouseX + 10) + 'px')
+              .style('top', (mouseY - 10) + 'px');
+          })
+          .on('mouseleave', function() {
+            d3.select(this)
+              .attr('opacity', 0.6)
+              .attr('stroke-width', 1);
+            
+            distTooltip
+              .transition()
+              .duration(150)
+              .style('opacity', 0)
+              .on('end', function() {
+                distTooltip.style('display', 'none');
+              });
+          });
+      }
     }
     
     // Ejes usando funciones reutilizables
@@ -8033,8 +8186,15 @@
         .attr('opacity', 0.5);
     }
     
+    // Tooltip para Q-Q Plot (opcional)
+    let qqTooltip = null;
+    if (shouldShowTooltip(spec)) {
+      const tooltipId = `qq-tooltip-${divId}`;
+      qqTooltip = createOrGetTooltip(d3, tooltipId, 'qq-tooltip', false);
+    }
+    
     // Puntos
-    g.selectAll('.point')
+    const points = g.selectAll('.point')
       .data(data)
       .enter()
       .append('circle')
@@ -8044,6 +8204,51 @@
       .attr('r', 3)
       .attr('fill', color)
       .attr('opacity', 0.6);
+    
+    if (qqTooltip) {
+      points
+        .style('cursor', 'pointer')
+        .on('mouseenter', function(event, d) {
+          const mouseX = event.pageX || event.clientX || 0;
+          const mouseY = event.pageY || event.clientY || 0;
+          
+          d3.select(this)
+            .attr('opacity', 1)
+            .attr('r', 5);
+          
+          qqTooltip
+            .style('left', (mouseX + 10) + 'px')
+            .style('top', (mouseY - 10) + 'px')
+            .style('display', 'block')
+            .html(
+              `<strong>${xLabel || 'Cuantil teórico'}:</strong> ${formatTooltipNumber(d.x)}<br/>` +
+              `<strong>${yLabel || 'Cuantil observado'}:</strong> ${formatTooltipNumber(d.y)}`
+            )
+            .transition()
+            .duration(150)
+            .style('opacity', 1);
+        })
+        .on('mousemove', function(event) {
+          const mouseX = event.pageX || event.clientX || 0;
+          const mouseY = event.pageY || event.clientY || 0;
+          qqTooltip
+            .style('left', (mouseX + 10) + 'px')
+            .style('top', (mouseY - 10) + 'px');
+        })
+        .on('mouseleave', function() {
+          d3.select(this)
+            .attr('opacity', 0.6)
+            .attr('r', 3);
+          
+          qqTooltip
+            .transition()
+            .duration(150)
+            .style('opacity', 0)
+            .on('end', function() {
+              qqTooltip.style('display', 'none');
+            });
+        });
+    }
     
     // Ejes - usar funciones reutilizables para evitar duplicación de labels
     if (spec.axes !== false) {
@@ -8124,7 +8329,7 @@
         .curve(d3.curveMonotoneX);
     }
     
-    const kdePath = g.append('path')
+    const ecdfPath = g.append('path')
       .datum(data)
       .attr('fill', 'none')
       .attr('stroke', color)
@@ -8132,19 +8337,19 @@
       .attr('d', line)
       .attr('class', 'bestlib-line');
     
-    // Tooltip para KDE (opcional)
-    let kdeTooltip = null;
+    // Tooltip para ECDF (opcional)
+    let ecdfTooltip = null;
     if (shouldShowTooltip(spec)) {
-      const tooltipId = `kde-tooltip-${divId}`;
-      kdeTooltip = createOrGetTooltip(d3, tooltipId, 'kde-tooltip', false);
+      const tooltipId = `ecdf-tooltip-${divId}`;
+      ecdfTooltip = createOrGetTooltip(d3, tooltipId, 'ecdf-tooltip', false);
     }
     
-    if (kdeTooltip) {
-      g.selectAll('.kde-point')
+    if (ecdfTooltip) {
+      g.selectAll('.ecdf-point')
         .data(data)
         .enter()
         .append('circle')
-        .attr('class', 'kde-point')
+        .attr('class', 'ecdf-point')
         .attr('cx', d => x(d.x))
         .attr('cy', d => y(d.y))
         .attr('r', 4)
@@ -8161,13 +8366,13 @@
             .attr('opacity', 1)
             .attr('r', 6);
           
-          kdeTooltip
+          ecdfTooltip
             .style('left', (mouseX + 10) + 'px')
             .style('top', (mouseY - 10) + 'px')
             .style('display', 'block')
             .html(
               `<strong>${xLabel}:</strong> ${formatTooltipNumber(d.x)}<br/>` +
-              `<strong>${yLabel}:</strong> ${formatTooltipNumber(d.y)}`
+              `<strong>${yLabel || 'F(x)'}:</strong> ${formatTooltipNumber(d.y)}`
             )
             .transition()
             .duration(150)
@@ -8176,7 +8381,7 @@
         .on('mousemove', function(event) {
           const mouseX = event.pageX || event.clientX || 0;
           const mouseY = event.pageY || event.clientY || 0;
-          kdeTooltip
+          ecdfTooltip
             .style('left', (mouseX + 10) + 'px')
             .style('top', (mouseY - 10) + 'px');
         })
@@ -8185,12 +8390,12 @@
             .attr('opacity', 0)
             .attr('r', 4);
           
-          kdeTooltip
+          ecdfTooltip
             .transition()
             .duration(150)
             .style('opacity', 0)
             .on('end', function() {
-              kdeTooltip.style('display', 'none');
+              ecdfTooltip.style('display', 'none');
             });
         });
     }
