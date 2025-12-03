@@ -34,7 +34,18 @@ setup(
     packages=find_packages(exclude=["tests", "tests.*", "examples", "examples.*"]),
     include_package_data=True,
     package_data={
-        "BESTLIB": ["*.js", "*.css"],
+        "BESTLIB": [
+            "*.js", 
+            "*.css",
+            "charts/*.py",
+            "compat/*.py",
+            "core/*.py",
+            "data/*.py",
+            "layouts/*.py",
+            "reactive/*.py",
+            "render/*.py",
+            "utils/*.py",
+        ],
     },
     python_requires=">=3.8",
     install_requires=[
