@@ -7894,6 +7894,9 @@
    * Ridgeline Plot con D3.js
    */
   function renderRidgelineD3(container, spec, d3, divId) {
+    // 🔍 DEBUG: Ver spec completo
+    console.log('🔍 [DEBUG] renderRidgelineD3 - Spec recibido:', JSON.stringify(spec, null, 2));
+    
     const series = spec.series || {};
     if (!series || Object.keys(series).length === 0) {
       console.error('[BESTLIB] renderRidgelineD3: No hay series', { 
