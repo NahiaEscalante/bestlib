@@ -8918,11 +8918,12 @@
         // Obtener el nombre de la región/categoría principal
         const rowName = rows[d.rowIdx];
         
-        // Tooltip simple y claro
-        const tooltip = d3.select(container)
+        // Tooltip simple y claro - usar body para asegurar que se muestre
+        d3.select('body').selectAll('.bestlib-tooltip').remove();
+        const tooltip = d3.select('body')
           .append('div')
           .attr('class', 'bestlib-tooltip')
-          .style('position', 'absolute')
+          .style('position', 'fixed')
           .style('background', 'rgba(50, 50, 50, 0.95)')
           .style('color', 'white')
           .style('padding', '8px 12px')
@@ -8932,16 +8933,18 @@
           .style('pointer-events', 'none')
           .style('z-index', '10000')
           .style('white-space', 'nowrap')
-          .html(`<strong>${rowName}</strong><br/>${d.key}: ${d.value.toLocaleString()}`);
-        
-        const rect = container.getBoundingClientRect();
-        tooltip
-          .style('left', (event.clientX - rect.left + 10) + 'px')
-          .style('top', (event.clientY - rect.top - 10) + 'px');
+          .html(`<strong>${rowName}</strong><br/>${d.key}: ${d.value.toLocaleString()}`)
+          .style('left', (event.pageX + 10) + 'px')
+          .style('top', (event.pageY - 10) + 'px');
+      })
+      .on('mousemove', function(event) {
+        d3.select('.bestlib-tooltip')
+          .style('left', (event.pageX + 10) + 'px')
+          .style('top', (event.pageY - 10) + 'px');
       })
       .on('mouseout', function() {
         d3.select(this).attr('opacity', 1);
-        d3.select(container).selectAll('.bestlib-tooltip').remove();
+        d3.select('body').selectAll('.bestlib-tooltip').remove();
       });
     
     // Eje X
