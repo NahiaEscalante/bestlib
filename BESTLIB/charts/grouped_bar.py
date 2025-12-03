@@ -27,6 +27,11 @@ class GroupedBarChart(ChartBase):
         groups = prepared.get('groups', [])
         series = prepared.get('series', [])
         
+        print(f"[DEBUG GroupedBar] Prepared data:")
+        print(f"  rows: {rows}")
+        print(f"  groups: {groups}")
+        print(f"  series: {series}")
+        
         for row_idx, row in enumerate(rows):
             for group_idx, group in enumerate(groups):
                 value = 0
@@ -52,6 +57,9 @@ class GroupedBarChart(ChartBase):
         for key, value in kwargs.items():
             if key not in ['rows', 'groups', 'series', 'data', 'type', 'grouped']:
                 spec[key] = value
+        
+        print(f"[DEBUG GroupedBar] Final spec keys: {list(spec.keys())}")
+        print(f"[DEBUG GroupedBar] Spec type: {spec.get('type')}")
         
         return spec
 
