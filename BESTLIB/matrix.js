@@ -1485,6 +1485,14 @@
    * Renderiza gráficos con D3.js
    */
   function renderChartD3(container, spec, d3, divId) {
+    // Log SIEMPRE para debugging
+    console.log('[BESTLIB] renderChartD3 llamado', {
+      divId: divId,
+      hasSpec: !!spec,
+      specType: spec ? spec.type : 'NO SPEC',
+      specKeys: spec ? Object.keys(spec) : []
+    });
+    
     // Validar que spec tenga type
     if (!spec || !spec.type) {
       const errorMsg = '<div style="padding: 20px; text-align: center; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 4px; margin: 10px;">' +
@@ -1497,6 +1505,7 @@
     }
     
     const chartType = spec.type;
+    console.log('[BESTLIB] Tipo de chart detectado:', chartType);
     
     // Diagnóstico: verificar estructura de datos para gráficos avanzados (siempre activo para debugging)
     if (['kde', 'distplot', 'rug', 'qqplot', 'ecdf', 'hist2d', 'polar', 'ridgeline', 'ribbon', 'funnel'].includes(chartType)) {
