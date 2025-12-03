@@ -992,6 +992,52 @@
       transitionDurationSlow: parseFloat(getCSSVariable('--chart-transition-duration-slow', '500ms')) || 500
     };
   }
+
+  /**
+   * Devuelve estilos de hover unificados para un gráfico dado.
+   * Permite que el spec sobrescriba colores y opacidades.
+   */
+  function getHoverStyles(spec = {}) {
+    const styles = getUnifiedStyles();
+    return {
+      color: spec.hoverColor || styles.primaryHover || styles.primaryColor,
+      opacity: spec.hoverOpacity != null ? spec.hoverOpacity : styles.opacityHover,
+      radius: spec.hoverRadius != null ? spec.hoverRadius : styles.pointRadiusHover,
+      strokeWidth: spec.hoverStrokeWidth != null ? spec.hoverStrokeWidth : styles.pointStrokeWidth * 1.2
+    };
+  }
+
+  /**
+   * Crea o reutiliza un tooltip estándar para un gráfico.
+   * Respeta spec.tooltip === false para desactivarlo.
+   */
+  function createOrGetChartTooltip(divId, baseClass, spec = {}) {
+    // Permitir desactivar tooltips desde el spec
+    if (spec.tooltip === false) {
+      return null;
+    }
+    const tooltipId = `${baseClass}-${divId}`;
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body')
+        .append('div')
+        .attr('id', tooltipId)
+        .attr('class', baseClass)
+        .style('position', 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    return tooltip;
+  }
   
   /**
    * Renderiza etiquetas de ejes con soporte para personalización
@@ -4961,26 +5007,8 @@
       .nice()
       .range([chartHeight, 0]);
     
-    // Crear tooltip para boxplot
-    const tooltipId = `boxplot-tooltip-${divId}`;
-    let tooltip = d3.select(`#${tooltipId}`);
-    if (tooltip.empty()) {
-      tooltip = d3.select('body').append('div')
-        .attr('id', tooltipId)
-        .attr('class', 'boxplot-tooltip')
-        .style('position', 'absolute')
-        .style('background', 'rgba(0, 0, 0, 0.85)')
-        .style('color', '#fff')
-        .style('padding', '10px 12px')
-        .style('border-radius', '6px')
-        .style('pointer-events', 'none')
-        .style('opacity', 0)
-        .style('font-size', '12px')
-        .style('z-index', 10000)
-        .style('display', 'none')
-        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
-        .style('font-family', 'Arial, sans-serif');
-    }
+    // Crear tooltip para boxplot (respetando spec.tooltip === false)
+    const tooltip = createOrGetChartTooltip(divId, 'boxplot-tooltip', spec);
     
     const yLabel = spec.yLabel || 'Value';
     
@@ -5224,26 +5252,8 @@
     const barWidthPixels = x(minBin + binSpacing) - x(minBin);
     const barWidth = Math.max(barWidthPixels * 0.9, 1); // 90% del ancho para dejar espacio
     
-    // Crear tooltip para histograma
-    const tooltipId = `histogram-tooltip-${divId}`;
-    let tooltip = d3.select(`#${tooltipId}`);
-    if (tooltip.empty()) {
-      tooltip = d3.select('body').append('div')
-        .attr('id', tooltipId)
-        .attr('class', 'histogram-tooltip')
-        .style('position', 'absolute')
-        .style('background', 'rgba(0, 0, 0, 0.85)')
-        .style('color', '#fff')
-        .style('padding', '10px 12px')
-        .style('border-radius', '6px')
-      .style('pointer-events', 'none')
-        .style('opacity', 0)
-        .style('font-size', '12px')
-        .style('z-index', 10000)
-        .style('display', 'none')
-        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
-        .style('font-family', 'Arial, sans-serif');
-    }
+    // Crear tooltip para histograma (respetando spec.tooltip === false)
+    const tooltip = createOrGetChartTooltip(divId, 'histogram-tooltip', spec);
     
     const xLabel = spec.xLabel || 'Bin';
     const yLabel = spec.yLabel || 'Frequency';
@@ -5507,26 +5517,8 @@
     const y2 = d3.scaleLinear().domain([0, maxValue]).nice().range([chartHeight, 0]);
     const color = d3.scaleOrdinal(d3.schemeCategory10).domain(series);
 
-    // Crear tooltip para grouped bar chart
-    const tooltipId = `grouped-bar-tooltip-${divId}`;
-    let tooltip = d3.select(`#${tooltipId}`);
-    if (tooltip.empty()) {
-      tooltip = d3.select('body').append('div')
-        .attr('id', tooltipId)
-        .attr('class', 'grouped-bar-chart-tooltip')
-        .style('position', 'absolute')
-        .style('background', 'rgba(0, 0, 0, 0.85)')
-        .style('color', '#fff')
-        .style('padding', '10px 12px')
-        .style('border-radius', '6px')
-        .style('pointer-events', 'none')
-        .style('opacity', 0)
-        .style('font-size', '12px')
-        .style('z-index', 10000)
-        .style('display', 'none')
-        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
-        .style('font-family', 'Arial, sans-serif');
-    }
+    // Crear tooltip para grouped bar chart (respetando spec.tooltip === false)
+    const tooltip = createOrGetChartTooltip(divId, 'grouped-bar-chart-tooltip', spec);
     
     const xLabel = spec.xLabel || 'Group';
     const yLabel = spec.yLabel || 'Value';
@@ -5616,26 +5608,8 @@
     }
   } else {
     // Simple bars
-    // Crear tooltip para bar chart
-    const tooltipId = `bar-tooltip-${divId}`;
-    let tooltip = d3.select(`#${tooltipId}`);
-    if (tooltip.empty()) {
-      tooltip = d3.select('body').append('div')
-        .attr('id', tooltipId)
-        .attr('class', 'bar-chart-tooltip')
-        .style('position', 'absolute')
-        .style('background', 'rgba(0, 0, 0, 0.85)')
-        .style('color', '#fff')
-        .style('padding', '10px 12px')
-        .style('border-radius', '6px')
-        .style('pointer-events', 'none')
-        .style('opacity', 0)
-        .style('font-size', '12px')
-        .style('z-index', 10000)
-        .style('display', 'none')
-        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
-        .style('font-family', 'Arial, sans-serif');
-    }
+    // Crear tooltip para bar chart (respetando spec.tooltip === false)
+    const tooltip = createOrGetChartTooltip(divId, 'bar-chart-tooltip', spec);
     
     const xLabel = spec.xLabel || 'Category';
     const yLabel = spec.yLabel || 'Value';
@@ -7427,6 +7401,63 @@
       .attr('stroke-width', strokeWidth)
       .attr('d', line)
       .attr('class', 'bestlib-line');
+
+    // Hover: puntos invisibles para tooltip + highlight
+    const hoverStyles = getHoverStyles(spec);
+    const tooltip = createOrGetChartTooltip(divId, 'kde-tooltip', spec);
+    const xLabelSafe = xLabel || spec.xLabel || 'X';
+    const yLabelSafe = yLabel || spec.yLabel || 'Density';
+    
+    if (tooltip) {
+      g.selectAll('.kde-hover-point')
+        .data(data)
+        .enter()
+        .append('circle')
+        .attr('class', 'kde-hover-point')
+        .attr('cx', d => x(d.x))
+        .attr('cy', d => y(d.y))
+        .attr('r', 6)
+        .attr('fill', 'transparent')
+        .attr('stroke', 'transparent')
+        .style('cursor', spec.interactive ? 'pointer' : 'default')
+        .on('mouseenter', function(event, d) {
+          const mouseX = event.pageX || event.clientX || 0;
+          const mouseY = event.pageY || event.clientY || 0;
+          
+          // Highlight visual en la línea usando un pequeño círculo de overlay
+          d3.select(this)
+            .attr('fill', hoverStyles.color)
+            .attr('stroke', '#fff')
+            .attr('stroke-width', hoverStyles.strokeWidth)
+            .attr('opacity', hoverStyles.opacity);
+          
+          tooltip
+            .style('left', (mouseX + 10) + 'px')
+            .style('top', (mouseY - 10) + 'px')
+            .style('display', 'block')
+            .html(
+              `<strong>${xLabelSafe}:</strong> ${formatTooltipNumber(d.x, 3)}<br/>` +
+              `<strong>${yLabelSafe}:</strong> ${formatTooltipNumber(d.y, 3)}`
+            )
+            .transition()
+            .duration(200)
+            .style('opacity', 1);
+        })
+        .on('mouseleave', function() {
+          d3.select(this)
+            .attr('fill', 'transparent')
+            .attr('stroke', 'transparent')
+            .attr('opacity', 0);
+          
+          tooltip
+            .transition()
+            .duration(200)
+            .style('opacity', 0)
+            .on('end', function() {
+              tooltip.style('display', 'none');
+            });
+        });
+    }
     
     // Ejes usando funciones reutilizables
     if (spec.axes !== false) {
@@ -7538,6 +7569,62 @@
         .attr('stroke-width', 2)
         .attr('d', kdeLine)
         .attr('class', 'bestlib-line');
+
+      // Hover sobre la curva KDE del distplot
+      const hoverStyles = getHoverStyles(spec);
+      const tooltip = createOrGetChartTooltip(divId, 'distplot-tooltip', spec);
+      const xLabelSafe = xLabel || spec.xLabel || 'X';
+      const yLabelSafe = yLabel || spec.yLabel || 'Density';
+      
+      if (tooltip) {
+        g.selectAll('.distplot-kde-hover-point')
+          .data(kde)
+          .enter()
+          .append('circle')
+          .attr('class', 'distplot-kde-hover-point')
+          .attr('cx', d => x(d.x))
+          .attr('cy', d => y(d.y))
+          .attr('r', 6)
+          .attr('fill', 'transparent')
+          .attr('stroke', 'transparent')
+          .style('cursor', spec.interactive ? 'pointer' : 'default')
+          .on('mouseenter', function(event, d) {
+            const mouseX = event.pageX || event.clientX || 0;
+            const mouseY = event.pageY || event.clientY || 0;
+            
+            d3.select(this)
+              .attr('fill', hoverStyles.color)
+              .attr('stroke', '#fff')
+              .attr('stroke-width', hoverStyles.strokeWidth)
+              .attr('opacity', hoverStyles.opacity);
+            
+            tooltip
+              .style('left', (mouseX + 10) + 'px')
+              .style('top', (mouseY - 10) + 'px')
+              .style('display', 'block')
+              .html(
+                `<strong>${xLabelSafe}:</strong> ${formatTooltipNumber(d.x, 3)}<br/>` +
+                `<strong>${yLabelSafe}:</strong> ${formatTooltipNumber(d.y, 3)}`
+              )
+              .transition()
+              .duration(200)
+              .style('opacity', 1);
+          })
+          .on('mouseleave', function() {
+            d3.select(this)
+              .attr('fill', 'transparent')
+              .attr('stroke', 'transparent')
+              .attr('opacity', 0);
+            
+            tooltip
+              .transition()
+              .duration(200)
+              .style('opacity', 0)
+              .on('end', function() {
+                tooltip.style('display', 'none');
+              });
+          });
+      }
     }
     
     // Rug
@@ -7554,6 +7641,58 @@
         .attr('stroke', rugColor)
         .attr('stroke-width', 1)
         .attr('opacity', 0.6);
+
+      // Hover: tooltip + highlight en cada marca del rug dentro del distplot
+      const hoverStyles = getHoverStyles(spec);
+      const tooltip = createOrGetChartTooltip(divId, 'distplot-rug-tooltip', spec);
+      const xLabelSafe = xLabel || spec.xLabel || 'Value';
+      
+      if (tooltip) {
+        g.selectAll('.distplot-rug-hover-point')
+          .data(rug)
+          .enter()
+          .append('circle')
+          .attr('class', 'distplot-rug-hover-point')
+          .attr('cx', d => x(d.x))
+          .attr('cy', chartHeight + 5)
+          .attr('r', 5)
+          .attr('fill', 'transparent')
+          .attr('stroke', 'transparent')
+          .style('cursor', spec.interactive ? 'pointer' : 'default')
+          .on('mouseenter', function(event, d) {
+            const mouseX = event.pageX || event.clientX || 0;
+            const mouseY = event.pageY || event.clientY || 0;
+            
+            d3.select(this)
+              .attr('fill', hoverStyles.color)
+              .attr('stroke', '#fff')
+              .attr('stroke-width', hoverStyles.strokeWidth)
+              .attr('opacity', hoverStyles.opacity);
+            
+            tooltip
+              .style('left', (mouseX + 10) + 'px')
+              .style('top', (mouseY - 10) + 'px')
+              .style('display', 'block')
+              .html(`<strong>${xLabelSafe}:</strong> ${formatTooltipNumber(d.x, 3)}`)
+              .transition()
+              .duration(200)
+              .style('opacity', 1);
+          })
+          .on('mouseleave', function() {
+            d3.select(this)
+              .attr('fill', 'transparent')
+              .attr('stroke', 'transparent')
+              .attr('opacity', 0);
+            
+            tooltip
+              .transition()
+              .duration(200)
+              .style('opacity', 0)
+              .on('end', function() {
+                tooltip.style('display', 'none');
+              });
+          });
+      }
     }
     
     // Ejes usando funciones reutilizables

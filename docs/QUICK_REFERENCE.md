@@ -92,7 +92,12 @@ MatrixLayout.map({
         "type": "bar",
         "data": data,
         "color": "#4a90e2",
-        "interactive": True
+        "interactive": True,   # activa selección/linked views
+        # tooltip está activado por defecto; puedes desactivarlo con:
+        # "tooltip": False,
+        # y personalizar el hover con:
+        # "hoverColor": "#ff6b35",
+        # "hoverOpacity": 0.9
     }
 })
 
@@ -117,6 +122,16 @@ layout.add_scatter('S', df_long, x_col='valX', y_col='valY', interactive=True)
 layout.add_heatmap('H', x_col='col', y_col='row', value_col='val', linked_to='S', axes=True)
 layout.display()
 ```
+
+### Notas sobre Hover y Tooltips
+
+- Todos los gráficos D3 modernos (`bar`, `histogram`, `boxplot`, `heatmap`, `violin`, `line`, `pie`, `kde`, `distplot`, `rug`, `parallel_coordinates`, etc.) incluyen:
+  - Tooltip HTML cerca del cursor al hacer hover
+  - Highlight visual del elemento (cambio de color/opacidad/tamaño)
+- El tooltip se puede desactivar añadiendo `"tooltip": False` en el spec (o como `tooltip=False` en el nivel Python cuando se soporta).
+- El color y opacidad de hover se pueden personalizar con:
+  - `"hoverColor"`: color al pasar el ratón
+  - `"hoverOpacity"`: opacidad del elemento en hover
 
 ### Correlation Heatmap
 ```python

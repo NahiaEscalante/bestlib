@@ -32,14 +32,16 @@ Gráfico de dispersión que muestra la relación entre dos variables numéricas.
 - `size_col`: Columna para tamaño de puntos (opcional)
 - `color_col`: Columna para color de puntos (opcional)
 - `interactive`: Habilita selección (default: True)
+- `tooltip`: Habilita/deshabilita tooltip de hover (default: True)
 
-**Selección:**
+**Selección e interactividad de hover:**
 - ✅ **SÍ SOPORTA SELECCIÓN**
 - **Tipo de selección:**
   - **Brush Selection**: Arrastrar un rectángulo para seleccionar múltiples puntos
   - **Click Individual**: Click en puntos individuales para seleccionar/deseleccionar
   - **Multi-selección**: Mantener Ctrl/Cmd mientras haces click para agregar a la selección
 - **Implementación:** Usa `d3.brush()` para selección rectangular y eventos de click
+- **Hover/tooltip:** Al pasar el ratón por encima de un punto se muestra un tooltip con (x, y, categoría) y el punto se resalta visualmente (tamaño/color/opacidad).
 - **Evento enviado:** `sendEvent(divId, 'select', {items: [...], __scatter_letter__: 'S'})`
 - **Uso:**
   ```python
