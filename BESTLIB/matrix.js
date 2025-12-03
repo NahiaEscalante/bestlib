@@ -6573,6 +6573,27 @@
         .attr('stroke-width', strokeWidth)
         .attr('d', line);
       
+      // Agregar rug plot si rugData está disponible
+      if (spec.rugData && spec.rugData.length > 0) {
+        const rugColor = spec.options?.rugColor || spec.options?.color || '#4a90e2';
+        const rugSize = spec.options?.rugSize || 2;
+        const rugOpacity = spec.options?.rugOpacity || 0.6;
+        const rugHeight = chartHeight * 0.05;
+        
+        g.selectAll('.rug-tick')
+          .data(spec.rugData)
+          .enter()
+          .append('line')
+          .attr('class', 'rug-tick')
+          .attr('x1', d => xScale(d.x))
+          .attr('x2', d => xScale(d.x))
+          .attr('y1', chartHeight)
+          .attr('y2', chartHeight - rugHeight)
+          .attr('stroke', rugColor)
+          .attr('stroke-width', rugSize)
+          .attr('opacity', rugOpacity);
+      }
+      
       // Marcadores opcionales
       if (markers) {
         g.selectAll(`.marker-${idx}`)
