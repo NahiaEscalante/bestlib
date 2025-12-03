@@ -315,6 +315,64 @@
   }
   
   // ==========================================
+  // Funciones Helper para Tooltips/Hover
+  // ==========================================
+  
+  /**
+   * Determina si los tooltips deben mostrarse para un spec dado.
+   * Por defecto están activados salvo que spec.tooltip === false.
+   */
+  function shouldShowTooltip(spec) {
+    return !(spec && spec.tooltip === false);
+  }
+  
+  /**
+   * Helper unificado para crear o recuperar un tooltip HTML.
+   * 
+   * @param {object} d3 - Referencia a d3
+   * @param {string} tooltipId - ID único del tooltip
+   * @param {string} className - Clase CSS base
+   * @param {boolean} useFixed - Si true, usa position: fixed (útil en Colab)
+   * @returns {object} Selección D3 del tooltip
+   */
+  function createOrGetTooltip(d3, tooltipId, className, useFixed = false) {
+    let tooltip = d3.select(`#${tooltipId}`);
+    if (tooltip.empty()) {
+      tooltip = d3.select('body')
+        .append('div')
+        .attr('id', tooltipId)
+        .attr('class', className)
+        .style('position', useFixed ? 'fixed' : 'absolute')
+        .style('background', 'rgba(0, 0, 0, 0.85)')
+        .style('color', '#fff')
+        .style('padding', '10px 12px')
+        .style('border-radius', '6px')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .style('font-size', '12px')
+        .style('z-index', 10000)
+        .style('display', 'none')
+        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
+        .style('font-family', 'Arial, sans-serif');
+    }
+    return tooltip;
+  }
+  
+  /**
+   * Formatea un número para mostrarlo en tooltips.
+   */
+  function formatTooltipNumber(value, decimals = 2) {
+    if (value == null || isNaN(value)) return value;
+    try {
+      const num = Number(value);
+      if (!isFinite(num)) return value;
+      return num.toFixed(decimals);
+    } catch (e) {
+      return value;
+    }
+  }
+  
+  // ==========================================
   // Renderizado Principal
   // ==========================================
   
@@ -1686,6 +1744,15 @@
       .transition()
       .duration(500)
       .attr('opacity', 1);
+    
+    // Tooltip para heatmap (opcional)
+    let heatmapTooltip = null;
+    const xAxisLabel = spec.xLabel || 'X';
+    const yAxisLabel = spec.yLabel || 'Y';
+    if (shouldShowTooltip(spec)) {
+      const tooltipId = `heatmap-tooltip-${divId}`;
+      heatmapTooltip = createOrGetTooltip(d3, tooltipId, 'heatmap-tooltip', false);
+    }
 
     // Mostrar valores numéricos si está habilitado
     if (showValues) {
@@ -1715,6 +1782,53 @@
         .attr('opacity', 1);
     }
 
+    // Hover / tooltip sobre celdas
+    if (heatmapTooltip) {
+      g.selectAll('rect')
+        .on('mouseenter', function(event, d) {
+          const mouseX = event.pageX || event.clientX || 0;
+          const mouseY = event.pageY || event.clientY || 0;
+          
+          d3.select(this)
+            .attr('stroke-width', 2)
+            .attr('opacity', 0.9);
+          
+          const valueStr = formatTooltipNumber(d.value, 2);
+          heatmapTooltip
+            .style('left', (mouseX + 10) + 'px')
+            .style('top', (mouseY - 10) + 'px')
+            .style('display', 'block')
+            .html(
+              `<strong>${xAxisLabel}:</strong> ${d.x}<br/>` +
+              `<strong>${yAxisLabel}:</strong> ${d.y}<br/>` +
+              `<strong>Valor:</strong> ${valueStr}`
+            )
+            .transition()
+            .duration(150)
+            .style('opacity', 1);
+        })
+        .on('mousemove', function(event) {
+          const mouseX = event.pageX || event.clientX || 0;
+          const mouseY = event.pageY || event.clientY || 0;
+          heatmapTooltip
+            .style('left', (mouseX + 10) + 'px')
+            .style('top', (mouseY - 10) + 'px');
+        })
+        .on('mouseleave', function() {
+          d3.select(this)
+            .attr('stroke-width', 1)
+            .attr('opacity', 1);
+          
+          heatmapTooltip
+            .transition()
+            .duration(150)
+            .style('opacity', 0)
+            .on('end', function() {
+              heatmapTooltip.style('display', 'none');
+            });
+        });
+    }
+    
     // Renderizar colorbar para correlation heatmap
     if (isCorrelation) {
       // Calcular absMax una sola vez (ya se calculó antes)
@@ -5462,25 +5576,11 @@
     const y2 = d3.scaleLinear().domain([0, maxValue]).nice().range([chartHeight, 0]);
     const color = d3.scaleOrdinal(d3.schemeCategory10).domain(series);
 
-    // Crear tooltip para grouped bar chart
-    const tooltipId = `grouped-bar-tooltip-${divId}`;
-    let tooltip = d3.select(`#${tooltipId}`);
-    if (tooltip.empty()) {
-      tooltip = d3.select('body').append('div')
-        .attr('id', tooltipId)
-        .attr('class', 'grouped-bar-chart-tooltip')
-        .style('position', 'absolute')
-        .style('background', 'rgba(0, 0, 0, 0.85)')
-        .style('color', '#fff')
-        .style('padding', '10px 12px')
-        .style('border-radius', '6px')
-        .style('pointer-events', 'none')
-        .style('opacity', 0)
-        .style('font-size', '12px')
-        .style('z-index', 10000)
-        .style('display', 'none')
-        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
-        .style('font-family', 'Arial, sans-serif');
+    // Crear tooltip para grouped bar chart (opcional)
+    let tooltip = null;
+    if (shouldShowTooltip(spec)) {
+      const tooltipId = `grouped-bar-tooltip-${divId}`;
+      tooltip = createOrGetTooltip(d3, tooltipId, 'grouped-bar-chart-tooltip', false);
     }
     
     const xLabel = spec.xLabel || 'Group';
@@ -5519,6 +5619,7 @@
         sendEvent(divId, 'select', payload);
       })
       .on('mouseenter', function(event, d) {
+        if (!tooltip) return;
         // Resaltar barra
         d3.select(this)
           .attr('opacity', 0.9);
@@ -5527,28 +5628,34 @@
         const mouseX = event.pageX || event.clientX || 0;
         const mouseY = event.pageY || event.clientY || 0;
         
-        const value = typeof d.value === 'number' ? d.value.toFixed(2) : d.value;
+        const valueStr = formatTooltipNumber(d.value, 2);
         tooltip
           .style('left', (mouseX + 10) + 'px')
           .style('top', (mouseY - 10) + 'px')
           .style('display', 'block')
-          .html(`<strong>${xLabel}:</strong> ${d.group}<br/><strong>Series:</strong> ${d.series}<br/><strong>${yLabel}:</strong> ${value}`)
+          .html(
+            `<strong>${xLabel}:</strong> ${d.group}<br/>` +
+            `<strong>Series:</strong> ${d.series}<br/>` +
+            `<strong>${yLabel}:</strong> ${valueStr}`
+          )
           .transition()
           .duration(200)
           .style('opacity', 1);
       })
-      .on('mouseleave', function(event, d) {
+      .on('mouseleave', function() {
         // Restaurar opacidad
         d3.select(this)
           .attr('opacity', 1);
         
         // Ocultar tooltip
-        tooltip.transition()
-          .duration(200)
-          .style('opacity', 0)
-          .on('end', function() {
-            tooltip.style('display', 'none');
-          });
+        if (tooltip) {
+          tooltip.transition()
+            .duration(200)
+            .style('opacity', 0)
+            .on('end', function() {
+              tooltip.style('display', 'none');
+            });
+        }
       })
       .transition()
       .duration(700)
@@ -5570,25 +5677,11 @@
     }
   } else {
     // Simple bars
-    // Crear tooltip para bar chart
-    const tooltipId = `bar-tooltip-${divId}`;
-    let tooltip = d3.select(`#${tooltipId}`);
-    if (tooltip.empty()) {
-      tooltip = d3.select('body').append('div')
-        .attr('id', tooltipId)
-        .attr('class', 'bar-chart-tooltip')
-        .style('position', 'absolute')
-        .style('background', 'rgba(0, 0, 0, 0.85)')
-        .style('color', '#fff')
-        .style('padding', '10px 12px')
-        .style('border-radius', '6px')
-        .style('pointer-events', 'none')
-        .style('opacity', 0)
-        .style('font-size', '12px')
-        .style('z-index', 10000)
-        .style('display', 'none')
-        .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)')
-        .style('font-family', 'Arial, sans-serif');
+    // Crear tooltip para bar chart (opcional)
+    let tooltip = null;
+    if (shouldShowTooltip(spec)) {
+      const tooltipId = `bar-tooltip-${divId}`;
+      tooltip = createOrGetTooltip(d3, tooltipId, 'bar-chart-tooltip', false);
     }
     
     const xLabel = spec.xLabel || 'Category';
@@ -5623,6 +5716,7 @@
         }
       })
       .on('mouseenter', function(event, d) {
+        if (!tooltip) return;
         // Resaltar barra
         d3.select(this)
           .attr('fill', d => d.color || spec.hoverColor || '#357abd')
@@ -5632,29 +5726,34 @@
         const mouseX = event.pageX || event.clientX || 0;
         const mouseY = event.pageY || event.clientY || 0;
         
-        const value = typeof d.value === 'number' ? d.value.toFixed(2) : d.value;
+        const valueStr = formatTooltipNumber(d.value, 2);
         tooltip
           .style('left', (mouseX + 10) + 'px')
           .style('top', (mouseY - 10) + 'px')
           .style('display', 'block')
-          .html(`<strong>${xLabel}:</strong> ${d.category}<br/><strong>${yLabel}:</strong> ${value}`)
+          .html(
+            `<strong>${xLabel}:</strong> ${d.category}<br/>` +
+            `<strong>${yLabel}:</strong> ${valueStr}`
+          )
           .transition()
           .duration(200)
           .style('opacity', 1);
       })
-      .on('mouseleave', function(event, d) {
+      .on('mouseleave', function() {
         // Restaurar color
         d3.select(this)
           .attr('fill', d => d.color || spec.color || '#4a90e2')
           .attr('opacity', 1);
         
         // Ocultar tooltip
-        tooltip.transition()
-          .duration(200)
-          .style('opacity', 0)
-          .on('end', function() {
-            tooltip.style('display', 'none');
-          });
+        if (tooltip) {
+          tooltip.transition()
+            .duration(200)
+            .style('opacity', 0)
+            .on('end', function() {
+              tooltip.style('display', 'none');
+            });
+        }
       })
       .transition()
       .duration(800)
@@ -5913,6 +6012,15 @@
       sendEvent(divId, 'select', payload);
     };
     
+    // Tooltip para scatter (opcional)
+    let scatterTooltip = null;
+    const xLabel = spec.xLabel || 'X';
+    const yLabel = spec.yLabel || 'Y';
+    if (shouldShowTooltip(spec)) {
+      const tooltipId = `scatter-tooltip-${divId}`;
+      scatterTooltip = createOrGetTooltip(d3, tooltipId, 'scatter-chart-tooltip', false);
+    }
+    
     // Puntos con D3 (renderizar PRIMERO)
     const dots = g.selectAll('.dot')
       .data(data)
@@ -5968,6 +6076,75 @@
             .attr('r', d => getRadius(d) * 1.3)
             .attr('opacity', 0.9);
         }
+      })
+      .on('mouseenter', function(event, d) {
+        if (!scatterTooltip || !shouldShowTooltip(spec)) return;
+        
+        event.stopPropagation();
+        
+        const mouseX = event.pageX || event.clientX || 0;
+        const mouseY = event.pageY || event.clientY || 0;
+        
+        const baseRadius = getRadius(d);
+        
+        // Resaltar punto en hover si no está seleccionado
+        d3.select(this)
+          .attr('stroke', '#ffffff')
+          .attr('stroke-width', styles.pointStrokeWidth + 1)
+          .attr('r', baseRadius * 1.3)
+          .attr('opacity', 1);
+        
+        const parts = [];
+        parts.push(`<strong>${xLabel}:</strong> ${formatTooltipNumber(d.x)}`);
+        parts.push(`<strong>${yLabel}:</strong> ${formatTooltipNumber(d.y)}`);
+        if (d.label) {
+          parts.unshift(`<strong>${d.label}</strong>`);
+        }
+        if (d.category) {
+          parts.push(`<strong>Categoría:</strong> ${d.category}`);
+        }
+        
+        scatterTooltip
+          .style('left', (mouseX + 10) + 'px')
+          .style('top', (mouseY - 10) + 'px')
+          .style('display', 'block')
+          .html(parts.join('<br/>'))
+          .transition()
+          .duration(150)
+          .style('opacity', 1);
+      })
+      .on('mousemove', function(event) {
+        if (!scatterTooltip || !shouldShowTooltip(spec)) return;
+        const mouseX = event.pageX || event.clientX || 0;
+        const mouseY = event.pageY || event.clientY || 0;
+        scatterTooltip
+          .style('left', (mouseX + 10) + 'px')
+          .style('top', (mouseY - 10) + 'px');
+      })
+      .on('mouseleave', function() {
+        if (!scatterTooltip || !shouldShowTooltip(spec)) return;
+        
+        // Restaurar apariencia del punto si no está seleccionado
+        const dot = d3.select(this);
+        const d = dot.datum();
+        const index = data.indexOf(d);
+        const isSelected = selectedIndices.has(index);
+        if (!isSelected) {
+          const baseRadius = getRadius(d);
+          dot
+            .attr('r', baseRadius)
+            .attr('stroke', 'none')
+            .attr('stroke-width', 0)
+            .attr('opacity', 0.6);
+        }
+        
+        scatterTooltip
+          .transition()
+          .duration(150)
+          .style('opacity', 0)
+          .on('end', function() {
+            scatterTooltip.style('display', 'none');
+          });
       })
       .on('mouseleave', function(event, d) {
         if (!spec.interactive || isBrushing) return;
@@ -8240,7 +8417,7 @@
       .domain([0, maxValue]);
     
     // Celdas del heatmap
-    g.selectAll('.cell')
+    const cells = g.selectAll('.cell')
       .data(data)
       .enter()
       .append('rect')
@@ -8252,6 +8429,65 @@
       .attr('fill', d => color(d.value))
       .attr('stroke', '#fff')
       .attr('stroke-width', 0.5);
+    
+    // Tooltip para hist2d (opcional)
+    let hist2dTooltip = null;
+    const xLabel = spec.xLabel || 'X';
+    const yLabel = spec.yLabel || 'Y';
+    if (shouldShowTooltip(spec)) {
+      const tooltipId = `hist2d-tooltip-${divId}`;
+      hist2dTooltip = createOrGetTooltip(d3, tooltipId, 'hist2d-tooltip', false);
+    }
+    
+    if (hist2dTooltip) {
+      cells
+        .style('cursor', 'pointer')
+        .on('mouseenter', function(event, d) {
+          const mouseX = event.pageX || event.clientX || 0;
+          const mouseY = event.pageY || event.clientY || 0;
+          
+          d3.select(this)
+            .attr('stroke-width', 1.5)
+            .attr('opacity', 0.95);
+          
+          const xRange = `[${formatTooltipNumber(d.x_bin_start)}, ${formatTooltipNumber(d.x_bin_end)}]`;
+          const yRange = `[${formatTooltipNumber(d.y_bin_start)}, ${formatTooltipNumber(d.y_bin_end)}]`;
+          const valueStr = formatTooltipNumber(d.value, 2);
+          
+          hist2dTooltip
+            .style('left', (mouseX + 10) + 'px')
+            .style('top', (mouseY - 10) + 'px')
+            .style('display', 'block')
+            .html(
+              `<strong>${xLabel}:</strong> ${xRange}<br/>` +
+              `<strong>${yLabel}:</strong> ${yRange}<br/>` +
+              `<strong>Valor:</strong> ${valueStr}`
+            )
+            .transition()
+            .duration(150)
+            .style('opacity', 1);
+        })
+        .on('mousemove', function(event) {
+          const mouseX = event.pageX || event.clientX || 0;
+          const mouseY = event.pageY || event.clientY || 0;
+          hist2dTooltip
+            .style('left', (mouseX + 10) + 'px')
+            .style('top', (mouseY - 10) + 'px');
+        })
+        .on('mouseleave', function() {
+          d3.select(this)
+            .attr('stroke-width', 0.5)
+            .attr('opacity', 1);
+          
+          hist2dTooltip
+            .transition()
+            .duration(150)
+            .style('opacity', 0)
+            .on('end', function() {
+              hist2dTooltip.style('display', 'none');
+            });
+        });
+    }
     
     // Ejes
     if (spec.axes !== false) {
