@@ -457,7 +457,9 @@
         value.type === 'ribbon' ||
         value.type === 'hist2d' ||
         value.type === 'polar' ||
-        value.type === 'funnel'
+        value.type === 'funnel' ||
+        value.type === 'grouped_bar' ||
+        value.type === 'grouped_barchart'
       );
     }
     
