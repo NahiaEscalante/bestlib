@@ -419,37 +419,17 @@
     };
 
     function isD3Spec(value) {
-      return value && typeof value === 'object' && (
-        value.type === 'bar' || 
-        value.type === 'scatter' || 
-        value.type === 'histogram' ||
-        value.type === 'pie' ||
-        value.type === 'boxplot' ||
-        value.type === 'heatmap' ||
-        value.type === 'line' ||
-        value.type === 'violin' ||
-        value.type === 'radviz' ||
-        value.type === 'star_coordinates' ||
-        value.type === 'parallel_coordinates' ||
-        value.type === 'line_plot' ||
-        value.type === 'horizontal_bar' ||
-        value.type === 'hexbin' ||
-        value.type === 'errorbars' ||
-        value.type === 'fill_between' ||
-        value.type === 'step_plot' ||
-        value.type === 'kde' ||
-        value.type === 'distplot' ||
-        value.type === 'rug' ||
-        value.type === 'qqplot' ||
-        value.type === 'ecdf' ||
-        value.type === 'ridgeline' ||
-        value.type === 'ribbon' ||
-        value.type === 'hist2d' ||
-        value.type === 'polar' ||
-        value.type === 'funnel' ||
-        value.type === 'grouped_bar' ||
-        value.type === 'grouped_barchart'
-      );
+      if (!value || typeof value !== 'object') return false;
+      
+      const validTypes = [
+        'bar', 'scatter', 'histogram', 'pie', 'boxplot', 'heatmap', 'line', 'violin',
+        'radviz', 'star_coordinates', 'parallel_coordinates', 'line_plot', 'horizontal_bar',
+        'hexbin', 'errorbars', 'fill_between', 'step_plot', 'kde', 'distplot', 'rug',
+        'qqplot', 'ecdf', 'ridgeline', 'ribbon', 'hist2d', 'polar', 'funnel',
+        'grouped_bar', 'grouped_barchart'
+      ];
+      
+      return validTypes.includes(value.type);
     }
     
     function isSimpleViz(value) {
