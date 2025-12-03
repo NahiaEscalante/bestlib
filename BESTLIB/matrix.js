@@ -8933,28 +8933,21 @@
         // Obtener el nombre de la región/categoría principal
         const rowName = rows[d.rowIdx];
         
-        // Mostrar tooltip con información completa
+        // Tooltip simple y claro
         const tooltip = d3.select(container)
           .append('div')
           .attr('class', 'bestlib-tooltip')
           .style('position', 'absolute')
-          .style('background', 'rgba(0,0,0,0.9)')
-          .style('color', '#fff')
-          .style('padding', '10px 14px')
-          .style('border-radius', '6px')
-          .style('font-size', '13px')
-          .style('font-family', 'system-ui, -apple-system, sans-serif')
+          .style('background', 'rgba(50, 50, 50, 0.95)')
+          .style('color', 'white')
+          .style('padding', '8px 12px')
+          .style('border-radius', '4px')
+          .style('font-size', '12px')
+          .style('font-family', 'Arial, sans-serif')
           .style('pointer-events', 'none')
-          .style('z-index', '1000')
-          .style('box-shadow', '0 4px 12px rgba(0,0,0,0.3)')
-          .style('line-height', '1.5')
-          .html(`
-            <div style="font-weight: 600; margin-bottom: 4px; color: #60a5fa;">${rowName}</div>
-            <div style="font-size: 12px;">
-              <span style="color: #d1d5db;">Producto:</span> <strong>${d.key}</strong><br/>
-              <span style="color: #d1d5db;">Valor:</span> <strong style="color: #fbbf24;">${d.value.toLocaleString()}</strong>
-            </div>
-          `);
+          .style('z-index', '10000')
+          .style('white-space', 'nowrap')
+          .html(`<strong>${rowName}</strong><br/>${d.key}: ${d.value.toLocaleString()}`);
         
         const rect = container.getBoundingClientRect();
         tooltip
