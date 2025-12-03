@@ -45,6 +45,7 @@ class ViolinChart(ChartBase):
             Lista de objetos {category: str, profile: [{y: float, w: float}]}
         """
         groups = defaultdict(list)
+        original_rows = defaultdict(list)
         
         # Agrupar valores por categoría
         if HAS_PANDAS and isinstance(data, pd.DataFrame):
@@ -52,18 +53,25 @@ class ViolinChart(ChartBase):
             if category_col:
                 cols.append(category_col)
             subset = data[cols].dropna()
-            for _, row in subset.iterrows():
+            for idx, row in subset.iterrows():
                 cat = row[category_col] if category_col else 'All'
-                groups[str(cat)].append(float(row[value_col]))
+                val = float(row[value_col])
+                groups[str(cat)].append(val)
+                # Guardar fila original completa para selección posterior
+                original_rows[str(cat)].append(data.loc[idx].to_dict())
         else:
             for item in data or []:
                 if value_col not in item:
                     continue
                 cat = item.get(category_col, 'All') if category_col else 'All'
                 try:
-                    groups[str(cat)].append(float(item[value_col]))
+                    val = float(item[value_col])
                 except (TypeError, ValueError):
                     continue
+                key = str(cat)
+                groups[key].append(val)
+                # Guardar copia de la fila original completa
+                original_rows[key].append(item.copy())
         
         # Calcular perfiles de densidad para cada categoría
         violin_data = []
@@ -112,7 +120,9 @@ class ViolinChart(ChartBase):
             if profile:
                 violin_data.append({
                     'category': cat,
-                    'profile': profile
+                    'profile': profile,
+                    # Adjuntar filas originales para selección por categoría
+                    '_original_rows': original_rows.get(cat, [])
                 })
         
         return violin_data

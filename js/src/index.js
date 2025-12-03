@@ -1769,7 +1769,66 @@
       .attr('fill', d => color(d.value))
       .attr('stroke', '#fff')
       .attr('stroke-width', 1)
-      .attr('opacity', 0)
+      .attr('opacity', 0);
+
+    // Selección por celda de heatmap (solo si es interactivo)
+    const heatmapTooltip = createOrGetChartTooltip(divId, 'heatmap-tooltip', spec);
+    const hoverStyles = getHoverStyles(spec);
+
+    cells
+      .style('cursor', spec.interactive ? 'pointer' : 'default')
+      .on('click', function(event, d) {
+        if (!spec.interactive) return;
+
+        // Extraer filas originales asociadas a esta celda
+        const originalRows = extractOriginalRows(d, `heatmap cell ${d.x},${d.y}`);
+
+        const payload = createSelectPayload(divId, originalRows, spec, container, 'heatmap', {
+          original_items: [d],
+          selected_x: d.x,
+          selected_y: d.y,
+          value: d.value
+        });
+
+        sendEvent(divId, 'select', payload);
+      })
+      .on('mouseenter', function(event, d) {
+        if (!heatmapTooltip) return;
+        const mouseX = event.pageX || event.clientX || 0;
+        const mouseY = event.pageY || event.clientY || 0;
+
+        d3.select(this)
+          .attr('stroke-width', 2)
+          .attr('opacity', hoverStyles.opacity);
+
+        heatmapTooltip
+          .style('left', (mouseX + 10) + 'px')
+          .style('top', (mouseY - 10) + 'px')
+          .style('display', 'block')
+          .html(
+            `<strong>X:</strong> ${d.x}<br/>` +
+            `<strong>Y:</strong> ${d.y}<br/>` +
+            `<strong>Valor:</strong> ${formatTooltipNumber(d.value, 3)}`
+          )
+          .transition()
+          .duration(200)
+          .style('opacity', 1);
+      })
+      .on('mouseleave', function() {
+        if (!heatmapTooltip) return;
+
+        d3.select(this)
+          .attr('stroke-width', 1)
+          .attr('opacity', 1);
+
+        heatmapTooltip
+          .transition()
+          .duration(200)
+          .style('opacity', 0)
+          .on('end', function() {
+            heatmapTooltip.style('display', 'none');
+          });
+      })
       .transition()
       .duration(500)
       .attr('opacity', 1);
@@ -2664,6 +2723,10 @@
     
     const color = d3.scaleOrdinal(d3.schemeSet2).domain(categories);
 
+    // Tooltip y estilos de hover/selección
+    const violinTooltip = createOrGetChartTooltip(divId, 'violin-tooltip', spec);
+    const hoverStyles = getHoverStyles(spec);
+
     // Contador de violines renderizados
     let renderedViolins = 0;
     const violinErrors = [];
@@ -2760,14 +2823,67 @@
         }
         
         // Dibujar violín completo (área cerrada simétrica)
-        g.append('path')
+        const shape = g.append('path')
           .attr('d', pathData)
           .attr('fill', color(category))
           .attr('opacity', 0.7)
           .attr('stroke', '#333')
           .attr('stroke-width', 1)
           .attr('stroke-linejoin', 'round')
-          .attr('stroke-linecap', 'round');
+          .attr('stroke-linecap', 'round')
+          .style('cursor', spec.interactive ? 'pointer' : 'default');
+
+        // Interacción de selección por categoría
+        shape
+          .on('click', function(event) {
+            if (!spec.interactive) return;
+
+            const originalRows = extractOriginalRows(v, `violin category ${category}`);
+            const payload = createSelectPayload(divId, originalRows, spec, container, 'violin', {
+              original_items: [v],
+              selected_category: category
+            });
+
+            sendEvent(divId, 'select', payload);
+          })
+          .on('mouseenter', function(event) {
+            if (!violinTooltip) return;
+
+            const mouseX = event.pageX || event.clientX || 0;
+            const mouseY = event.pageY || event.clientY || 0;
+
+            d3.select(this)
+              .attr('opacity', hoverStyles.opacity)
+              .attr('stroke-width', hoverStyles.strokeWidth);
+
+            const count = Array.isArray(v._original_rows) ? v._original_rows.length : 0;
+            violinTooltip
+              .style('left', (mouseX + 10) + 'px')
+              .style('top', (mouseY - 10) + 'px')
+              .style('display', 'block')
+              .html(
+                `<strong>Categoría:</strong> ${category}<br/>` +
+                `<strong>Observaciones:</strong> ${count}`
+              )
+              .transition()
+              .duration(200)
+              .style('opacity', 1);
+          })
+          .on('mouseleave', function() {
+            if (!violinTooltip) return;
+
+            d3.select(this)
+              .attr('opacity', 0.7)
+              .attr('stroke-width', 1);
+
+            violinTooltip
+              .transition()
+              .duration(200)
+              .style('opacity', 0)
+              .on('end', function() {
+                violinTooltip.style('display', 'none');
+              });
+          });
         
         renderedViolins++;
       } catch (e) {
@@ -6680,7 +6796,7 @@
       .range([0, chartWidth]);
     
     // Barras
-    g.selectAll('.bar')
+    const bars = g.selectAll('.bar')
       .data(data)
       .enter()
       .append('rect')
@@ -6690,6 +6806,63 @@
       .attr('width', 0)
       .attr('height', y.bandwidth())
       .attr('fill', color)
+      .style('cursor', spec.interactive ? 'pointer' : 'default');
+
+    // Selección y tooltip para horizontal_bar
+    const tooltip = createOrGetChartTooltip(divId, 'horizontal-bar-tooltip', spec);
+    const hoverStyles = getHoverStyles(spec);
+    const xLabelSafe = xLabel || 'Value';
+    const yLabelSafe = yLabel || 'Category';
+
+    bars
+      .on('click', function(event, d) {
+        if (!spec.interactive) return;
+
+        const originalRows = extractOriginalRows(d, `horizontal bar category ${d.category}`);
+        const payload = createSelectPayload(divId, originalRows, spec, container, 'horizontal_bar', {
+          original_items: [d],
+          selected_category: d.category
+        });
+
+        sendEvent(divId, 'select', payload);
+      })
+      .on('mouseenter', function(event, d) {
+        if (!tooltip) return;
+        const mouseX = event.pageX || event.clientX || 0;
+        const mouseY = event.pageY || event.clientY || 0;
+
+        d3.select(this)
+          .attr('fill', hoverStyles.color)
+          .attr('opacity', hoverStyles.opacity);
+
+        const value = typeof d.value === 'number' ? d.value.toFixed(2) : d.value;
+        tooltip
+          .style('left', (mouseX + 10) + 'px')
+          .style('top', (mouseY - 10) + 'px')
+          .style('display', 'block')
+          .html(
+            `<strong>${yLabelSafe}:</strong> ${d.category}<br/>` +
+            `<strong>${xLabelSafe}:</strong> ${value}`
+          )
+          .transition()
+          .duration(200)
+          .style('opacity', 1);
+      })
+      .on('mouseleave', function() {
+        if (!tooltip) return;
+
+        d3.select(this)
+          .attr('fill', color)
+          .attr('opacity', 1);
+
+        tooltip
+          .transition()
+          .duration(200)
+          .style('opacity', 0)
+          .on('end', function() {
+            tooltip.style('display', 'none');
+          });
+      })
       .transition()
       .duration(500)
       .attr('width', d => x(d.value));
@@ -6834,7 +7007,7 @@
     }
     
     // Dibujar hexágonos
-    g.selectAll('.hexagon')
+    const hexagons = g.selectAll('.hexagon')
       .data(bins_data)
       .enter()
       .append('path')
@@ -6843,7 +7016,69 @@
       .attr('transform', d => `translate(${d.x},${d.y})`)
       .attr('fill', d => color(d.count))
       .attr('stroke', '#fff')
-      .attr('stroke-width', 0.5);
+      .attr('stroke-width', 0.5)
+      .style('cursor', spec.interactive ? 'pointer' : 'default');
+
+    // Selección y tooltip para hexbin
+    const hexTooltip = createOrGetChartTooltip(divId, 'hexbin-tooltip', spec);
+    const hexHoverStyles = getHoverStyles(spec);
+
+    hexagons
+      .on('click', function(event, d) {
+        if (!spec.interactive) return;
+
+        // Extraer filas originales de los puntos dentro del hexágono
+        const originalRows = [];
+        (d.points || []).forEach(p => {
+          const rows = extractOriginalRows(p, 'hexbin point');
+          rows.forEach(r => originalRows.push(r));
+        });
+
+        const payload = createSelectPayload(divId, originalRows, spec, container, 'hexbin', {
+          original_items: d.points || [],
+          count: d.count
+        });
+
+        sendEvent(divId, 'select', payload);
+      })
+      .on('mouseenter', function(event, d) {
+        if (!hexTooltip) return;
+
+        const mouseX = event.pageX || event.clientX || 0;
+        const mouseY = event.pageY || event.clientY || 0;
+
+        d3.select(this)
+          .attr('stroke-width', 1.5)
+          .attr('fill', hexHoverStyles.color)
+          .attr('opacity', hexHoverStyles.opacity);
+
+        hexTooltip
+          .style('left', (mouseX + 10) + 'px')
+          .style('top', (mouseY - 10) + 'px')
+          .style('display', 'block')
+          .html(
+            `<strong>Recuentos:</strong> ${d.count}`
+          )
+          .transition()
+          .duration(200)
+          .style('opacity', 1);
+      })
+      .on('mouseleave', function() {
+        if (!hexTooltip) return;
+
+        d3.select(this)
+          .attr('stroke-width', 0.5)
+          .attr('fill', d => color(d.count))
+          .attr('opacity', 1);
+
+        hexTooltip
+          .transition()
+          .duration(200)
+          .style('opacity', 0)
+          .on('end', function() {
+            hexTooltip.style('display', 'none');
+          });
+      });
     
     // Ejes
     if (axes !== false) {
@@ -6937,6 +7172,9 @@
     const yLabel = options.yLabel || spec.yLabel;
     
     // Dibujar errorbars
+    const hoverStyles = getHoverStyles(spec);
+    const errorTooltip = createOrGetChartTooltip(divId, 'errorbars-tooltip', spec);
+
     data.forEach(d => {
       const xPos = x(d.x);
       const yPos = y(d.y);
@@ -7007,12 +7245,64 @@
           .attr('stroke-width', strokeWidth);
       }
       
-      // Punto central
-      g.append('circle')
+      // Punto central con soporte de selección
+      const point = g.append('circle')
         .attr('cx', xPos)
         .attr('cy', yPos)
         .attr('r', 3)
-        .attr('fill', color);
+        .attr('fill', color)
+        .style('cursor', spec.interactive ? 'pointer' : 'default');
+
+      point
+        .on('click', function(event) {
+          if (!spec.interactive) return;
+
+          const originalRows = extractOriginalRows(d, 'errorbar point');
+          const payload = createSelectPayload(divId, originalRows, spec, container, 'errorbars', {
+            original_items: [d]
+          });
+
+          sendEvent(divId, 'select', payload);
+        })
+        .on('mouseenter', function(event) {
+          if (!errorTooltip) return;
+
+          const mouseX = event.pageX || event.clientX || 0;
+          const mouseY = event.pageY || event.clientY || 0;
+
+          d3.select(this)
+            .attr('r', hoverStyles.radius)
+            .attr('fill', hoverStyles.color)
+            .attr('opacity', hoverStyles.opacity);
+
+          errorTooltip
+            .style('left', (mouseX + 10) + 'px')
+            .style('top', (mouseY - 10) + 'px')
+            .style('display', 'block')
+            .html(
+              `<strong>X:</strong> ${formatTooltipNumber(d.x, 3)}<br/>` +
+              `<strong>Y:</strong> ${formatTooltipNumber(d.y, 3)}`
+            )
+            .transition()
+            .duration(200)
+            .style('opacity', 1);
+        })
+        .on('mouseleave', function() {
+          if (!errorTooltip) return;
+
+          d3.select(this)
+            .attr('r', 3)
+            .attr('fill', color)
+            .attr('opacity', 1);
+
+          errorTooltip
+            .transition()
+            .duration(200)
+            .style('opacity', 0)
+            .on('end', function() {
+              errorTooltip.style('display', 'none');
+            });
+        });
     });
     
     // Ejes

@@ -394,13 +394,22 @@ def prepare_heatmap_data(data, x_col=None, y_col=None, value_col=None):
     
     if HAS_PANDAS and isinstance(data, pd.DataFrame):
         if value_col and x_col and y_col:
+            # Mantener todas las columnas originales para poder reconstruir filas completas
             df = data[[x_col, y_col, value_col]].dropna()
             x_labels = df[x_col].astype(str).unique().tolist()
             y_labels = df[y_col].astype(str).unique().tolist()
-            cells = [
-                {'x': str(r[x_col]), 'y': str(r[y_col]), 'value': float(r[value_col])}
-                for _, r in df.iterrows()
-            ]
+            for idx, r in df.iterrows():
+                # Recuperar la fila original completa (todas las columnas)
+                try:
+                    original_row = data.loc[idx].to_dict()
+                except Exception:
+                    original_row = {x_col: r[x_col], y_col: r[y_col], value_col: r[value_col]}
+                cells.append({
+                    'x': str(r[x_col]),
+                    'y': str(r[y_col]),
+                    'value': float(r[value_col]),
+                    '_original_row': original_row
+                })
         elif x_col is None and y_col is None and value_col is None:
             # Matriz: usar índices y columnas automáticamente
             index_list = data.index.tolist()
@@ -430,7 +439,14 @@ def prepare_heatmap_data(data, x_col=None, y_col=None, value_col=None):
             raise DataError("Datos inválidos para heatmap")
         for item in data:
             if x_col in item and y_col in item and value_col in item:
-                cells.append({'x': str(item[x_col]), 'y': str(item[y_col]), 'value': float(item[value_col])})
+                # Conservar la fila original completa para selección
+                original_row = item.copy()
+                cells.append({
+                    'x': str(item[x_col]),
+                    'y': str(item[y_col]),
+                    'value': float(item[value_col]),
+                    '_original_row': original_row
+                })
                 x_labels.append(str(item[x_col]))
                 y_labels.append(str(item[y_col]))
         x_labels = sorted(list(set(x_labels)))

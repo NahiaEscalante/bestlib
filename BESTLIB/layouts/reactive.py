@@ -2494,23 +2494,138 @@ class ReactiveMatrixLayout:
     # ==========================
     # Nuevos gráficos dependientes
     # ==========================
-    def add_heatmap(self, letter, x_col=None, y_col=None, value_col=None, linked_to=None, **kwargs):
+    def add_heatmap(self, letter, x_col=None, y_col=None, value_col=None, linked_to=None, interactive=None, selection_var=None, **kwargs):
+        """
+        Agrega un heatmap que puede ser vista principal (con selección) o enlazada.
+
+        - Como vista principal (interactive=True, sin linked_to):
+          el usuario puede hacer click en una celda y recibir un DataFrame con las filas asociadas.
+        - Como vista enlazada (linked_to=...):
+          el heatmap se actualiza a partir de la selección de otra vista (scatter, bar, etc.).
+        """
         from .matrix import MatrixLayout
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
-        # initial render
-        self._register_chart(letter, 'heatmap', self._data, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
-        # link to selection
-        if not self._scatter_selection_models:
+
+        # Determinar si será vista principal o enlazada
+        if linked_to is None:
+            # Solo es vista principal si interactive=True se especifica explícitamente
+            if interactive is None:
+                interactive = False
+                is_primary = False
+            else:
+                is_primary = bool(interactive)
+        else:
+            is_primary = False
+            if interactive is None:
+                interactive = False
+
+        # Vista principal con selección
+        if is_primary:
+            # Crear SelectionModel específico y registrar como vista principal
+            heatmap_selection = SelectionModel()
+            self._primary_view_models[letter] = heatmap_selection
+            self._primary_view_types[letter] = 'heatmap'
+
+            # Configurar variable de selección si se especifica
+            if selection_var:
+                self._selection_variables[letter] = selection_var
+                self._selection_store[selection_var] = self._empty_selection()
+                if self._debug or MatrixLayout._debug:
+                    df_type = "DataFrame" if HAS_PANDAS else "lista"
+                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de heatmap '{letter}' como {df_type}")
+
+            # Handler para eventos de selección provenientes del heatmap
+            def heatmap_handler(payload):
+                """Actualiza el SelectionModel de este heatmap a partir de eventos de JS."""
+                items = payload.get('items', [])
+                if not isinstance(items, list):
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⚠️ [ReactiveMatrixLayout] items no es lista en heatmap '{letter}': {type(items)}")
+                    items = []
+
+                # Filtrado por letra o tipo de gráfico
+                event_letter = payload.get('__view_letter__') or payload.get('__scatter_letter__')
+                if event_letter is not None and event_letter != letter:
+                    # Evento para otra vista
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⏭️ [ReactiveMatrixLayout] Evento de heatmap ignorado: esperado '{letter}', recibido '{event_letter}'")
+                    return
+
+                graph_type = payload.get('__graph_type__', '')
+                if event_letter is None and graph_type not in ('heatmap', ''):
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: tipo de gráfico '{graph_type}' no es 'heatmap'")
+                    return
+
+                if self._debug or MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Evento recibido para heatmap '{letter}': {len(items)} items")
+
+                # Convertir a DataFrame cuando sea posible
+                items_df = _items_to_dataframe(items)
+                data_to_update = items_df if (items_df is not None and not getattr(items_df, 'empty', False)) else items
+
+                # Actualizar modelo específico y modelo global
+                heatmap_selection.update(data_to_update)
+                self.selection_model.update(data_to_update)
+                self._selected_data = items_df if items_df is not None else items
+
+                # Actualizar variable de selección del usuario
+                if selection_var:
+                    self.set_selection(selection_var, items_df if items_df is not None else items)
+
+            # Registrar handler y marcar spec como vista principal interactiva
+            self._layout.on('select', heatmap_handler)
+            kwargs['__view_letter__'] = letter
+            kwargs['__is_primary_view__'] = True
+            kwargs['interactive'] = True
+
+            # Render inicial con todos los datos
+            self._register_chart(letter, 'heatmap', self._data, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
+
+            # Asegurar que el spec almacenado tenga los metadatos correctos
+            if letter in self._layout._map:
+                self._layout.update_spec_metadata(
+                    letter,
+                    __view_letter__=letter,
+                    __is_primary_view__=True,
+                    interactive=True
+                )
+
             return self
-        scatter_letter = linked_to or list(self._scatter_selection_models.keys())[-1]
-        sel = self._scatter_selection_models[scatter_letter]
+
+        # Vista enlazada (como hasta ahora): se actualiza según selección de otra vista
+        # Render inicial
+        self._register_chart(letter, 'heatmap', self._data, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
+
+        # Enlazar solo si hay al menos una vista principal existente
+        if not self._scatter_selection_models and not self._primary_view_models:
+            return self
+
+        # Determinar vista principal a la que se enlaza
+        if linked_to is not None:
+            if linked_to in self._scatter_selection_models:
+                sel = self._scatter_selection_models[linked_to]
+            elif linked_to in self._primary_view_models:
+                sel = self._primary_view_models[linked_to]
+            else:
+                raise ValueError(f"Vista principal '{linked_to}' no existe. Agrega la vista principal primero.")
+        else:
+            # Si no se especifica, usar la última vista principal disponible
+            all_primary = {**self._scatter_selection_models, **self._primary_view_models}
+            primary_letter = list(all_primary.keys())[-1]
+            sel = all_primary[primary_letter]
+
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
                 self._register_chart(letter, 'heatmap', data_to_use, x_col=x_col, y_col=y_col, value_col=value_col, **kwargs)
             except Exception:
-                pass
+                if self._debug or MatrixLayout._debug:
+                    import traceback
+                    print(f"⚠️ [ReactiveMatrixLayout] Error actualizando heatmap enlazado '{letter}'")
+                    traceback.print_exc()
+
         sel.on_change(update)
         return self
 
@@ -3105,7 +3220,7 @@ class ReactiveMatrixLayout:
         
         return self
 
-    def add_violin(self, letter, value_col=None, category_col=None, bins=50, linked_to=None, **kwargs):
+    def add_violin(self, letter, value_col=None, category_col=None, bins=50, linked_to=None, interactive=None, selection_var=None, **kwargs):
         """
         Agrega un violin plot que muestra la distribución de densidad de los datos.
         
@@ -3123,7 +3238,82 @@ class ReactiveMatrixLayout:
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
         
-        # Crear violin plot inicial usando el método de instancia
+        # Determinar si será vista principal o enlazada
+        if linked_to is None:
+            if interactive is None:
+                interactive = False
+                is_primary = False
+            else:
+                is_primary = bool(interactive)
+        else:
+            is_primary = False
+            if interactive is None:
+                interactive = False
+
+        # Vista principal con selección (click en violines)
+        if is_primary:
+            violin_selection = SelectionModel()
+            self._primary_view_models[letter] = violin_selection
+            self._primary_view_types[letter] = 'violin'
+
+            if selection_var:
+                self._selection_variables[letter] = selection_var
+                self._selection_store[selection_var] = self._empty_selection()
+                if self._debug or MatrixLayout._debug:
+                    df_type = "DataFrame" if HAS_PANDAS else "lista"
+                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de violin '{letter}' como {df_type}")
+
+            def violin_handler(payload):
+                """Handler que actualiza el SelectionModel de este violin plot."""
+                items = payload.get('items', [])
+                if not isinstance(items, list):
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⚠️ [ReactiveMatrixLayout] items no es lista en violin '{letter}': {type(items)}")
+                    items = []
+
+                event_letter = payload.get('__view_letter__') or payload.get('__scatter_letter__')
+                if event_letter is not None and event_letter != letter:
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{letter}', recibido '{event_letter}'")
+                    return
+
+                graph_type = payload.get('__graph_type__', '')
+                if event_letter is None and graph_type not in ('violin', ''):
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: tipo de gráfico '{graph_type}' no es 'violin'")
+                    return
+
+                if self._debug or MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Evento recibido para violin '{letter}': {len(items)} items")
+
+                items_df = _items_to_dataframe(items)
+                data_to_update = items_df if (items_df is not None and not getattr(items_df, 'empty', False)) else items
+
+                violin_selection.update(data_to_update)
+                self.selection_model.update(data_to_update)
+                self._selected_data = items_df if items_df is not None else items
+
+                if selection_var:
+                    self.set_selection(selection_var, items_df if items_df is not None else items)
+
+            self._layout.on('select', violin_handler)
+
+            # Crear violin plot inicial marcándolo como vista principal interactiva
+            self._register_chart(
+                letter,
+                'violin',
+                self._data,
+                value_col=value_col,
+                category_col=category_col,
+                bins=bins,
+                __view_letter__=letter,
+                __is_primary_view__=True,
+                interactive=True,
+                **kwargs
+            )
+            return self
+
+        # Vista enlazada (como antes): se actualiza desde otra vista
         self._register_chart(
             letter,
             'violin',
@@ -3449,6 +3639,85 @@ class ReactiveMatrixLayout:
         from .matrix import MatrixLayout
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
+
+        # Determinar si será vista principal o enlazada
+        interactive = kwargs.pop('interactive', None) if 'interactive' in kwargs else interactive
+        selection_var = kwargs.pop('selection_var', None) if 'selection_var' in kwargs else None
+
+        if linked_to is None:
+            if interactive is None:
+                interactive = False
+                is_primary = False
+            else:
+                is_primary = bool(interactive)
+        else:
+            is_primary = False
+            if interactive is None:
+                interactive = False
+
+        # Vista principal con selección (similar a barchart)
+        if is_primary:
+            hb_selection = SelectionModel()
+            self._primary_view_models[letter] = hb_selection
+            self._primary_view_types[letter] = 'horizontal_bar'
+
+            if selection_var:
+                self._selection_variables[letter] = selection_var
+                self._selection_store[selection_var] = self._empty_selection()
+                if self._debug or MatrixLayout._debug:
+                    df_type = "DataFrame" if HAS_PANDAS else "lista"
+                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de horizontal_bar '{letter}' como {df_type}")
+
+            def hb_handler(payload):
+                """Handler que actualiza el SelectionModel de este horizontal bar chart"""
+                items = payload.get('items', [])
+                if not isinstance(items, list):
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⚠️ [ReactiveMatrixLayout] items no es lista en horizontal_bar '{letter}': {type(items)}")
+                    items = []
+
+                event_letter = payload.get('__view_letter__') or payload.get('__scatter_letter__')
+                if event_letter is not None and event_letter != letter:
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{letter}', recibido '{event_letter}'")
+                    return
+
+                graph_type = payload.get('__graph_type__', '')
+                if event_letter is None and graph_type not in ('horizontal_bar', ''):
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: tipo de gráfico '{graph_type}' no es 'horizontal_bar'")
+                    return
+
+                if self._debug or MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Evento recibido para horizontal_bar '{letter}': {len(items)} items")
+
+                items_df = _items_to_dataframe(items)
+                data_to_update = items_df if (items_df is not None and not getattr(items_df, 'empty', False)) else items
+
+                hb_selection.update(data_to_update)
+                self.selection_model.update(data_to_update)
+                self._selected_data = items_df if items_df is not None else items
+
+                if selection_var:
+                    self.set_selection(selection_var, items_df if items_df is not None else items)
+
+            self._layout.on('select', hb_handler)
+
+            # Crear gráfico inicial como vista principal interactiva
+            self._register_chart(
+                letter,
+                'horizontal_bar',
+                self._data,
+                category_col=category_col,
+                value_col=value_col,
+                __view_letter__=letter,
+                __is_primary_view__=True,
+                interactive=True,
+                **kwargs
+            )
+            return self
+
+        # Vista enlazada (como antes)
         self._register_chart(letter, 'horizontal_bar', self._data, category_col=category_col, value_col=value_col, **kwargs)
         if linked_to is None:
             return self
@@ -3458,12 +3727,17 @@ class ReactiveMatrixLayout:
             sel = self._primary_view_models[linked_to]
         else:
             return self
+
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
                 self._register_chart(letter, 'horizontal_bar', data_to_use, category_col=category_col, value_col=value_col, **kwargs)
             except Exception:
-                pass
+                if self._debug or MatrixLayout._debug:
+                    import traceback
+                    print(f"⚠️ [ReactiveMatrixLayout] Error actualizando horizontal_bar enlazado '{letter}'")
+                    traceback.print_exc()
+
         sel.on_change(update)
         return self
     
@@ -3484,6 +3758,83 @@ class ReactiveMatrixLayout:
         from .matrix import MatrixLayout
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
+
+        interactive = kwargs.pop('interactive', None) if 'interactive' in kwargs else interactive
+        selection_var = kwargs.pop('selection_var', None) if 'selection_var' in kwargs else None
+
+        if linked_to is None:
+            if interactive is None:
+                interactive = False
+                is_primary = False
+            else:
+                is_primary = bool(interactive)
+        else:
+            is_primary = False
+            if interactive is None:
+                interactive = False
+
+        # Vista principal con selección por hexágono
+        if is_primary:
+            hex_selection = SelectionModel()
+            self._primary_view_models[letter] = hex_selection
+            self._primary_view_types[letter] = 'hexbin'
+
+            if selection_var:
+                self._selection_variables[letter] = selection_var
+                self._selection_store[selection_var] = self._empty_selection()
+                if self._debug or MatrixLayout._debug:
+                    df_type = "DataFrame" if HAS_PANDAS else "lista"
+                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de hexbin '{letter}' como {df_type}")
+
+            def hex_handler(payload):
+                """Handler que actualiza el SelectionModel de este hexbin chart"""
+                items = payload.get('items', [])
+                if not isinstance(items, list):
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⚠️ [ReactiveMatrixLayout] items no es lista en hexbin '{letter}': {type(items)}")
+                    items = []
+
+                event_letter = payload.get('__view_letter__') or payload.get('__scatter_letter__')
+                if event_letter is not None and event_letter != letter:
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{letter}', recibido '{event_letter}'")
+                    return
+
+                graph_type = payload.get('__graph_type__', '')
+                if event_letter is None and graph_type not in ('hexbin', ''):
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: tipo de gráfico '{graph_type}' no es 'hexbin'")
+                    return
+
+                if self._debug or MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Evento recibido para hexbin '{letter}': {len(items)} items")
+
+                items_df = _items_to_dataframe(items)
+                data_to_update = items_df if (items_df is not None and not getattr(items_df, 'empty', False)) else items
+
+                hex_selection.update(data_to_update)
+                self.selection_model.update(data_to_update)
+                self._selected_data = items_df if items_df is not None else items
+
+                if selection_var:
+                    self.set_selection(selection_var, items_df if items_df is not None else items)
+
+            self._layout.on('select', hex_handler)
+
+            self._register_chart(
+                letter,
+                'hexbin',
+                self._data,
+                x_col=x_col,
+                y_col=y_col,
+                __view_letter__=letter,
+                __is_primary_view__=True,
+                interactive=True,
+                **kwargs
+            )
+            return self
+
+        # Vista enlazada (como antes)
         self._register_chart(letter, 'hexbin', self._data, x_col=x_col, y_col=y_col, **kwargs)
         if linked_to is None:
             return self
@@ -3498,7 +3849,10 @@ class ReactiveMatrixLayout:
             try:
                 self._register_chart(letter, 'hexbin', data_to_use, x_col=x_col, y_col=y_col, **kwargs)
             except Exception:
-                pass
+                if self._debug or MatrixLayout._debug:
+                    import traceback
+                    print(f"⚠️ [ReactiveMatrixLayout] Error actualizando hexbin enlazado '{letter}'")
+                    traceback.print_exc()
         sel.on_change(update)
         return self
     
@@ -3521,6 +3875,85 @@ class ReactiveMatrixLayout:
         from .matrix import MatrixLayout
         if self._data is None:
             raise ValueError("Debe usar set_data() primero")
+
+        interactive = kwargs.pop('interactive', None) if 'interactive' in kwargs else interactive
+        selection_var = kwargs.pop('selection_var', None) if 'selection_var' in kwargs else None
+
+        if linked_to is None:
+            if interactive is None:
+                interactive = False
+                is_primary = False
+            else:
+                is_primary = bool(interactive)
+        else:
+            is_primary = False
+            if interactive is None:
+                interactive = False
+
+        # Vista principal con selección por punto de errorbars
+        if is_primary:
+            eb_selection = SelectionModel()
+            self._primary_view_models[letter] = eb_selection
+            self._primary_view_types[letter] = 'errorbars'
+
+            if selection_var:
+                self._selection_variables[letter] = selection_var
+                self._selection_store[selection_var] = self._empty_selection()
+                if self._debug or MatrixLayout._debug:
+                    df_type = "DataFrame" if HAS_PANDAS else "lista"
+                    print(f"📦 Variable '{selection_var}' creada para guardar selecciones de errorbars '{letter}' como {df_type}")
+
+            def eb_handler(payload):
+                """Handler que actualiza el SelectionModel de este errorbars chart"""
+                items = payload.get('items', [])
+                if not isinstance(items, list):
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⚠️ [ReactiveMatrixLayout] items no es lista en errorbars '{letter}': {type(items)}")
+                    items = []
+
+                event_letter = payload.get('__view_letter__') or payload.get('__scatter_letter__')
+                if event_letter is not None and event_letter != letter:
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: esperado '{letter}', recibido '{event_letter}'")
+                    return
+
+                graph_type = payload.get('__graph_type__', '')
+                if event_letter is None and graph_type not in ('errorbars', ''):
+                    if self._debug or MatrixLayout._debug:
+                        print(f"⏭️ [ReactiveMatrixLayout] Evento ignorado: tipo de gráfico '{graph_type}' no es 'errorbars'")
+                    return
+
+                if self._debug or MatrixLayout._debug:
+                    print(f"✅ [ReactiveMatrixLayout] Evento recibido para errorbars '{letter}': {len(items)} items")
+
+                items_df = _items_to_dataframe(items)
+                data_to_update = items_df if (items_df is not None and not getattr(items_df, 'empty', False)) else items
+
+                eb_selection.update(data_to_update)
+                self.selection_model.update(data_to_update)
+                self._selected_data = items_df if items_df is not None else items
+
+                if selection_var:
+                    self.set_selection(selection_var, items_df if items_df is not None else items)
+
+            self._layout.on('select', eb_handler)
+
+            self._register_chart(
+                letter,
+                'errorbars',
+                self._data,
+                x_col=x_col,
+                y_col=y_col,
+                yerr=yerr,
+                xerr=xerr,
+                __view_letter__=letter,
+                __is_primary_view__=True,
+                interactive=True,
+                **kwargs
+            )
+            return self
+
+        # Vista enlazada (como antes)
         self._register_chart(letter, 'errorbars', self._data, x_col=x_col, y_col=y_col, yerr=yerr, xerr=xerr, **kwargs)
         if linked_to is None:
             return self
@@ -3530,12 +3963,17 @@ class ReactiveMatrixLayout:
             sel = self._primary_view_models[linked_to]
         else:
             return self
+
         def update(items, count):
             data_to_use = self._data if not items else (pd.DataFrame(items) if HAS_PANDAS and isinstance(items[0], dict) else items)
             try:
                 self._register_chart(letter, 'errorbars', data_to_use, x_col=x_col, y_col=y_col, yerr=yerr, xerr=xerr, **kwargs)
             except Exception:
-                pass
+                if self._debug or MatrixLayout._debug:
+                    import traceback
+                    print(f"⚠️ [ReactiveMatrixLayout] Error actualizando errorbars enlazado '{letter}'")
+                    traceback.print_exc()
+
         sel.on_change(update)
         return self
     
