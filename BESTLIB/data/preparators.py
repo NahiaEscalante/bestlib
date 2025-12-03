@@ -578,49 +578,72 @@ def prepare_grouped_bar_data(data, main_col=None, sub_col=None, value_col=None):
     
     Args:
         data: DataFrame de pandas o lista de diccionarios
-        main_col: Columna principal
-        sub_col: Columna de sub-grupos
-        value_col: Columna de valores (opcional)
+        main_col: Columna principal (categorías en eje X)
+        sub_col: Columna de sub-grupos (series/barras agrupadas)
+        value_col: Columna de valores (opcional, si no se especifica cuenta ocurrencias)
     
     Returns:
         tuple: (rows, groups, series)
+            - rows: lista de categorías principales (eje X)
+            - groups: lista de sub-categorías (series)
+            - series: lista de listas, cada una con valores para cada grupo
     """
-    rows = []
+    from collections import defaultdict
+    
     if HAS_PANDAS and isinstance(data, pd.DataFrame):
         if value_col and value_col in data.columns:
+            # Sumar valores
             agg = data.groupby([main_col, sub_col])[value_col].sum().reset_index()
-            for _, r in agg.iterrows():
-                rows.append({'group': r[main_col], 'series': r[sub_col], 'value': float(r[value_col])})
         else:
-            counts = data.groupby([main_col, sub_col]).size().reset_index(name='value')
-            for _, r in counts.iterrows():
-                rows.append({'group': r[main_col], 'series': r[sub_col], 'value': float(r['value'])})
-        groups = agg[main_col].unique().tolist() if 'agg' in locals() else counts[main_col].unique().tolist()
-        series = agg[sub_col].unique().tolist() if 'agg' in locals() else counts[sub_col].unique().tolist()
+            # Contar ocurrencias
+            agg = data.groupby([main_col, sub_col]).size().reset_index(name='value')
+            value_col = 'value'
+        
+        # Obtener categorías únicas
+        rows = agg[main_col].unique().tolist()
+        groups = agg[sub_col].unique().tolist()
+        
+        # Crear matriz de valores: series[group_idx][row_idx]
+        series = []
+        for group in groups:
+            group_values = []
+            for row in rows:
+                # Buscar el valor para esta combinación row+group
+                mask = (agg[main_col] == row) & (agg[sub_col] == group)
+                values = agg[mask][value_col].values
+                value = float(values[0]) if len(values) > 0 else 0.0
+                group_values.append(value)
+            series.append(group_values)
     else:
-        from collections import defaultdict
+        # Caso lista de diccionarios
         if not isinstance(data, list):
             raise DataError("Datos inválidos para grouped barplot")
-        if value_col:
-            sums = defaultdict(lambda: defaultdict(float))
-            for it in data:
-                g = it.get(main_col, 'unknown')
-                s = it.get(sub_col, 'unknown')
-                sums[g][s] += float(it.get(value_col, 0))
-            for g, submap in sums.items():
-                for s, v in submap.items():
-                    rows.append({'group': g, 'series': s, 'value': float(v)})
-        else:
-            counts = defaultdict(lambda: defaultdict(int))
-            for it in data:
-                g = it.get(main_col, 'unknown')
-                s = it.get(sub_col, 'unknown')
-                counts[g][s] += 1
-            for g, submap in counts.items():
-                for s, v in submap.items():
-                    rows.append({'group': g, 'series': s, 'value': int(v)})
-        groups = sorted(list({r['group'] for r in rows}))
-        series = sorted(list({r['series'] for r in rows}))
+        
+        # Acumular valores
+        value_map = defaultdict(lambda: defaultdict(float))
+        for item in data:
+            row_key = item.get(main_col, 'unknown')
+            group_key = item.get(sub_col, 'unknown')
+            if value_col:
+                value_map[row_key][group_key] += float(item.get(value_col, 0))
+            else:
+                value_map[row_key][group_key] += 1
+        
+        # Extraer categorías únicas
+        rows = sorted(value_map.keys())
+        all_groups = set()
+        for row_dict in value_map.values():
+            all_groups.update(row_dict.keys())
+        groups = sorted(all_groups)
+        
+        # Crear matriz de valores
+        series = []
+        for group in groups:
+            group_values = []
+            for row in rows:
+                value = value_map[row].get(group, 0.0)
+                group_values.append(float(value))
+            series.append(group_values)
     
     return rows, groups, series
 
