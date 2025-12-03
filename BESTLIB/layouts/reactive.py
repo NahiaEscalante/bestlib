@@ -4005,6 +4005,9 @@ class ReactiveMatrixLayout:
         
         # Solo mostrar una vez - el bar chart se actualiza automáticamente vía JavaScript
         self._layout.display()
+        
+        # Retornar None explícitamente para evitar que Jupyter muestre el objeto
+        return None
 
     # ==========================
     # Passthrough de Merge

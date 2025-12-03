@@ -948,9 +948,13 @@ class MatrixLayout:
             
             display(HTML(html_content))
             display(Javascript(js_content))
+            return None
             
         except Exception as e:
-            print(f"❌ Error: {e}")
+            import traceback
+            print(f"❌ Error en display(): {e}")
+            traceback.print_exc()
+            return None
     
     def merge(self, letters=True):
         """Configura merge explícito para este layout"""
