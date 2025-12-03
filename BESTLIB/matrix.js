@@ -8864,7 +8864,10 @@
       seriesLength: series.length,
       rowsType: Array.isArray(rows) ? 'array' : typeof rows,
       groupsType: Array.isArray(groups) ? 'array' : typeof groups,
-      seriesType: Array.isArray(series) ? 'array' : typeof series
+      seriesType: Array.isArray(series) ? 'array' : typeof series,
+      rowsData: rows,
+      groupsData: groups,
+      seriesData: series
     });
     
     if (rows.length === 0 || groups.length === 0) {

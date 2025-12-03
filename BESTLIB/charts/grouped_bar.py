@@ -38,5 +38,20 @@ class GroupedBarChart(ChartBase):
                     'value': value
                 })
         
-        return {'type': self.chart_type, 'grouped': True, 'data': flat_data, **prepared, **kwargs}
+        # Construir spec con estructura correcta
+        spec = {
+            'type': self.chart_type,
+            'grouped': True,
+            'data': flat_data,
+            'rows': rows,
+            'groups': groups,
+            'series': series
+        }
+        
+        # Agregar opciones adicionales sin sobrescribir rows/groups/series
+        for key, value in kwargs.items():
+            if key not in ['rows', 'groups', 'series', 'data', 'type', 'grouped']:
+                spec[key] = value
+        
+        return spec
 
