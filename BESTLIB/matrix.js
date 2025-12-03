@@ -525,31 +525,16 @@
           
           if (isPrimary) {
             cell.classList.add('linked-primary');
-            cell.setAttribute('title', `Gráfico principal '${letter}' (genera selecciones)`);
             cell.setAttribute('data-is-primary', 'true');
             cell.setAttribute('data-primary-letter', letter);
-            // Agregar etiqueta visual con la letra del gráfico
-            const label = document.createElement('div');
-            label.className = 'link-primary-label';
-            label.textContent = `${letter} (LINKED)`;
-            label.style.cssText = 'position: absolute; top: 6px; right: 6px; background: #2563eb; color: white; border-radius: 6px; padding: 4px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; z-index: 100; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.5); text-transform: uppercase; white-space: nowrap; pointer-events: none;';
-            cell.appendChild(label);
           }
           
           // Si está enlazado a otro gráfico (linked_to), agregar clase linked-secondary
           if (spec.__linked_to__) {
             cell.classList.add('linked-secondary');
             const linkedTo = spec.__linked_to__;
-            cell.setAttribute('title', `Gráfico '${letter}' enlazado a '${linkedTo}'`);
-            // Agregar atributo data para referencia
             cell.setAttribute('data-linked-to', linkedTo);
             cell.setAttribute('data-linked-from', letter);
-            // Agregar etiqueta visual con ambas letras
-            const label = document.createElement('div');
-            label.className = 'link-secondary-label';
-            label.textContent = `${letter} ← ${linkedTo}`;
-            label.style.cssText = 'position: absolute; top: 6px; left: 6px; background: #dc2626; color: white; border-radius: 6px; padding: 4px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; z-index: 100; box-shadow: 0 2px 6px rgba(220, 38, 38, 0.5); text-transform: uppercase; white-space: nowrap; pointer-events: none; animation: pulse-link 2s ease-in-out infinite;';
-            cell.appendChild(label);
           }
         }
         
