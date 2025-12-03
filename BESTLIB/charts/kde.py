@@ -216,44 +216,15 @@ class KdeChart(ChartBase):
         if 'yLabel' not in kwargs:
             kwargs['yLabel'] = 'Density'
         
-        # Preparar datos del rug si está activado
-        rug_data = None
-        if rug:
-            try:
-                # Obtener valores originales para el rug
-                if HAS_PANDAS and isinstance(data, pd.DataFrame):
-                    values = data[column].dropna().values
-                else:
-                    values = [d[column] for d in data if column in d and d[column] is not None]
-                
-                # Crear datos del rug
-                rug_data = [{'x': float(val)} for val in values if val is not None]
-            except Exception as e:
-                # Si falla, simplemente no agregar rug
-                rug_data = None
-        
         # Construir spec
         spec = {
             'type': self.chart_type,
-            'data': kde_data['data'],
+            'data': kde_result['data'],
         }
-        
-        # Preparar y agregar datos del rug si está activado
-        if kwargs.get('rug', False) or rug:
-            try:
-                if HAS_PANDAS and isinstance(data, pd.DataFrame):
-                    values = data[column].dropna().values
-                else:
-                    values = [d[column] for d in data if column in d and d[column] is not None]
-                rug_data = [{'x': float(val)} for val in values if val is not None]
-                if rug_data:
-                    spec['rugData'] = rug_data
-            except Exception:
-                pass
         
         # Agregar rug data si existe
         if 'rug_data' in kde_result:
-            spec['rug_data'] = kde_result['rug_data']
+            spec['rugData'] = kde_result['rug_data']
         
         # Agregar encoding
         encoding = {}
