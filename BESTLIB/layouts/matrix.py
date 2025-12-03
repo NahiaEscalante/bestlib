@@ -769,6 +769,13 @@ class MatrixLayout:
             if k.startswith('__') or k in valid_letters
         }
         
+        # Debug logging para verificar specs - SIEMPRE para gráficos problemáticos
+        for letter in valid_letters:
+            if letter in filtered_map:
+                spec = filtered_map[letter]
+                if spec.get('type') in ['funnel', 'polar', 'hist2d', 'ribbon', 'ridgeline']:
+                    print(f"🔍 [MatrixLayout] Spec generado para '{letter}': type={spec.get('type')}, keys={list(spec.keys())}")
+        
         # Debug logging para verificar specs
         if self._debug:
             print(f"🔍 [MatrixLayout._prepare_repr_data] Debug de specs:")
