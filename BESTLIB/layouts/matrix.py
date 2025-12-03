@@ -769,7 +769,19 @@ class MatrixLayout:
             if k.startswith('__') or k in valid_letters
         }
         
-        # Debug logging para verificar specs
+        # Debug logging para verificar specs - SIEMPRE ACTIVO PARA GROUPED_BAR
+        for letter in valid_letters:
+            if letter in filtered_map:
+                spec = filtered_map[letter]
+                if spec.get('type') == 'grouped_bar':
+                    print(f"🔍 [MatrixLayout] GROUPED_BAR SPEC para '{letter}':")
+                    print(f"   - type: {spec.get('type')}")
+                    print(f"   - rows: {spec.get('rows')}")
+                    print(f"   - groups: {spec.get('groups')}")
+                    print(f"   - series: {spec.get('series')}")
+                    print(f"   - data length: {len(spec.get('data', []))}")
+                    print(f"   - All keys: {list(spec.keys())}")
+        
         if self._debug:
             print(f"🔍 [MatrixLayout._prepare_repr_data] Debug de specs:")
             print(f"   - Letras válidas en layout: {valid_letters}")
